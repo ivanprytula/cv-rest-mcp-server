@@ -1,0 +1,46 @@
+[project]
+name = "cv-mcp-agent"
+version = "0.1.0"
+description = "FastAPI + FastMCP service that renders a CV as JSON or themed PDFs."
+readme = "README.md"
+requires-python = ">=3.14"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+dependencies = [
+    "fastapi>=0.115,<1.0",
+    "uvicorn[standard]>=0.34,<1.0",
+    "fastmcp>=3.0,<4.0",
+    "jinja2>=3.1,<4.0",
+    "weasyprint>=62.0",
+    "pydantic-settings>=2.0",
+    "slowapi>=0.1.10",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pre-commit>=3.8",
+    "ruff>=0.6",
+    "ty>=0.0.72",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "httpx>=0.27",
+]
+
+[project.urls]
+Homepage = "https://github.com/ivanprytula/cv-mcp-agent"
+
+[tool.ruff]
+target-version = "py314"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.ty]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
