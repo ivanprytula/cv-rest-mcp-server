@@ -10,7 +10,8 @@ dist/
 build/
 .pre-commit-cache/
 
-data/cv.json
+data/*
+!data/cv.example.json
 
 .kilo/
 .vscode/

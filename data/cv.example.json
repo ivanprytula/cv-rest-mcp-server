@@ -1,0 +1,96 @@
+{
+  "name": "Jane Doe",
+  "title": "Software Engineer",
+  "email": "jane@example.com",
+  "phone": "+1 555 0199",
+  "telegram": "@janedoe",
+  "location": "San Francisco, CA",
+  "github": "https://github.com/janedoe",
+  "linkedin": "https://www.linkedin.com/in/janedoe/",
+  "summary": "Brief professional summary.",
+  "skills": [
+    {
+      "category": "Backend development",
+      "items": [
+        "Python, FastAPI, Django, DRF, SQLAlchemy, Alembic, Pydantic",
+        "REST API design, OpenAPI/Swagger, request validation, authentication, RBAC"
+      ]
+    },
+    {
+      "category": "Databases",
+      "items": [
+        "PostgreSQL: schema design, migrations, indexing, query optimisation",
+        "Redis caching and connection pooling"
+      ]
+    }
+  ],
+  "additional_skills": [
+    {
+      "category": "Containers and CI/CD",
+      "items": [
+        "Docker, Docker Compose, Kubernetes",
+        "GitLab CI/CD, GitHub Actions"
+      ]
+    },
+    {
+      "category": "Cloud",
+      "items": [
+        "AWS practical working knowledge of common backend services"
+      ]
+    }
+  ],
+  "experience": [
+    {
+      "role": "Senior Engineer",
+      "company": "Acme Corp",
+      "period": "2020 - Present",
+      "highlights": ["Led backend migration to async stack"],
+      "tech": ["Python", "FastAPI"]
+    }
+  ],
+  "education": {
+    "degree": "MSc Computer Science",
+    "institution": "University of Example",
+    "year": "2018"
+  },
+  "languages": ["English: Native", "Spanish: B2"],
+  "projects": [
+    {
+      "name": "Open Source CLI",
+      "description": "A tool for managing deployments",
+      "url": "https://github.com/janedoe/cli",
+      "tech": ["Rust", "CLI"]
+    }
+  ],
+  "certifications": [
+    {
+      "name": "AWS Solutions Architect",
+      "issuer": "Amazon Web Services",
+      "date": "2023",
+      "url": "https://aws.amazon.com/certification"
+    }
+  ],
+  "publications": [
+    {
+      "title": "Scaling APIs with Async Python",
+      "venue": "Python Magazine",
+      "year": "2024",
+      "url": "https://example.com/article"
+    }
+  ],
+  "awards": [
+    {
+      "name": "Employee of the Year",
+      "issuer": "Acme Corp",
+      "date": "2023"
+    }
+  ],
+  "volunteering": [
+    {
+      "role": "Mentor",
+      "organization": "Code for Good",
+      "period": "2022 - Present",
+      "description": "Mentoring junior developers"
+    }
+  ]
+}

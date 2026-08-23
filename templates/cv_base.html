@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ name|default('') }} - CV</title>
+    <style>
+        {{ css|default('')|safe }}
+    </style>
+</head>
+<body>
+    <h1>{{ name|default('') }}</h1>
+    <div class="subtitle">{{ title|default('') }}</div>
+
+    <div class="contact-line">
+        {{ email|default('') }} &middot; {{ phone|default('') }} &middot; {{ telegram|default('') }} &middot; {{ location|default('') }}<br>
+        <a href="{{ github|default('') }}">{{ github|default('') }}</a> &middot;
+        <a href="{{ linkedin|default('') }}">{{ linkedin|default('') }}</a>
+    </div>
+
+    {% if summary|default('') %}
+    <div class="section">
+        <h2>Summary</h2>
+        <p>{{ summary }}</p>
+    </div>
+    {% endif %}
+
+    {% if skills|default([]) %}
+    <div class="section">
+        <h2>Skills</h2>
+        {% for skill in skills %}
+        <div class="skill-item">
+            <span class="skill-category">{{ skill["category"] }}:</span><span class="skill-text">{{ skill["items"]|join("; ") }}</span>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if additional_skills|default([]) %}
+    <div class="section">
+        <h2>Additional Skills</h2>
+        {% for skill in additional_skills %}
+        <div class="skill-item">
+            <span class="skill-category">{{ skill["category"] }}:</span><span class="skill-text">{{ skill["items"]|join("; ") }}</span>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if experience|default([]) %}
+    <div class="section">
+        <h2>Experience</h2>
+        {% for job in experience %}
+        <div class="job">
+            <div class="job-header">
+                <span class="job-role">{{ job.role|default('') }}</span>
+                <span class="job-period">{{ job.period|default('') }}</span>
+            </div>
+            <div class="job-company">{{ job.company|default('') }}</div>
+            <div class="job-tech">{{ job.tech|default([])|join(', ') }}</div>
+            <ul class="highlights">
+                {% for highlight in job.highlights|default([]) %}
+                <li>{{ highlight }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if projects|default([]) %}
+    <div class="section projects">
+        <h2>Projects</h2>
+        {% for project in projects %}
+        <div class="job">
+            <div class="job-header">
+                <span class="job-role">{{ project.name|default('') }}</span>
+                {% if project.url|default('') %}
+                <span class="job-period"><a href="{{ project.url }}">Link</a></span>
+                {% endif %}
+            </div>
+            <div class="job-company">{{ project.description|default('') }}</div>
+            <div class="job-tech">{{ project.tech|default([])|join(', ') }}</div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if certifications|default([]) %}
+    <div class="section certifications">
+        <h2>Certifications</h2>
+        {% for cert in certifications %}
+        <div class="job">
+            <div class="job-header">
+                <span class="job-role">{{ cert.name|default('') }}</span>
+                <span class="job-period">{{ cert.date|default('') }}</span>
+            </div>
+            <div class="job-company">{{ cert.issuer|default('') }}</div>
+            {% if cert.url|default('') %}
+            <div><a href="{{ cert.url }}">{{ cert.url }}</a></div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if publications|default([]) %}
+    <div class="section publications">
+        <h2>Publications</h2>
+        {% for pub in publications %}
+        <div class="job">
+            <div class="job-header">
+                <span class="job-role">{{ pub.title|default('') }}</span>
+                <span class="job-period">{{ pub.year|default('') }}</span>
+            </div>
+            <div class="job-company">{{ pub.venue|default('') }}</div>
+            {% if pub.url|default('') %}
+            <div><a href="{{ pub.url }}">{{ pub.url }}</a></div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if awards|default([]) %}
+    <div class="section awards">
+        <h2>Awards</h2>
+        {% for award in awards %}
+        <div class="job">
+            <div class="job-header">
+                <span class="job-role">{{ award.name|default('') }}</span>
+                <span class="job-period">{{ award.date|default('') }}</span>
+            </div>
+            <div class="job-company">{{ award.issuer|default('') }}</div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if volunteering|default([]) %}
+    <div class="section volunteering">
+        <h2>Volunteering</h2>
+        {% for vol in volunteering %}
+        <div class="job">
+            <div class="job-header">
+                <span class="job-role">{{ vol.role|default('') }}</span>
+                <span class="job-period">{{ vol.period|default('') }}</span>
+            </div>
+            <div class="job-company">{{ vol.organization|default('') }}</div>
+            <div>{{ vol.description|default('') }}</div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if education|default([]) %}
+    <div class="section">
+        <h2>Education</h2>
+        {% for edu in education %}
+        <div class="job">
+            <div class="job-header">
+                <span class="job-role">{{ edu.degree|default('') }}</span>
+                <span class="job-period">{{ edu.year|default('') }}</span>
+            </div>
+            <div class="job-company">{{ edu.institution|default('') }}</div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if languages|default([]) %}
+    <div class="section">
+        <h2>Languages</h2>
+        {% for lang in languages %}
+        <div class="skill-item">{{ lang }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</body>
+</html>
