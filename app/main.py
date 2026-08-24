@@ -1,5 +1,6 @@
 import base64
 import logging
+import sys
 from contextlib import asynccontextmanager
 from typing import cast
 
@@ -25,6 +26,10 @@ from app.rate_limiter import limiter
 from app.routes import router
 from app.settings import settings
 
+
+# Cloud Run maps stderr -> ERROR for every line; default logging writes to
+# stderr. Send app logs to stdout so WARNING stays WARNING in Logs Explorer.
+logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
 logger = logging.getLogger(__name__)
 

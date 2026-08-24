@@ -5,6 +5,7 @@ import threading
 import time
 from pathlib import Path
 
+from google.api_core.exceptions import NotFound
 from google.cloud import storage
 
 from app.cv_data import load_cv_data, validate_cv_payload
@@ -122,6 +123,14 @@ class CvSource:
 
         try:
             generation, cv = self._fetch(self._blob)
+        except NotFound:
+            # Expected pre-upload state, not an incident: one clean line,
+            # no traceback — this fires every refresh until content lands.
+            logger.warning(
+                "CV object %s not found; serving %s",
+                self._gcs_uri,
+                self.source_kind,
+            )
         except Exception:
             logger.warning(
                 "CV refresh from %s failed; serving last good payload",
