@@ -173,9 +173,9 @@ wif() {
         gcloud iam workload-identity-pools create "$pool" --location global --project "$GCP_PROJECT" \
             --display-name="GitHub Actions"
 
-    gcloud iam workload-identity-pools-providers describe "$provider" \
+    gcloud iam workload-identity-pools providers describe "$provider" \
         --workload-identity-pool "$pool" --location global --project "$GCP_PROJECT" >/dev/null 2>&1 ||
-        gcloud iam workload-identity-pools-providers create-oidc "$provider" \
+        gcloud iam workload-identity-pools providers create-oidc "$provider" \
             --workload-identity-pool "$pool" --location global --project "$GCP_PROJECT" \
             --issuer-uri="https://token.actions.githubusercontent.com" \
             --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository" \
