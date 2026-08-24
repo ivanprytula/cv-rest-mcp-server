@@ -20,10 +20,19 @@
       ],
       "enabled": true
     },
-      "cv-rest-mcp-server": {
-        "enabled": true,
-        "path": "app/main.py",
-        "host": "localhost"
-      }
+    "cv-rest-mcp-server": {
+      // Remote: the deployed/dev server over streamable HTTP — requires `just dev` running.
+      "type": "remote",
+      // "url": "http://localhost:8080/mcp",
+      "url": "https://cv-ivanprytula-62sttn5hja-ew.a.run.app/mcp",
+      "enabled": true
+    },
+    "cv-rest-mcp-server-local": {
+      // Local: same tools over stdio, no server needed. Flip enabled to swap;
+      // keeping both on duplicates every tool in agent context.
+      "type": "local",
+      "command": ["uv", "run", "python", "scripts/cv_mcp_stdio.py"],
+      "enabled": false
     }
   }
+}
