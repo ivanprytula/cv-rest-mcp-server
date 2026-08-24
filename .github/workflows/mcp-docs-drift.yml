@@ -1,0 +1,54 @@
+name: MCP docs drift
+
+on:
+  schedule:
+    - cron: "0 6 1 * *" # monthly, 1st at 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write # commit refreshed verified stamps
+  issues: write # open an issue when drift is detected
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Check doc sources against markers
+        id: check
+        continue-on-error: true
+        run: python scripts/check_mcp_docs.py | tee drift-report.log
+
+      - name: Open drift issue
+        if: steps.check.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh issue list --state open --search "MCP docs drift detected in:title" | grep -q .; then
+            echo "Open drift issue already exists; not duplicating."
+          else
+            gh issue create \
+              --title "MCP docs drift detected" \
+              --body "$(printf 'Monthly marker check failed for one or more MCP clients — landing snippets likely need updating.\n\n```\n%s\n```\n' "$(cat drift-report.log)")"
+          fi
+
+      - name: Refresh verified stamps (clean check only)
+        if: steps.check.outcome == 'success'
+        run: python scripts/check_mcp_docs.py --bump
+
+      - name: Commit stamp bumps
+        if: steps.check.outcome == 'success'
+        run: |
+          if git diff --quiet config/mcp_clients.json; then
+            echo "Stamps already current; nothing to commit."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -am "ci: refresh MCP docs verified stamps"
+            git push
+          fi

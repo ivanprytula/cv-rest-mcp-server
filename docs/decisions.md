@@ -180,3 +180,29 @@ service is never down due to missing content, but operators must watch the
 the failure mode. Auth for writes is delegated entirely to GCS IAM; no admin
 REST surface exists. Cloud SQL remains deferred until multi-document or
 multi-user requirements actually appear.
+
+## ADR-014: MCP client snippets are static data with CI drift-checks, not live-fetched
+
+**Context.** The landing page shows copy-pasteable MCP config snippets for
+four clients (Claude Code, Codex CLI, Gemini CLI, VS Code Copilot). Formats
+drift often, but vendors publish no machine-readable config API; docs sites
+block CORS, and parsing prose/markdown into "the current snippet" at request
+time fails silently — the worst mode for a copy-paste feature. Fetching raw
+markdown from vendor GitHub repos works for only some clients (Codex and
+Claude moved their references off GitHub to CORS-blocked sites).
+
+**Decision.** Snippets live in `config/mcp_clients.json` — rendered
+server-side by `routes.load_mcp_clients()` (startup aborts on a broken file)
+and consumed by the same file's per-client check spec: a fetch URL plus
+conservative markers that must appear in that source. A monthly GitHub Action
+(`mcp-docs-drift`) runs `scripts/check_mcp_docs.py`: any missing marker opens
+a tracking issue; a clean run rewrites the `verified YYYY-MM` stamps shown as
+badges on the landing page and auto-commits them. No runtime fetching, no
+localStorage caching.
+
+**Consequences.** The page stays zero-runtime-dependency and fails loudly at
+deploy time on bad data instead of serving guessed configs; freshness is
+eventual (up to a month) but human-confirmed via the issue queue. Marker sets
+are intentionally loose enough to survive doc prose edits while still
+catching format changes; first-line maintenance when an issue fires is
+updating one JSON entry.

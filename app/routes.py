@@ -5,6 +5,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, Response
 
+from app.constants import CONFIG_DIR
 from app.dependencies import get_pdf_service
 from app.pdf_generator import ThemeNotFoundError
 from app.rate_limiter import limiter, limits
@@ -14,6 +15,46 @@ from app.renderer import render_html, render_template
 router = APIRouter()
 
 get_pdf_service_dep = Depends(get_pdf_service)
+
+MCP_CLIENTS_PATH = CONFIG_DIR / "mcp_clients.json"
+
+_MCP_CLIENTS_REQUIRED_KEYS = {
+    "id",
+    "label",
+    "file",
+    "docs_url",
+    "verified",
+    "config_template",
+}
+
+
+def load_mcp_clients(path) -> list[dict]:
+    """Parse and validate the MCP client tab definitions.
+
+    Single source of truth shared with scripts/check_mcp_docs.py; a broken
+    file aborts startup instead of silently rendering an empty section.
+    """
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise RuntimeError(f"MCP clients config missing: {path}") from exc
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            f"MCP clients config is not valid JSON ({path}): {exc}"
+        ) from exc
+
+    if not isinstance(data, list) or not data:
+        raise RuntimeError(f"{path}: expected a non-empty list of client entries")
+    for entry in data:
+        missing = _MCP_CLIENTS_REQUIRED_KEYS - entry.keys()
+        if missing:
+            raise RuntimeError(
+                f"{path}: entry {entry.get('id', '?')!r} missing keys {sorted(missing)}"
+            )
+    return data
+
+
+_MCP_CLIENTS = load_mcp_clients(MCP_CLIENTS_PATH)
 
 
 def _pdf_filename(cv: dict) -> str:
@@ -33,21 +74,27 @@ def _consent_kwargs(company: str, consent: bool) -> dict:
     return {"consent": consent or bool(clean), "consent_company": clean}
 
 
+def _client_mcp_configs(mcp_url: str) -> list[dict]:
+    """Per-client MCP snippets in each agent's native config format."""
+    return [
+        {
+            **entry,
+            "config_template": entry["config_template"].replace("{mcp_url}", mcp_url),
+        }
+        for entry in _MCP_CLIENTS
+    ]
+
+
 @router.get("/")
 @limits("30/minute", "120/hour")
 async def root(request: Request, pdf_service=get_pdf_service_dep):
     """Landing page with ready-to-copy MCP client config and CV download form."""
     mcp_url = str(request.base_url).rstrip("/") + "/mcp"
-    mcp_config = {
-        "mcpServers": {
-            "cv-mcp-agent": {"url": mcp_url},
-        },
-    }
     html = render_template(
         "landing.html",
         service_name="CV REST/MCP Server",
         description="Generate, preview, and download your CV as a themed PDF — or plug it into any MCP client.",
-        mcp_config=json.dumps(mcp_config, indent=2),
+        mcp_clients=_client_mcp_configs(mcp_url),
         themes=pdf_service.list_themes(),
     )
     return HTMLResponse(content=html)
