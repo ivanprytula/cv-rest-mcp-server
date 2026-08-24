@@ -5,7 +5,7 @@
     "file": ".mcp.json (project root)",
     "docs_url": "https://code.claude.com/docs/en/mcp",
     "verified": "2026-08",
-    "config_template": "{\n  \"mcpServers\": {\n    \"cv-mcp-agent\": {\n      \"type\": \"http\",\n      \"url\": \"{mcp_url}\"\n    }\n  }\n}",
+    "config_template": "{\n  \"mcpServers\": {\n    \"cv-rest-mcp-server\": {\n      \"type\": \"http\",\n      \"url\": \"{mcp_url}\"\n    }\n  }\n}",
     "check": {
       "fetch_url": "https://code.claude.com/docs/en/mcp.md",
       "markers": [
@@ -20,7 +20,7 @@
     "file": "~/.codex/config.toml",
     "docs_url": "https://developers.openai.com/codex/mcp",
     "verified": "2026-08",
-    "config_template": "[mcp_servers.cv-mcp-agent]\nurl = \"{mcp_url}\"",
+    "config_template": "[mcp_servers.cv-rest-mcp-server]\nurl = \"{mcp_url}\"",
     "check": {
       "fetch_url": "https://developers.openai.com/codex/mcp.md",
       "markers": [
@@ -35,7 +35,7 @@
     "file": "~/.cursor/mcp.json",
     "docs_url": "https://cursor.com/docs/mcp",
     "verified": "2026-08",
-    "config_template": "{\n  \"mcpServers\": {\n    \"cv-mcp-agent\": {\n      \"url\": \"{mcp_url}\"\n    }\n  }\n}",
+    "config_template": "{\n  \"mcpServers\": {\n    \"cv-rest-mcp-server\": {\n      \"url\": \"{mcp_url}\"\n    }\n  }\n}",
     "check": {
       "fetch_url": "https://cursor.com/docs/mcp.md",
       "markers": [
@@ -50,7 +50,7 @@
     "file": "~/.gemini/settings.json",
     "docs_url": "https://developers.google.com/gemini-code-assist/docs/gemini-cli",
     "verified": "2026-08",
-    "config_template": "{\n  \"mcpServers\": {\n    \"cv-mcp-agent\": {\n      \"httpUrl\": \"{mcp_url}\"\n    }\n  }\n}",
+    "config_template": "{\n  \"mcpServers\": {\n    \"cv-rest-mcp-server\": {\n      \"httpUrl\": \"{mcp_url}\"\n    }\n  }\n}",
     "check": {
       "fetch_url": "https://raw.githubusercontent.com/google-gemini/gemini-cli/main/docs/tools/mcp-server.md",
       "markers": [
@@ -65,7 +65,7 @@
     "file": ".vscode/mcp.json",
     "docs_url": "https://code.visualstudio.com/docs/copilot/customization/mcp-servers",
     "verified": "2026-08",
-    "config_template": "{\n  \"servers\": {\n    \"cv-mcp-agent\": {\n      \"type\": \"http\",\n      \"url\": \"{mcp_url}\"\n    }\n  }\n}",
+    "config_template": "{\n  \"servers\": {\n    \"cv-rest-mcp-server\": {\n      \"type\": \"http\",\n      \"url\": \"{mcp_url}\"\n    }\n  }\n}",
     "check": {
       "fetch_url": "https://raw.githubusercontent.com/microsoft/vscode-docs/main/docs/agent-customization/mcp-servers.md",
       "markers": [

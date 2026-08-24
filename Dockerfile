@@ -57,7 +57,7 @@ COPY --chown=65532:65532 pyproject.toml ./
 
 USER 65532
 
-LABEL org.opencontainers_image.source="https://github.com/ivanprytula/cv-mcp-agent" \
+LABEL org.opencontainers_image.source="https://github.com/ivanprytula/cv-rest-mcp-server" \
       org.opencontainers_image.licenses="Apache-2.0"
 
 ENV PORT=8080

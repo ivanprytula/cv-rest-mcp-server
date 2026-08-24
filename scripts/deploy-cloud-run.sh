@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Cloud Run deploy automation for cv-mcp-agent.
+# Cloud Run deploy automation for cv-rest-mcp-server.
 #
 # Mirrors .local/deploy-checklist.md step by step; every stage is idempotent.
 #
@@ -18,14 +18,14 @@
 # Environment:
 #   GCP_PROJECT  required — your EXISTING project id. This script never
 #                creates projects (that is a billing/console decision).#   GCP_REGION   default europe-west1
-#   SVC_NAME     default cv-mcp-agent
+#   SVC_NAME     default cv-rest-mcp-server
 #   REPO         owner/name for `wif`; derived from git remote when unset.
 
 set -euo pipefail
 
 GCP_PROJECT="${GCP_PROJECT:-}"   # required; validated per-stage by require_project
 GCP_REGION="${GCP_REGION:-europe-west1}"
-SVC_NAME="${SVC_NAME:-cv-mcp-agent}"
+SVC_NAME="${SVC_NAME:-cv-rest-mcp-server}"
 RUN_SA_ID="${SVC_NAME}-runtime"
 DEPLOY_SA_ID="${SVC_NAME}-deployer"
 CV_BUCKET="${GCP_PROJECT}-cv-data"

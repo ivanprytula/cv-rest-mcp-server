@@ -1,5 +1,5 @@
 [project]
-name = "cv-mcp-agent"
+name = "cv-rest-mcp-server"
 version = "0.1.0"
 description = "FastAPI + FastMCP service that renders a CV as JSON or themed PDFs."
 readme = "README.md"
@@ -30,7 +30,7 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/ivanprytula/cv-mcp-agent"
+Homepage = "https://github.com/ivanprytula/cv-rest-mcp-server"
 
 [tool.ruff]
 target-version = "py314"

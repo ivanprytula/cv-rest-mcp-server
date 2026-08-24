@@ -55,4 +55,4 @@ async def test_landing_renders_tabs_with_verified_stamps(client):
     assert r.status_code == 200
     assert 'role="tab"' in r.text
     assert "✓ verified 20" in r.text
-    assert "mcp_servers.cv-mcp-agent" in r.text  # Codex TOML snippet present
+    assert "mcp_servers.cv-rest-mcp-server" in r.text  # Codex TOML snippet present

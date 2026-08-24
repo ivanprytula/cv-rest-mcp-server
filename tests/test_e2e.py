@@ -97,7 +97,9 @@ def test_config_tabs_switch_panels(page):
     page.click("[data-tab='codex']")
     expect(page.locator("#config-codex")).to_be_visible()
     expect(page.locator("#config-claude-code")).to_be_hidden()
-    assert "mcp_servers.cv-mcp-agent" in page.locator("#config-codex").inner_text()
+    assert (
+        "mcp_servers.cv-rest-mcp-server" in page.locator("#config-codex").inner_text()
+    )
     assert (
         page.get_by_role("tab", name="Codex CLI").get_attribute("aria-selected")
         == "true"

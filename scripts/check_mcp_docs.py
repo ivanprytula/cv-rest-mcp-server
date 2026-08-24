@@ -23,7 +23,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PATH = ROOT / "config" / "mcp_clients.json"
 REQUEST_TIMEOUT_S = 30
-USER_AGENT = "cv-mcp-agent-docs-checker"
+USER_AGENT = "cv-rest-mcp-server-docs-checker"
 
 
 def fetch(url: str) -> str:

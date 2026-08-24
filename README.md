@@ -42,7 +42,7 @@ Any MCP-compatible client (Claude Desktop, Cursor, VS Code with Kilo, Windsurf) 
 ```json
 {
   "mcpServers": {
-    "cv-mcp-agent": {
+    "cv-rest-mcp-server": {
       "url": "http://localhost:8080/mcp"
     }
   }
@@ -82,7 +82,7 @@ just build && just run
 
 ```bash
 just gcloud-build
-gcloud run deploy cv-mcp-agent --image gcr.io/$GCP_PROJECT/cv-mcp-agent --region us-central1 --platform managed --allow-unauthenticated
+gcloud run deploy cv-rest-mcp-server --image gcr.io/$GCP_PROJECT/cv-rest-mcp-server --region us-central1 --platform managed --allow-unauthenticated
 ```
 
 ## Stack

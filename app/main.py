@@ -115,7 +115,7 @@ app.add_middleware(
 app.add_middleware(GuardMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 
-mcp = FastMCP("cv-mcp-agent")
+mcp = FastMCP("cv-rest-mcp-server")
 
 
 @mcp.tool

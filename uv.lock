@@ -467,7 +467,7 @@ wheels = [
 ]
 
 [[package]]
-name = "cv-mcp-agent"
+name = "cv-rest-mcp-server"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

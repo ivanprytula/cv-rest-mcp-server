@@ -20,7 +20,7 @@
       ],
       "enabled": true
     },
-      "cv-mcp-agent": {
+      "cv-rest-mcp-server": {
         "enabled": true,
         "path": "app/main.py",
         "host": "localhost"

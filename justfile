@@ -63,13 +63,13 @@ update-geo-blocklist:
     echo "Wrote $out ($(grep -vc '^#' "$out") networks)"
 
 build:
-    docker buildx build -t cv-mcp-agent .
+    docker buildx build -t cv-rest-mcp-server .
 
 run:
-    docker run -p 8080:8080 cv-mcp-agent
+    docker run -p 8080:8080 cv-rest-mcp-server
 
 gcloud-build:
-    gcloud builds submit --tag gcr.io/$$GCP_PROJECT/cv-mcp-agent
+    gcloud builds submit --tag gcr.io/$$GCP_PROJECT/cv-rest-mcp-server
 
 # Cloud Run lifecycle via scripts/deploy-cloud-run.sh (see checklist §7):
 # just deploy bootstrap upload-cv build deploy verify   — first full run
