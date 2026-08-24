@@ -128,11 +128,31 @@ upload_cv() {
 }
 
 build() {
+    local build_id build_status
     require_project
     log "Cloud Build: gcr.io/$GCP_PROJECT/$SVC_NAME"
-    gcloud builds submit --project "$GCP_PROJECT" \
+    build_id="$(gcloud builds submit --project "$GCP_PROJECT" \
         --tag "gcr.io/${GCP_PROJECT}/${SVC_NAME}" \
-        --quiet --suppress-logs
+        --quiet --async --format='value(id)')"
+    log "Cloud Build started: $build_id"
+
+    while :; do
+        build_status="$(gcloud builds describe "$build_id" \
+            --project "$GCP_PROJECT" --format='value(status)')"
+        case "$build_status" in
+            SUCCESS)
+                log "Cloud Build succeeded: $build_id"
+                return 0
+                ;;
+            FAILURE|INTERNAL_ERROR|TIMEOUT|CANCELLED|EXPIRED)
+                die "Cloud Build failed with status $build_status: $build_id"
+                ;;
+            *)
+                printf 'waiting for build (%s)...\n' "${build_status:-UNKNOWN}"
+                sleep 5
+                ;;
+        esac
+    done
 }
 
 deploy() {
