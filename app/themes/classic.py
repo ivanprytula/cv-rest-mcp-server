@@ -1,4 +1,3 @@
-THEME_NAME = "classic"
 CSS = """body {
     font-family: Georgia, "Times New Roman", serif;
     font-size: 11pt;

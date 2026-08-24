@@ -2,178 +2,293 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>{{ name|default('') }} - CV</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ name }} - CV</title>
     <style>
-        {{ css|default('')|safe }}
+        {{ css|safe }}
+
+        /* Page geometry — single source of truth (shared by all themes).
+           @page drives the PDF (WeasyPrint); @media screen mirrors it as an A4
+           "sheet" so the HTML preview matches the printed output.
+           12.7mm sides/top = the standard "Narrow" preset; the deeper bottom
+           margin keeps body text clear of the page footer. */
+        @page {
+            size: A4;
+            margin: 12.7mm 12.7mm 18mm;
+            @bottom-center {
+                content: element(cv-footer);
+            }
+        }
+
+        /* Cover page stays clean: no footer on page 1. */
+        @page :first {
+            @bottom-center {
+                content: none;
+            }
+        }
+
+        /* Pagination guards: keep small semantic units unsplit across page
+           breaks (WeasyPrint honors break-* and orphans/widows). */
+        :where(h2) {
+            break-after: avoid;
+        }
+        :where(.job-header),
+        :where(.job-company),
+        :where(.job-tech) {
+            break-after: avoid;
+        }
+        :where(ul.skill-list li),
+        :where(ul.highlights li) {
+            break-inside: avoid;
+        }
+        :where(p) {
+            orphans: 2;
+            widows: 2;
+        }
+
+        /* Separator between items; themes may override the glyph.
+           :where() keeps this default at zero specificity so any theme
+           rule wins regardless of stylesheet order. */
+        :where(.sep)::before {
+            content: " · ";
+        }
+
+        /* Shared structural defaults for CV content (lists, emphasis).
+           All zero-specificity via :where(): themes own styling and can
+           override any of this with an ordinary selector; structure,
+           geometry and fallbacks live here, once. */
+        :where(ul.skill-list) {
+            margin: 0;
+            padding-left: 18px;
+            list-style: disc;
+        }
+        :where(.skill-category) {
+            font-weight: bold;
+        }
+        :where(ul.highlights) {
+            margin: 4px 0;
+            padding-left: 18px;
+            list-style: disc;
+        }
+        :where(ul.highlights li) {
+            margin-bottom: 3px;
+        }
+
+        /* PDF page footer: repeated at the bottom of every page through
+           WeasyPrint's running-element mechanism (@bottom-center below).
+           Browsers don't support running(), so the element is hidden on
+           screen (WeasyPrint renders with print media and ignores this). */
+        :where(.cv-footer) {
+            position: running(cv-footer);
+            font-size: 8pt;
+            color: #6b7280;
+        }
+        :where(.cv-footer) .page-number::after {
+            content: counter(page) " of " counter(pages);
+        }
+
+        /* Semantic-element resets: keep UA defaults (address italics,
+           h3 heading sizing) from leaking into the themed layout.
+           Zero-specificity, so themes always win. */
+        :where(address) {
+            font-style: normal;
+        }
+        :where(h3) {
+            margin: 0;
+            font-size: inherit;
+            font-weight: inherit;
+        }
+
+        @media screen {
+            html {
+                background: #94a3b8;
+            }
+            body {
+                max-width: 210mm;
+                margin: 24px auto;
+                padding: 12.7mm 12.7mm 18mm;
+                background: #ffffff;
+                box-shadow: 0 2px 16px rgb(15 23 42 / 0.3);
+            }
+            .cv-footer {
+                display: none;
+            }
+        }
     </style>
 </head>
 <body>
-    <h1>{{ name|default('') }}</h1>
-    <div class="subtitle">{{ title|default('') }}</div>
+    <!-- Running element for @page @bottom-center. Kept FIRST in the DOM:
+         per CSS GCPM, a running element is available only from the page
+         where it appears onward, so a document-final footer would never
+         reach earlier pages. Browsers hide it via @media screen below. -->
+    <footer class="cv-footer">
+        <span>{{ name }}</span>
+        <span class="sep"></span>
+        <span>{{ title }}</span>
+        <span class="sep"></span>
+        <span>{{ email }}</span>
+        <span class="sep"></span>
+        <span>Page&nbsp;<span class="page-number"></span></span>
+    </footer>
 
-    <div class="contact-line">
-        {{ email|default('') }} &middot; {{ phone|default('') }} &middot; {{ telegram|default('') }} &middot; {{ location|default('') }}<br>
-        <a href="{{ github|default('') }}">{{ github|default('') }}</a> &middot;
-        <a href="{{ linkedin|default('') }}">{{ linkedin|default('') }}</a>
-    </div>
-
-    {% if summary|default('') %}
-    <div class="section">
-        <h2>Summary</h2>
-        <p>{{ summary }}</p>
-    </div>
-    {% endif %}
-
-    {% if skills|default([]) %}
-    <div class="section">
-        <h2>Skills</h2>
-        {% for skill in skills %}
-        <div class="skill-item">
-            <span class="skill-category">{{ skill["category"] }}:</span><span class="skill-text">{{ skill["items"]|join("; ") }}</span>
-        </div>
-        {% endfor %}
-    </div>
-    {% endif %}
-
-    {% if additional_skills|default([]) %}
-    <div class="section">
-        <h2>Additional Skills</h2>
-        {% for skill in additional_skills %}
-        <div class="skill-item">
-            <span class="skill-category">{{ skill["category"] }}:</span><span class="skill-text">{{ skill["items"]|join("; ") }}</span>
-        </div>
-        {% endfor %}
-    </div>
-    {% endif %}
-
-    {% if experience|default([]) %}
-    <div class="section">
-        <h2>Experience</h2>
-        {% for job in experience %}
-        <div class="job">
+    <main>
+        {% macro entry(title, meta='', subtitle='', url='', tech=[], highlights=[], note='') %}
+        <article class="job">
             <div class="job-header">
-                <span class="job-role">{{ job.role|default('') }}</span>
-                <span class="job-period">{{ job.period|default('') }}</span>
+                <h3 class="job-role">{{ title }}</h3>
+                {% if meta %}
+                <time class="job-period">{{ meta }}</time>
+                {% elif url %}
+                <span class="job-period"><a href="{{ url }}">Link</a></span>
+                {% endif %}
             </div>
-            <div class="job-company">{{ job.company|default('') }}</div>
-            <div class="job-tech">{{ job.tech|default([])|join(', ') }}</div>
+            {% if subtitle %}
+            <div class="job-company">{{ subtitle }}</div>
+            {% endif %}
+            {% if tech %}
+            <div class="job-tech">{{ tech|join(', ') }}</div>
+            {% endif %}
+            {% if url and meta %}
+            <div><a href="{{ url }}">{{ url }}</a></div>
+            {% endif %}
+            {% if highlights %}
             <ul class="highlights">
-                {% for highlight in job.highlights|default([]) %}
+                {% for highlight in highlights %}
                 <li>{{ highlight }}</li>
                 {% endfor %}
             </ul>
-        </div>
-        {% endfor %}
-    </div>
-    {% endif %}
+            {% endif %}
+            {% if note %}
+            <div>{{ note }}</div>
+            {% endif %}
+        </article>
+        {% endmacro %}
 
-    {% if projects|default([]) %}
-    <div class="section projects">
-        <h2>Projects</h2>
-        {% for project in projects %}
-        <div class="job">
-            <div class="job-header">
-                <span class="job-role">{{ project.name|default('') }}</span>
-                {% if project.url|default('') %}
-                <span class="job-period"><a href="{{ project.url }}">Link</a></span>
+        <header>
+            <h1>{{ name }}</h1>
+            <p class="subtitle">{{ title }}</p>
+            <address class="contact-line">
+                {% set contact_parts = [email, phone, telegram, location] | select | list %}
+                {% for part in contact_parts %}
+                <span>{{ part }}</span>{% if not loop.last %}<span class="sep"></span>{% endif %}
+                {% endfor %}
+                {% if github or linkedin %}
+                <br>
+                {% for link in [github, linkedin] if link %}
+                <a href="{{ link }}">{{ link }}</a>{% if not loop.last %}<span class="sep"></span>{% endif %}
+                {% endfor %}
                 {% endif %}
-            </div>
-            <div class="job-company">{{ project.description|default('') }}</div>
-            <div class="job-tech">{{ project.tech|default([])|join(', ') }}</div>
-        </div>
-        {% endfor %}
-    </div>
-    {% endif %}
+            </address>
+        </header>
 
-    {% if certifications|default([]) %}
-    <div class="section certifications">
-        <h2>Certifications</h2>
-        {% for cert in certifications %}
-        <div class="job">
-            <div class="job-header">
-                <span class="job-role">{{ cert.name|default('') }}</span>
-                <span class="job-period">{{ cert.date|default('') }}</span>
-            </div>
-            <div class="job-company">{{ cert.issuer|default('') }}</div>
-            {% if cert.url|default('') %}
-            <div><a href="{{ cert.url }}">{{ cert.url }}</a></div>
-            {% endif %}
-        </div>
-        {% endfor %}
-    </div>
-    {% endif %}
+        {% if summary %}
+        <section class="section">
+            <h2>Summary</h2>
+            <p>{{ summary }}</p>
+        </section>
+        {% endif %}
 
-    {% if publications|default([]) %}
-    <div class="section publications">
-        <h2>Publications</h2>
-        {% for pub in publications %}
-        <div class="job">
-            <div class="job-header">
-                <span class="job-role">{{ pub.title|default('') }}</span>
-                <span class="job-period">{{ pub.year|default('') }}</span>
-            </div>
-            <div class="job-company">{{ pub.venue|default('') }}</div>
-            {% if pub.url|default('') %}
-            <div><a href="{{ pub.url }}">{{ pub.url }}</a></div>
-            {% endif %}
-        </div>
-        {% endfor %}
-    </div>
-    {% endif %}
+        {% if skills %}
+        <section class="section">
+            <h2>Skills</h2>
+            <ul class="skill-list">
+                {% for skill in skills %}
+                <li class="skill-item">
+                    <span class="skill-category">{{ skill["category"] }}:</span>
+                    <span class="skill-text">{{ skill["items"]|join("; ") }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </section>
+        {% endif %}
 
-    {% if awards|default([]) %}
-    <div class="section awards">
-        <h2>Awards</h2>
-        {% for award in awards %}
-        <div class="job">
-            <div class="job-header">
-                <span class="job-role">{{ award.name|default('') }}</span>
-                <span class="job-period">{{ award.date|default('') }}</span>
-            </div>
-            <div class="job-company">{{ award.issuer|default('') }}</div>
-        </div>
-        {% endfor %}
-    </div>
-    {% endif %}
+        {% if additional_skills %}
+        <section class="section">
+            <h2>Additional Skills</h2>
+            <ul class="skill-list">
+                {% for skill in additional_skills %}
+                <li class="skill-item">
+                    <span class="skill-category">{{ skill["category"] }}:</span>
+                    <span class="skill-text">{{ skill["items"]|join("; ") }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </section>
+        {% endif %}
 
-    {% if volunteering|default([]) %}
-    <div class="section volunteering">
-        <h2>Volunteering</h2>
-        {% for vol in volunteering %}
-        <div class="job">
-            <div class="job-header">
-                <span class="job-role">{{ vol.role|default('') }}</span>
-                <span class="job-period">{{ vol.period|default('') }}</span>
-            </div>
-            <div class="job-company">{{ vol.organization|default('') }}</div>
-            <div>{{ vol.description|default('') }}</div>
-        </div>
-        {% endfor %}
-    </div>
-    {% endif %}
+        {% if experience %}
+        <section class="section">
+            <h2>Experience</h2>
+            {% for job in experience %}
+            {{ entry(job.role, job.period, job.company, tech=job.tech, highlights=job.highlights) }}
+            {% endfor %}
+        </section>
+        {% endif %}
 
-    {% if education|default([]) %}
-    <div class="section">
-        <h2>Education</h2>
-        {% for edu in education %}
-        <div class="job">
-            <div class="job-header">
-                <span class="job-role">{{ edu.degree|default('') }}</span>
-                <span class="job-period">{{ edu.year|default('') }}</span>
-            </div>
-            <div class="job-company">{{ edu.institution|default('') }}</div>
-        </div>
-        {% endfor %}
-    </div>
-    {% endif %}
+        {% if projects %}
+        <section class="section projects">
+            <h2>Projects</h2>
+            {% for project in projects %}
+            {{ entry(project.name, url=project.url, subtitle=project.description, tech=project.tech) }}
+            {% endfor %}
+        </section>
+        {% endif %}
 
-    {% if languages|default([]) %}
-    <div class="section">
-        <h2>Languages</h2>
-        {% for lang in languages %}
-        <div class="skill-item">{{ lang }}</div>
-        {% endfor %}
-    </div>
-    {% endif %}
+        {% if certifications %}
+        <section class="section certifications">
+            <h2>Certifications</h2>
+            {% for cert in certifications %}
+            {{ entry(cert.name, cert.date, cert.issuer, url=cert.url) }}
+            {% endfor %}
+        </section>
+        {% endif %}
+
+        {% if publications %}
+        <section class="section publications">
+            <h2>Publications</h2>
+            {% for pub in publications %}
+            {{ entry(pub.title, pub.year, pub.venue, url=pub.url) }}
+            {% endfor %}
+        </section>
+        {% endif %}
+
+        {% if awards %}
+        <section class="section awards">
+            <h2>Awards</h2>
+            {% for award in awards %}
+            {{ entry(award.name, award.date, award.issuer) }}
+            {% endfor %}
+        </section>
+        {% endif %}
+
+        {% if volunteering %}
+        <section class="section volunteering">
+            <h2>Volunteering</h2>
+            {% for vol in volunteering %}
+            {{ entry(vol.role, vol.period, vol.organization, note=vol.description) }}
+            {% endfor %}
+        </section>
+        {% endif %}
+
+        {% if education %}
+        <section class="section">
+            <h2>Education</h2>
+            {% for edu in education %}
+            {{ entry(edu.degree, edu.year, edu.institution) }}
+            {% endfor %}
+        </section>
+        {% endif %}
+
+        {% if languages %}
+        <section class="section">
+            <h2>Languages</h2>
+            <ul class="skill-list">
+                {% for lang in languages %}
+                <li class="skill-item">{{ lang }}</li>
+                {% endfor %}
+            </ul>
+        </section>
+        {% endif %}
+    </main>
 </body>
 </html>

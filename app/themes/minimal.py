@@ -1,4 +1,3 @@
-THEME_NAME = "minimal"
 CSS = """
 body {
     font-family: Helvetica, Arial, sans-serif;
@@ -47,7 +46,7 @@ h2 {
 .skill-item {
     margin-bottom: 6px;
 }
-.skill-title {
+.skill-category {
     font-weight: 600;
 }
 .job {

@@ -1,4 +1,3 @@
-THEME_NAME = "modern"
 CSS = """
 body {
     font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
@@ -49,7 +48,7 @@ h2 {
 .skill-item {
     margin-bottom: 6px;
 }
-.skill-title {
+.skill-category {
     font-weight: 600;
     color: #111827;
 }
