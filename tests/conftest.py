@@ -1,7 +1,28 @@
 import json
+import os
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+
+
+os.environ.update(
+    {
+        "SERVICE_HOURS_START": "",
+        "SERVICE_HOURS_END": "",
+        "SERVICE_DAYS": "",
+        "SERVICE_TIMEZONE": "",
+        "ALLOWED_IPS": "",
+        "BLOCKED_IPS": "",
+        "FAILBAN_THRESHOLD": "0",
+        "TRUST_PROXY": "false",
+        "CLIENT_IP_XFF_ENTRY": "0",
+        "CLIENT_IP_HEADER": "",
+        "CV_DATA_PATH": "data/cv.example.json",
+        "CV_DATA_GCS_URI": "",
+    }
+)
+os.environ.pop("ALLOWED_IPS_FILE", None)
+os.environ.pop("BLOCKED_IPS_FILE", None)
 
 from app.constants import PDF_CACHE_MAX_ENTRIES, PDF_EXECUTOR_MAX_WORKERS
 from app.cv_source import CvSource

@@ -103,7 +103,8 @@ def test_load_cv_data_invalid_schema_raises_readable_error(tmp_path):
     assert "name" in message
 
 
-def test_settings_defaults():
+def test_settings_defaults(monkeypatch):
+    monkeypatch.delenv("CV_DATA_PATH", raising=False)
     s = Settings()
     assert str(s.cv_data_path) == "data/cv.json"
 
