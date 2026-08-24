@@ -31,6 +31,11 @@ from app.settings import settings
 # stderr. Send app logs to stdout so WARNING stays WARNING in Logs Explorer.
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
+# Third-party render pipeline logs every font-subsetting detail at INFO;
+# keep root at INFO for app messages (cv_source reloads) but silence these.
+for _noisy in ("weasyprint", "fontTools"):
+    logging.getLogger(_noisy).setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
 
 
