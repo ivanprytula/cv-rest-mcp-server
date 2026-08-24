@@ -66,8 +66,9 @@ h2 {
     display: block;
 }
 
-.job-header {
-    align-items: baseline;
+.job-company {
+    display: flex;
+    justify-content: space-between;
 }
 .job-role {
     font-size: 1.0833rem;         /* 13pt */

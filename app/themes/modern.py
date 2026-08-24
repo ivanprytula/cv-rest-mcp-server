@@ -56,8 +56,6 @@ h2 {
     margin-bottom: 14px;
 }
 .job-header {
-    display: flex;
-    justify-content: space-between;
     margin-bottom: 2px;
 }
 .job-role {
@@ -65,6 +63,8 @@ h2 {
     color: #111827;
 }
 .job-company {
+    display: flex;
+    justify-content: space-between;
     font-weight: 600;
     color: #2563eb;
 }

@@ -150,14 +150,20 @@
         <article class="job">
             <div class="job-header">
                 <h3 class="job-role">{{ title }}</h3>
-                {% if meta %}
+                {# Period belongs on the company/org line (themes place it there);
+                   it only shares the header row when there is no subtitle at all,
+                   e.g. project entries showing a bare Link. #}
+                {% if meta and not subtitle %}
                 <time class="job-period">{{ meta }}</time>
-                {% elif url %}
+                {% elif url and not meta %}
                 <span class="job-period"><a href="{{ url }}">Link</a></span>
                 {% endif %}
             </div>
             {% if subtitle %}
-            <div class="job-company">{{ subtitle }}</div>
+            <div class="job-company">
+                <span class="job-org">{{ subtitle }}</span>
+                {%- if meta %}<time class="job-period">{{ meta }}</time>{% endif -%}
+            </div>
             {% endif %}
             {% if tech %}
             <div class="job-tech">{{ tech|join(', ') }}</div>

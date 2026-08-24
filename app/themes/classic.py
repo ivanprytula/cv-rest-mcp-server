@@ -58,12 +58,15 @@ h2 {
     margin-bottom: 12px;
 }
 .job-header {
-    display: flex;
-    justify-content: space-between;
     font-weight: bold;
 }
 .job-company {
+    display: flex;
+    justify-content: space-between;
     font-style: italic;
+}
+.job-company .job-period {
+    font-style: normal;
 }
 .job-period {
     color: #555;
