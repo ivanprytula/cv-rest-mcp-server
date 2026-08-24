@@ -84,22 +84,31 @@ class PdfService:
         ).hexdigest()
         return theme, cv_hash
 
-    def _get_or_render_pdf(self, theme: str, cv_json: dict) -> bytes:
-        key = self._cache_key(theme, cv_json)
+    def _cache_get(self, key: tuple[str, str]) -> bytes | None:
         with self._lock:
-            if key in self._cache:
-                self._cache.move_to_end(key)
-                return self._cache[key]
+            if key not in self._cache:
+                return None
+            self._cache.move_to_end(key)
+            return self._cache[key]
 
-            html = render_html(cv_json, self.themes[theme].CSS)
-            pdf = _generate_pdf_sync(html)
-
+    def _cache_put(self, key: tuple[str, str], pdf: bytes) -> None:
+        with self._lock:
             self._cache[key] = pdf
             self._cache.move_to_end(key)
             if len(self._cache) > self._max_entries:
                 self._cache.popitem(last=False)
 
-            return pdf
+    def _get_or_render_pdf(self, theme: str, cv_json: dict) -> bytes:
+        key = self._cache_key(theme, cv_json)
+        cached = self._cache_get(key)
+        if cached is not None:
+            return cached
+
+        html = render_html(cv_json, self.themes[theme].CSS)
+        pdf = _generate_pdf_sync(html)
+
+        self._cache_put(key, pdf)
+        return pdf
 
     def generate_cv_pdf(self, theme: str, cv_json: dict | None = None) -> bytes:
         if theme not in self.themes:
@@ -114,20 +123,13 @@ class PdfService:
 
         cv_json = cv_json or self.cv_data
         key = self._cache_key(theme, cv_json)
-
-        with self._lock:
-            if key in self._cache:
-                self._cache.move_to_end(key)
-                return self._cache[key]
+        cached = self._cache_get(key)
+        if cached is not None:
+            return cached
 
         html = render_html(cv_json, self.themes[theme].CSS)
         loop = asyncio.get_running_loop()
         pdf = await loop.run_in_executor(self._executor, _generate_pdf_sync, html)
 
-        with self._lock:
-            self._cache[key] = pdf
-            self._cache.move_to_end(key)
-            if len(self._cache) > self._max_entries:
-                self._cache.popitem(last=False)
-
+        self._cache_put(key, pdf)
         return pdf

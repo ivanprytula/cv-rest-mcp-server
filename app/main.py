@@ -1,4 +1,5 @@
 import base64
+import logging
 from contextlib import asynccontextmanager
 from typing import cast
 
@@ -14,11 +15,13 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 from app.constants import PDF_CACHE_MAX_ENTRIES, PDF_EXECUTOR_MAX_WORKERS, STATIC_DIR
-from app.pdf_generator import PdfService
+from app.pdf_generator import PdfService, ThemeNotFoundError
 from app.rate_limiter import limiter
 from app.routes import router
 from app.settings import settings
 
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="CV REST/MCP Server")
 app.state.limiter = limiter
@@ -61,16 +64,19 @@ def get_available_themes() -> list[str]:
 
 
 @mcp.tool
-def generate_cv_pdf_tool(theme: str) -> str:
+async def generate_cv_pdf_tool(theme: str) -> str:
     pdf_service = app.state.pdf_service
     if pdf_service is None:
         raise RuntimeError("PDF service not initialized")
     try:
-        pdf_bytes = pdf_service.generate_cv_pdf(theme)
+        pdf_bytes = await pdf_service.generate_cv_pdf_async(theme)
+    except ThemeNotFoundError as exc:
+        raise ToolError(exc.detail) from exc
     except ToolError:
         raise
-    except Exception as exc:
-        raise ToolError(str(exc)) from exc
+    except Exception:
+        logger.exception("MCP PDF generation failed for theme '%s'", theme)
+        raise ToolError("PDF generation failed") from None
     return base64.b64encode(pdf_bytes).decode("utf-8")
 
 
