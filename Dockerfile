@@ -10,9 +10,11 @@ ENV UV_COMPILE_BYTECODE=1 \
     PYTHONPATH=/app \
     PYTHONUNBUFFERED=1
 
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    apt-get update && apt-get install -y --no-install-recommends \
+# No RUN --mount=type=cache here: Cloud Build's default runner uses the
+# legacy (non-BuildKit) builder. Layer caching on uv.lock covers the deps.
+# DEBIAN_FRONTEND inline (not ENV): silences debconf TTY warnings in
+# non-interactive builds without leaking the var into the runtime image.
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
         libffi-dev \
         libssl-dev \
@@ -26,9 +28,7 @@ RUN uv sync --no-dev --frozen --no-install-project
 
 FROM base AS runtime
 
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    apt-get update && apt-get install -y --no-install-recommends \
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y --no-install-recommends \
         wget \
         libcairo2 \
         libpango-1.0-0 \
