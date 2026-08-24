@@ -1,0 +1,151 @@
+import re
+from unittest.mock import AsyncMock
+
+import pytest
+from fastapi import HTTPException, Request, status
+
+from app.dependencies import get_pdf_service
+from app.main import app
+
+
+async def test_root(client, override_pdf_service):
+    resp = await client.get("/")
+    assert resp.status_code == status.HTTP_200_OK
+    assert "text/html" in resp.headers["content-type"]
+    assert "CV REST/MCP Server" in resp.text
+    assert "/mcp" in resp.text
+    assert "cdn.tailwindcss.com" in resp.text
+    assert "/cv/preview" in resp.text
+    assert "/static/favicon.svg" in resp.text
+
+
+async def test_favicon_served(client):
+    resp = await client.get("/static/favicon.svg")
+    assert resp.status_code == status.HTTP_200_OK
+    assert "image/svg+xml" in resp.headers["content-type"]
+    assert "<desc>" in resp.text
+
+
+async def test_health(client):
+    resp = await client.get("/health")
+    assert resp.status_code == status.HTTP_200_OK
+    assert resp.json() == {"status": "ok"}
+
+
+async def test_get_cv(client, override_pdf_service):
+    resp = await client.get("/cv")
+    assert resp.status_code == status.HTTP_200_OK
+    data = resp.json()
+    assert data["name"] == "Jane Doe"
+    assert data["title"] == "Backend Engineer"
+    for key in (
+        "skills",
+        "experience",
+        "education",
+        "languages",
+        "projects",
+        "certifications",
+        "publications",
+        "awards",
+        "volunteering",
+    ):
+        assert isinstance(data[key], list)
+
+
+async def test_get_cv_html_classic(client, override_pdf_service):
+    resp = await client.get("/cv/html?theme=classic")
+    assert resp.status_code == status.HTTP_200_OK
+    assert "text/html" in resp.headers["content-type"]
+    assert "Jane Doe" in resp.text
+    assert "Georgia" in resp.text
+
+
+async def test_get_cv_html_footer(client, override_pdf_service):
+    resp = await client.get("/cv/html?theme=minimal")
+    assert resp.status_code == status.HTTP_200_OK
+    assert 'class="cv-footer"' in resp.text
+    footer = resp.text.split('class="cv-footer"', 1)[1].split("</div>", 1)[0]
+    assert "Jane Doe" in footer
+    assert "Backend Engineer" in footer
+    assert "jane.doe@example.com" in footer
+    assert "Page" in footer
+    assert "page-number" in footer
+
+
+async def test_get_cv_html_invalid_theme(client, override_pdf_service):
+    resp = await client.get("/cv/html?theme=nonexistent")
+    assert resp.status_code == status.HTTP_404_NOT_FOUND
+    assert "Theme 'nonexistent' not found" in resp.json()["detail"]
+
+
+async def test_cv_preview_page(client, override_pdf_service):
+    resp = await client.get("/cv/preview?theme=modern")
+    assert resp.status_code == status.HTTP_200_OK
+    assert "text/html" in resp.headers["content-type"]
+    assert "/cv/html?theme=modern" in resp.text
+    assert "/cv/pdf?theme=modern" in resp.text
+    assert "Download PDF" in resp.text
+    for theme_name in ("classic", "minimal", "modern"):
+        assert f"/cv/preview?theme={theme_name}" in resp.text
+
+
+async def test_cv_preview_invalid_theme(client, override_pdf_service):
+    resp = await client.get("/cv/preview?theme=nonexistent")
+    assert resp.status_code == status.HTTP_404_NOT_FOUND
+    assert "Theme 'nonexistent' not found" in resp.json()["detail"]
+
+
+async def test_get_cv_pdf_classic(client, override_pdf_service):
+    override_pdf_service.generate_cv_pdf_async = AsyncMock(
+        return_value=b"%PDF-1.7 fake"
+    )
+    resp = await client.get("/cv/pdf?theme=classic")
+    assert resp.status_code == status.HTTP_200_OK
+    assert resp.headers["content-type"] == "application/pdf"
+    pattern = r'attachment; filename="CV_Jane_Doe_Backend_Engineer_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.pdf"'
+    assert re.match(pattern, resp.headers["content-disposition"])
+    assert resp.content == b"%PDF-1.7 fake"
+
+
+async def test_get_cv_pdf_modern(client, override_pdf_service):
+    override_pdf_service.generate_cv_pdf_async = AsyncMock(
+        return_value=b"%PDF-1.7 fake"
+    )
+    resp = await client.get("/cv/pdf?theme=modern")
+    assert resp.status_code == status.HTTP_200_OK
+    assert resp.headers["content-type"] == "application/pdf"
+    assert resp.content == b"%PDF-1.7 fake"
+
+
+async def test_get_cv_pdf_minimal(client, override_pdf_service):
+    override_pdf_service.generate_cv_pdf_async = AsyncMock(
+        return_value=b"%PDF-1.7 fake"
+    )
+    resp = await client.get("/cv/pdf?theme=minimal")
+    assert resp.status_code == status.HTTP_200_OK
+    assert resp.headers["content-type"] == "application/pdf"
+    assert resp.content == b"%PDF-1.7 fake"
+
+
+async def test_get_pdf_service_dependency_returns_state_service():
+    request = Request({"type": "http", "app": app})
+    sentinel = object()
+    app.state.pdf_service = sentinel
+    try:
+        assert await get_pdf_service(request) is sentinel
+    finally:
+        app.state.pdf_service = None
+
+
+async def test_get_pdf_service_dependency_unavailable():
+    app.state.pdf_service = None
+    request = Request({"type": "http", "app": app})
+    with pytest.raises(HTTPException) as exc_info:
+        await get_pdf_service(request)
+    assert exc_info.value.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+
+
+async def test_get_cv_pdf_invalid_theme(client, override_pdf_service):
+    resp = await client.get("/cv/pdf?theme=nonexistent")
+    assert resp.status_code == status.HTTP_404_NOT_FOUND
+    assert "Theme 'nonexistent' not found" in resp.json()["detail"]

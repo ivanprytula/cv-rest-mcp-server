@@ -22,6 +22,7 @@ dev = [
     "ruff>=0.6",
     "ty>=0.0.72",
     "pytest>=8.0",
+    "pytest-cov>=6.0",
     "pytest-asyncio>=0.24",
     "httpx>=0.27",
 ]
@@ -41,7 +42,13 @@ ignore = ["E501"]
 known-first-party = ["app"]
 lines-after-imports = 2
 
-[tool.ty]
-
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+pythonpath = ["."]
+addopts = "--cov"
+
+[tool.coverage.run]
+source = ["app"]
+
+[tool.coverage.report]
+show_missing = true

@@ -1,0 +1,119 @@
+import json
+import os
+import tempfile
+from pathlib import Path
+from typing import Any
+
+import pytest
+from pydantic import ValidationError
+
+from app.cv_data import CVData, load_cv_data
+from app.settings import Settings, settings
+
+
+def test_cv_data_loads_successfully():
+    data = load_cv_data(settings.cv_data_path)
+    assert isinstance(data, dict)
+    assert isinstance(data["experience"], list)
+
+
+def test_cv_data_schema_validation(synthetic_cv_path, synthetic_cv):
+    cv = CVData(**load_cv_data(synthetic_cv_path))
+    assert cv.name == synthetic_cv["name"]
+    assert len(cv.experience) == len(synthetic_cv["experience"])
+    assert [job.company for job in cv.experience] == ["Beta Corp", "Alpha Corp"]
+    assert cv.education[0].degree == "BSc Testing"
+
+
+def test_cv_data_accepts_minimal_fields():
+    cv = CVData()
+    assert cv.name == ""
+    assert cv.skills == []
+    assert cv.experience == []
+
+
+def test_cv_data_accepts_extra_fields():
+    cv = CVData(custom_field="value")
+    assert cv.model_extra == {"custom_field": "value"}
+
+
+def test_cv_data_rejects_invalid_type():
+    invalid_fields: dict[str, Any] = {"name": 123}
+    with pytest.raises(ValidationError):
+        CVData(**invalid_fields)
+
+
+def test_load_cv_data_wraps_single_education():
+    raw = {
+        "name": "Test",
+        "education": {"degree": "BSc", "institution": "Uni", "year": "2020"},
+    }
+    result = load_cv_data_from_raw(raw)
+    assert isinstance(result["education"], list)
+    assert result["education"][0]["degree"] == "BSc"
+
+
+def test_load_cv_data_keeps_list_education():
+    raw = {
+        "name": "Test",
+        "education": [{"degree": "BSc", "institution": "Uni", "year": "2020"}],
+    }
+    result = load_cv_data_from_raw(raw)
+    assert isinstance(result["education"], list)
+    assert len(result["education"]) == 1
+
+
+def test_load_cv_data_minimal_json():
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+        json.dump({}, f)
+        path = Path(f.name)
+    try:
+        result = load_cv_data(path)
+        assert result["name"] == ""
+        assert result["skills"] == []
+    finally:
+        os.unlink(path)
+
+
+def test_load_cv_data_missing_file():
+    with pytest.raises(FileNotFoundError):
+        load_cv_data(Path("/nonexistent/path/cv.json"))
+
+
+def test_load_cv_data_invalid_json_type():
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+        f.write("[]")
+        path = Path(f.name)
+    try:
+        with pytest.raises(ValueError, match="must be a JSON object"):
+            load_cv_data(path)
+    finally:
+        os.unlink(path)
+
+
+def test_load_cv_data_invalid_schema_raises_readable_error(tmp_path):
+    path = tmp_path / "bad.json"
+    path.write_text(json.dumps({"name": 123}), encoding="utf-8")
+    with pytest.raises(ValueError) as exc_info:
+        load_cv_data(path)
+    message = str(exc_info.value)
+    assert "CV data validation failed" in message
+    assert "name" in message
+
+
+def test_settings_defaults():
+    s = Settings()
+    assert str(s.cv_data_path) == "data/cv.json"
+
+
+def test_settings_env_override(monkeypatch):
+    monkeypatch.setenv("CV_DATA_PATH", "/tmp/custom.json")
+    s = Settings()
+    assert s.cv_data_path == Path("/tmp/custom.json")
+
+
+def load_cv_data_from_raw(raw: dict) -> dict:
+    if isinstance(raw.get("education"), dict):
+        raw["education"] = [raw["education"]]
+    cv = CVData(**raw)
+    return cv.model_dump()
