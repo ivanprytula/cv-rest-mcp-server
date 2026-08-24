@@ -1,4 +1,4 @@
-# CV MCP Agent
+# CV REST/MCP Server
 
 FastAPI + FastMCP service that renders a CV as JSON or themed PDFs.
 
@@ -12,12 +12,16 @@ Server: `http://localhost:8080` · MCP: `/mcp` (JSON-RPC, not a browser page)
 
 ## REST API
 
-| Method | Path                   | Description  |
-| ------ | ---------------------- | ------------ |
-| GET    | `/`                    | Service info |
-| GET    | `/health`              | Health check |
-| GET    | `/cv`                  | CV as JSON   |
-| GET    | `/cv/pdf?theme=<name>` | CV as PDF    |
+| Method | Path                    | Description                                  |
+| ------ | ----------------------- | -------------------------------------------- |
+| GET    | `/`                     | Landing page                                 |
+| GET    | `/health`               | Health check                                 |
+| GET    | `/cv`                   | CV as JSON                                   |
+| GET    | `/cv/html?theme=<name>` | Rendered CV as HTML                          |
+| GET    | `/cv/preview?theme=<name>` | Preview page with toolbar                 |
+| GET    | `/cv/pdf?theme=<name>`  | CV as PDF (attachment)                       |
+
+Interactive OpenAPI docs (Swagger UI): [`/docs`](http://localhost:8080/docs)
 
 ## MCP
 
@@ -49,7 +53,7 @@ For a deployed instance, replace the URL with your public endpoint.
 
 ## Themes
 
-`classic` · `minimal` · `modern` — defined in `app/themes/<name>.py` as `CSS` strings.
+`classic` · `minimal` · `modern` · `original` — defined in `app/themes/<name>.py` as `CSS` strings.
 
 ## Content & Customization
 
@@ -59,7 +63,14 @@ Set `CV_DATA_PATH` to point to a different JSON file. See `data/cv.example.json`
 
 ## Rate Limiting
 
-5 req/15min per IP. `localhost` exempt. In-memory, per-instance.
+Per-IP, in-memory. `localhost` exempt.
+
+| Endpoint    | Limit   |
+| ----------- | ------- |
+| `/`         | 30/min  |
+| `/health`   | 60/min  |
+| `/cv*`      | 30/min  |
+| `/cv/pdf`   | 5/15min |
 
 ## Docker
 
