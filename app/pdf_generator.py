@@ -5,7 +5,7 @@ import json
 import os
 import threading
 from collections import OrderedDict
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 
 from fastapi import HTTPException
 from weasyprint import HTML
@@ -76,6 +76,7 @@ class PdfService:
         self._executor = ThreadPoolExecutor(max_workers=max_workers)
         self.themes: dict[str, Theme] = load_themes()
         self._cache: OrderedDict[tuple[str, str], bytes] = OrderedDict()
+        self._inflight: dict[tuple[str, str], Future[bytes]] = {}
 
     @property
     def cv_data(self) -> dict:
@@ -114,6 +115,25 @@ class PdfService:
             self._cache.move_to_end(key)
             if len(self._cache) > self._max_entries:
                 self._cache.popitem(last=False)
+
+    def _render_pdf(
+        self,
+        key: tuple[str, str],
+        theme: str,
+        cv_json: dict,
+        *,
+        consent: bool,
+        consent_company: str,
+    ) -> bytes:
+        html = render_html(
+            cv_json,
+            self.themes[theme].CSS,
+            consent=consent,
+            consent_company=consent_company,
+        )
+        pdf = _generate_pdf_sync(html)
+        self._cache_put(key, pdf)
+        return pdf
 
     def _get_or_render_pdf(
         self,
@@ -175,14 +195,29 @@ class PdfService:
         if cached is not None:
             return cached
 
-        html = render_html(
-            cv_json,
-            self.themes[theme].CSS,
-            consent=consent,
-            consent_company=consent_company,
-        )
-        loop = asyncio.get_running_loop()
-        pdf = await loop.run_in_executor(self._executor, _generate_pdf_sync, html)
+        with self._lock:
+            cached = self._cache.get(key)
+            if cached is not None:
+                self._cache.move_to_end(key)
+                return cached
 
-        self._cache_put(key, pdf)
-        return pdf
+            future = self._inflight.get(key)
+            if future is None:
+                future = self._executor.submit(
+                    self._render_pdf,
+                    key,
+                    theme,
+                    cv_json,
+                    consent=consent,
+                    consent_company=consent_company,
+                )
+                self._inflight[key] = future
+
+                def remove_inflight(completed: Future[bytes]) -> None:
+                    with self._lock:
+                        if self._inflight.get(key) is completed:
+                            del self._inflight[key]
+
+                future.add_done_callback(remove_inflight)
+
+        return await asyncio.shield(asyncio.wrap_future(future))

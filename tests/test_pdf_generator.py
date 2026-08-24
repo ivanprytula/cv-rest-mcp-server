@@ -1,3 +1,6 @@
+import asyncio
+import threading
+
 import pytest
 from fastapi import HTTPException
 
@@ -53,6 +56,34 @@ async def test_generate_cv_pdf_async_uses_cache(pdf_service):
     pdf1 = await pdf_service.generate_cv_pdf_async("modern")
     pdf2 = await pdf_service.generate_cv_pdf_async("modern")
     assert pdf1 == pdf2
+
+
+async def test_generate_cv_pdf_async_single_flight(pdf_service, monkeypatch):
+    started = threading.Event()
+    release = threading.Event()
+    render_count = 0
+    original_render = pdf_service._render_pdf
+
+    def render_once(*args, **kwargs):
+        nonlocal render_count
+        render_count += 1
+        started.set()
+        assert release.wait(timeout=5)
+        return original_render(*args, **kwargs)
+
+    monkeypatch.setattr(pdf_service, "_render_pdf", render_once)
+    first = asyncio.create_task(pdf_service.generate_cv_pdf_async("classic"))
+    await asyncio.to_thread(started.wait)
+    second = asyncio.create_task(pdf_service.generate_cv_pdf_async("classic"))
+    await asyncio.sleep(0)
+    assert len(pdf_service._inflight) == 1
+    release.set()
+
+    pdf1, pdf2 = await asyncio.gather(first, second)
+
+    assert render_count == 1
+    assert pdf1 == pdf2
+    assert len(pdf_service._cache) == 1
 
 
 def test_cache_evicts_least_recently_used_entry(synthetic_cv_path):
