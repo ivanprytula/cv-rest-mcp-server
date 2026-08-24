@@ -82,6 +82,15 @@ config/
 ├── blocked_geo.txt      # GENERATED geo blocklist (ipdeny RU IR KP BY CU SY VE MM) — refresh: just update-geo-blocklist
 └── mcp_clients.json     # MCP tab definitions (snippets, docs links, check markers, verified stamps) — shared with CI drift-check
 
+.github/workflows/
+├── ci.yml               # push(main)/PR: ruff check + format --check, ty, pytest (e2e excluded)
+├── deploy.yml           # manual dispatch → WIF auth → scripts/deploy-cloud-run.sh build deploy verify
+└── mcp-docs-drift.yml   # monthly vendor-docs marker check (see ADR-014)
+
+scripts/
+├── check_mcp_docs.py    # marker check + verified-stamp bump for config/mcp_clients.json
+└── deploy-cloud-run.sh  # checklist stages as idempotent stages; never creates the GCP project
+
 tests/
 ├── conftest.py          # AsyncClient fixture via ASGITransport
 ├── test_api.py          # REST endpoint tests

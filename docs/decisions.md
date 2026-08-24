@@ -206,3 +206,30 @@ eventual (up to a month) but human-confirmed via the issue queue. Marker sets
 are intentionally loose enough to survive doc prose edits while still
 catching format changes; first-line maintenance when an issue fires is
 updating one JSON entry.
+
+## ADR-015: CI on GitHub Actions; CD via dispatch-gated workflow reusing the local deploy script
+
+**Context.** Deploys were copy-paste gcloud blocks in a checklist. The team
+wanted PR/main CI (lint, types, tests) and a path from manual deploys to
+continuous deployment without long-lived cloud credentials in GitHub.
+
+**Decision.** `.github/workflows/ci.yml` runs ruff check/format-check, ty,
+and pytest on pushes to main and PRs (e2e excluded per pytest config).
+`.github/workflows/deploy.yml` triggers on `workflow_dispatch`, authenticates
+via Workload Identity Federation (`id-token: write`; no key material), and
+executes `scripts/deploy-cloud-run.sh build deploy verify`. That script is
+the single source of deploy truth — it mirrors the checklist stages
+(bootstrap/upload-cv/build/deploy/verify) and is idempotent; the same file
+serves local runs and CI so the two paths cannot drift. Project creation is
+deliberately out of scope: `GCP_PROJECT` must reference an existing project,
+validated at stage start. A one-time `wif` stage creates the identity pool,
+provider, and least-privilege deployer SA (run.admin + cloudbuild builder +
+serviceAccountUser scoped to the runtime SA only) and prints the exact
+`gh secret set` commands.
+
+**Consequences.** Zero secrets stored in GitHub beyond WIF identifiers;
+deploy provenance is auditable via Actions history; graduating to full CD is
+a trigger change plus a CI gate, with an optional approval gate through a
+GitHub environment. Runtime least-privilege is unchanged: the deployer can
+build images and push revisions but holds no data-plane access to the CV
+bucket.

@@ -1,0 +1,43 @@
+name: Deploy
+
+# Manual deploy to Cloud Run. Auth via Workload Identity Federation —
+# no service-account keys. One-time setup: scripts/deploy-cloud-run.sh wif
+# then wire the secrets it prints.
+#
+# To graduate from manual dispatch to continuous deployment on main,
+# add below and gate the job on CI:
+#   push:
+#     branches: [main]
+# plus `needs: ci` with a reusable-ci workflow.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write # required for WIF token exchange
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # environment: production   # uncomment after creating the environment
+    #                           # in repo settings to require manual approval
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build and deploy
+        env:
+          GCP_PROJECT: ${{ vars.GCP_PROJECT }}
+          GCP_REGION: ${{ vars.GCP_REGION }} # falls back to europe-west1 if unset
+        run: scripts/deploy-cloud-run.sh build deploy verify

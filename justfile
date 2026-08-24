@@ -71,6 +71,13 @@ run:
 gcloud-build:
     gcloud builds submit --tag gcr.io/$$GCP_PROJECT/cv-mcp-agent
 
+# Cloud Run lifecycle via scripts/deploy-cloud-run.sh (see checklist §7):
+# just deploy bootstrap upload-cv build deploy verify   — first full run
+# just deploy build deploy verify                       — code change
+# just deploy wif                                       — one-time CD wiring
+@deploy *args:
+    ./scripts/deploy-cloud-run.sh {{args}}
+
 mcp-init:
     curl -s -D - -X POST http://localhost:8080/mcp/ \
         -H "Content-Type: application/json" \
