@@ -13,6 +13,7 @@ from fastmcp.exceptions import ToolError
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+from starlette.types import ASGIApp
 
 from app.constants import PDF_CACHE_MAX_ENTRIES, PDF_EXECUTOR_MAX_WORKERS, STATIC_DIR
 from app.failban import register_violation_from_request
@@ -39,17 +40,51 @@ app.add_exception_handler(
     RateLimitExceeded,
     _handle_rate_limit_exceeded,
 )
-# Middleware runs in reverse addition order: Guard (added last) executes first,
-# rejecting banned/blocked/out-of-hours clients before they consume rate slots.
+
+
+class SecurityHeadersMiddleware:
+    """Attach baseline browser-security headers to every HTTP response.
+
+    X-Frame-Options is SAMEORIGIN because /cv/preview embeds /cv/html in an
+    iframe; DENY would break that same-origin frame.
+    """
+
+    _HEADERS = (
+        (b"x-content-type-options", b"nosniff"),
+        (b"x-frame-options", b"SAMEORIGIN"),
+        (b"referrer-policy", b"strict-origin-when-cross-origin"),
+    )
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_with_headers(message) -> None:
+            if message["type"] == "http.response.start":
+                existing = {k.lower() for k, _ in message.get("headers", [])}
+                message.setdefault("headers", []).extend(
+                    h for h in self._HEADERS if h[0] not in existing
+                )
+            await send(message)
+
+        await self.app(scope, receive, send_with_headers)
+
+
+# Middleware runs in reverse addition order: SecurityHeaders then Guard execute
+# first, so responses carry headers even when the guard rejects the client.
 app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 app.add_middleware(GuardMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
 
 mcp = FastMCP("cv-mcp-agent")
 

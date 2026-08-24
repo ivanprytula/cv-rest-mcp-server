@@ -149,3 +149,16 @@ async def test_get_cv_pdf_invalid_theme(client, override_pdf_service):
     resp = await client.get("/cv/pdf?theme=nonexistent")
     assert resp.status_code == status.HTTP_404_NOT_FOUND
     assert "Theme 'nonexistent' not found" in resp.json()["detail"]
+
+
+async def test_security_headers_present(client):
+    response = await client.get("/health")
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["x-frame-options"] == "SAMEORIGIN"
+    assert response.headers["referrer-policy"] == "strict-origin-when-cross-origin"
+
+
+async def test_cors_allows_any_origin_without_credentials(client):
+    response = await client.get("/health", headers={"Origin": "https://example.com"})
+    assert response.headers["access-control-allow-origin"] == "*"
+    assert "access-control-allow-credentials" not in response.headers
