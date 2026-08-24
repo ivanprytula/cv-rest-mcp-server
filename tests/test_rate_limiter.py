@@ -2,7 +2,12 @@ from unittest.mock import MagicMock
 
 from slowapi.util import get_remote_address
 
-from app.rate_limiter import get_client_ip, limiter
+from app.rate_limiter import (
+    _exempt_loopback,
+    get_client_ip,
+    limiter,
+    peer_is_loopback,
+)
 from app.settings import settings
 
 
@@ -70,3 +75,37 @@ def test_xff_falls_back_to_socket_when_chain_too_short(monkeypatch):
 
 def test_limiter_uses_get_client_ip_key_func():
     assert limiter._key_func is get_client_ip
+
+
+# --- loopback exemption vs TRUST_PROXY ---
+
+
+def _scope_request(ip="127.0.0.1"):
+    from starlette.requests import Request
+
+    scope = {"type": "http", "headers": []}
+    if ip is None:
+        scope["client"] = None
+    else:
+        scope["client"] = (ip, 12345)
+    return Request(scope)
+
+
+def test_loopback_peer_exempt_by_default():
+    assert peer_is_loopback(_scope_request("127.0.0.1"))
+    assert _exempt_loopback(_scope_request("127.0.0.1"))
+
+
+def test_public_peer_not_exempt():
+    assert not _exempt_loopback(_scope_request("203.0.113.5"))
+
+
+def test_missing_peer_not_exempt():
+    request = _scope_request()
+    request.scope["client"] = None
+    assert not _exempt_loopback(request)
+
+
+def test_trust_proxy_disables_loopback_exemption(monkeypatch):
+    monkeypatch.setattr(settings, "trust_proxy", True)
+    assert not _exempt_loopback(_scope_request("127.0.0.1"))

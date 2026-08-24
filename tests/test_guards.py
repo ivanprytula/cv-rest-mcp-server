@@ -206,6 +206,33 @@ def test_tracker_prunes_to_max_tracked():
     assert len(tracker._strikes) <= 5
 
 
+# --- register_violation_from_request (loopback gating vs TRUST_PROXY) ---
+
+
+def _scope_request(ip="127.0.0.1"):
+    from starlette.requests import Request
+
+    return Request(
+        {"type": "http", "headers": [], "client": None if ip is None else (ip, 12345)}
+    )
+
+
+def test_register_skips_loopback_by_default(monkeypatch):
+    tracker = _tracker(threshold=1)
+    monkeypatch.setattr(failban, "violation_tracker", tracker)
+    monkeypatch.setattr(failban.settings, "trust_proxy", False)
+    failban.register_violation_from_request(_scope_request("127.0.0.1"))
+    assert not tracker.is_banned("127.0.0.1")
+
+
+def test_register_bans_loopback_when_trust_proxy(monkeypatch):
+    tracker = _tracker(threshold=1)
+    monkeypatch.setattr(failban, "violation_tracker", tracker)
+    monkeypatch.setattr(failban.settings, "trust_proxy", True)
+    failban.register_violation_from_request(_scope_request("127.0.0.1"))
+    assert tracker.is_banned("127.0.0.1")
+
+
 # --- GuardMiddleware (direct ASGI scope calls) ---
 
 

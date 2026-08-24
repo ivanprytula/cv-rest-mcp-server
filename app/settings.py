@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     client_ip_xff_entry: int = 0
     client_ip_header: str = ""
 
+    # Set on platforms where the socket peer is a local proxy hop rather than
+    # the client (e.g. Cloud Run sees 127.0.0.1 for every request). Disables
+    # loopback-peer exemptions so rate limits and failban stay effective.
+    trust_proxy: bool = False
+
     # Static access lists (comma-separated IPs/CIDRs). Empty string disables.
     # allowed_ips acts as a whitelist: when set, only listed clients may connect.
     # The *_FILE variants point to text files with one IP/CIDR per line

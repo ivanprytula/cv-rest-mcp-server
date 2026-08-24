@@ -44,7 +44,10 @@ def peer_is_loopback(request: Request) -> bool:
 
 
 def _exempt_loopback(request: Request) -> bool:
-    return peer_is_loopback(request)
+    # Behind a trusted proxy the socket peer is a local hop, not the client;
+    # exempting it would disarm every limit, so exemptions only apply to
+    # direct peers (local dev).
+    return not settings.trust_proxy and peer_is_loopback(request)
 
 
 limiter = Limiter(key_func=get_client_ip)

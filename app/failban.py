@@ -82,6 +82,11 @@ class ViolationTracker:
 
 
 def _is_loopback(ip_str: str) -> bool:
+    # Behind a trusted proxy (TRUST_PROXY) a loopback *key* can only come from
+    # spoofable headers or the proxy hop itself, and dev self-ban protection
+    # is unnecessary — exemptions apply only to direct-peer deployments.
+    if settings.trust_proxy:
+        return False
     try:
         return ip_address(ip_str).is_loopback
     except ValueError:
@@ -98,9 +103,10 @@ violation_tracker = ViolationTracker(
 
 def register_violation_from_request(request) -> None:
     """Record a rate-limit violation for the resolved client, skipping
-    loopback peers (dev traffic must never self-ban)."""
+    loopback peers unless TRUST_PROXY is set (behind a proxy the peer is a
+    local hop, not the client; direct loopback is dev traffic)."""
     from app.rate_limiter import get_client_ip, peer_is_loopback
 
-    if peer_is_loopback(request):
+    if not settings.trust_proxy and peer_is_loopback(request):
         return
     violation_tracker.record(get_client_ip(request))
