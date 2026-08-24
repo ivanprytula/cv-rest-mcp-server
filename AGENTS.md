@@ -44,7 +44,8 @@ app/
 ├── main.py              # FastAPI app assembly, MCP tools, lifespan, /mcp mount
 ├── constants.py         # Project paths (TEMPLATE_DIR, THEMES_DIR), cache/worker limits
 ├── routes.py            # REST endpoints: /, /health, /cv, /cv/html, /cv/preview, /cv/pdf
-├── cv_data.py           # Pydantic models + load_cv_data(path) entry point
+├── cv_data.py           # Pydantic models + validate_cv_payload/load_cv_data
+├── cv_source.py         # CvSource: local file or GCS object (generation-checked hot reload, example-file placeholder fallback)
 ├── pdf_generator.py     # PdfService class: cache, executor, sync/async PDF generation
 ├── rate_limiter.py      # slowapi Limiter, get_client_ip strategy, @limits stacked decorator
 ├── mcp_limits.py        # MCP tool rate limits (slowapi stubs + fastmcp request context)
@@ -82,6 +83,7 @@ tests/
 ├── conftest.py          # AsyncClient fixture via ASGITransport
 ├── test_api.py          # REST endpoint tests
 ├── test_cv_data.py      # Data validation tests
+├── test_cv_source.py    # CvSource file/GCS modes, hot reload, placeholder fallback
 ├── test_guards.py       # ip_lists, service_hours, failban, GuardMiddleware tests
 ├── test_mcp.py          # MCP tool tests
 ├── test_mcp_limits.py   # MCP tool rate-limit tests
@@ -107,8 +109,9 @@ pyproject.toml          # Python 3.14+, deps, ruff/ty config, pytest asyncio_mod
 - **PDF visual verification**: when measuring generated PDFs with pdfplumber, check EVERY page and EVERY glyph variant — WeasyPrint's UA stylesheet adds native list markers (duplicate small bullets) unless `list-style: none`, and abs-pos offsets anchor to the padding box. Page-1-only checks have shipped real bugs (overlapped/duplicated bullets in the original theme).
 - **PDF cache**: LRU-bounded (50 entries) `OrderedDict` keyed by `(theme, sha256(cv_json))`. Shared `_get_or_render_pdf()` helper for sync/async paths.
 - **PDF functions**: `generate_cv_pdf(theme, cv_json)` and `generate_cv_pdf_async(theme, cv_json)` both require explicit `cv_json` dict — no module-level state.
-- **Rate limiting**: slowapi `Limiter` keyed by `get_client_ip` (XFF-entry / header / socket-peer strategies). REST uses the `@limits(...)` stacked decorator (burst + sustained, loopback-socket-peer exempt); MCP tools enforce via `app/mcp_limits.py` stubs + `get_http_request()`. `GuardMiddleware` (added last = runs first) handles allowlist/blocklist/dynamic bans/service hours; `/health` always passes.
+- **Rate limiting**: slowapi `Limiter` keyed by `get_client_ip` (XFF-entry / header / socket-peer strategies). REST uses the `@limits(...)` stacked decorator (burst + sustained, loopback-socket-peer exempt); MCP tools enforce via `app/mcp_limits.py` stubs + `get_http_request()`. `GuardMiddleware` (added last = runs first) handles allowlist/blocklist/dynamic bans/service hours; `/health` always passes. Loopback exemptions (limits, failban) are gated by `TRUST_PROXY`: proxied platforms (Cloud Run peer = 127.0.0.1 for everyone) MUST set `TRUST_PROXY=true` + `CLIENT_IP_XFF_ENTRY=2` or limits silently stop applying.
 - **IP access lists**: `parse_ip_list` accepts commas, whitespace, and newlines; `#` comments run to end of line (stripped BEFORE comma splitting — a comma inside a comment must not split tokens). Inline env values merge with `*_FILE` files; missing configured file = startup failure. Large geo lists MUST use the file form (execve caps env args at ~128KB); regenerate via `just update-geo-blocklist`.
+- **Image packaging**: the image ships `data/cv.example.json` ONLY (never real cv.json — CV content comes from GCS via `CV_DATA_GCS_URI`) plus `config/` (geo blocklist). `.dockerignore` and `.gcloudignore` both use `data/*` + `!data/cv.example.json`; gcloud builds submit applies `.gcloudignore` verbatim when present, otherwise it derives one from `.gitignore`, which excludes personal data.
 - **MCP tools**: Return base64 string for `generate_cv_pdf_tool` (MCP is JSON-only). Re-raises `ToolError` without wrapping.
 - **Tests**: Use `httpx.AsyncClient` + `ASGITransport` with `asyncio_mode = "auto"` — async tests need no `@pytest.mark.asyncio` marker.
 - **Tests are CV-data-independent**: tests must NOT assert on `data/cv.json` wording, names, or counts (the file is user content that changes often). Use the `SYNTHETIC_CV` fixtures from `tests/conftest.py` (`synthetic_cv`, `synthetic_cv_path`, `pdf_service`, `override_pdf_service`). Only structural smoke checks (e.g., "experience is a list") are allowed against the real file.

@@ -6,13 +6,12 @@ import os
 import threading
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
 
 from fastapi import HTTPException
 from weasyprint import HTML
 
 from app.constants import PDF_CACHE_MAX_ENTRIES, PDF_EXECUTOR_MAX_WORKERS, THEMES_DIR
-from app.cv_data import load_cv_data
+from app.cv_source import CvSource
 from app.renderer import render_html
 from app.themes import Theme
 
@@ -58,18 +57,27 @@ class ThemeNotFoundError(HTTPException):
 class PdfService:
     def __init__(
         self,
-        cv_json_path: Path,
+        cv_source: CvSource,
         *,
         max_entries: int = PDF_CACHE_MAX_ENTRIES,
         max_workers: int = PDF_EXECUTOR_MAX_WORKERS,
     ) -> None:
-        self._cv_json_path = cv_json_path
+        self._cv_source = cv_source
         self._max_entries = max_entries
         self._lock = threading.Lock()
         self._executor = ThreadPoolExecutor(max_workers=max_workers)
         self.themes: dict[str, Theme] = load_themes()
-        self.cv_data: dict = load_cv_data(cv_json_path)
         self._cache: OrderedDict[tuple[str, str], bytes] = OrderedDict()
+
+    @property
+    def cv_data(self) -> dict:
+        """Current CV document (hot-reloaded when backed by GCS)."""
+        return self._cv_source.get()
+
+    @property
+    def cv_source_kind(self) -> str:
+        """Where the served CV came from: "gcs", "file", or "placeholder"."""
+        return self._cv_source.source_kind
 
     def clear_cache(self) -> None:
         with self._lock:

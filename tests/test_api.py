@@ -29,7 +29,9 @@ async def test_favicon_served(client):
 async def test_health(client):
     resp = await client.get("/health")
     assert resp.status_code == status.HTTP_200_OK
-    assert resp.json() == {"status": "ok"}
+    body = resp.json()
+    assert body["status"] == "ok"
+    assert body["cv_source"] in {"gcs", "file", "placeholder", "unknown"}
 
 
 async def test_get_cv(client, override_pdf_service):

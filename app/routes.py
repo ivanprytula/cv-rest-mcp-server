@@ -46,7 +46,11 @@ async def root(request: Request, pdf_service=get_pdf_service_dep):
 @router.get("/health")
 @limiter.limit("60/minute")
 async def health(request: Request):
-    return {"status": "ok"}
+    pdf_service = getattr(request.app.state, "pdf_service", None)
+    return {
+        "status": "ok",
+        "cv_source": pdf_service.cv_source_kind if pdf_service else "unknown",
+    }
 
 
 @router.get("/cv")

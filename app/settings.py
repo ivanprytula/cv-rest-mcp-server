@@ -9,6 +9,15 @@ class Settings(BaseSettings):
     cv_data_path: Path = Path("data/cv.json")
     port: int = 8080
 
+    # CV content delivery. When set (gs://<bucket>/<object>), the CV document
+    # is fetched from a private GCS bucket instead of the local file — the
+    # image ships without personal data. The object is re-checked every
+    # cv_refresh_seconds via its generation number, so uploading a new file
+    # goes live without a redeploy. Runtime refresh failures keep serving the
+    # last good payload; startup failures abort boot.
+    cv_data_gcs_uri: str = ""
+    cv_refresh_seconds: int = 30
+
     # Client-IP strategy for rate limiting behind a reverse proxy.
     # - client_ip_xff_entry > 0: Nth entry of X-Forwarded-For counted from the
     #   right (Cloud Run recipe: 2 — GFE appends itself, so the penultimate

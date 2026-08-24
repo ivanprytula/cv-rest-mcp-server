@@ -1,3 +1,5 @@
+set dotenv-load
+
 @help:
     just --list
 
@@ -18,6 +20,14 @@ test:
 
 test-pdf:
     curl localhost:8080/cv/pdf?theme=modern -o /tmp/test.pdf
+
+# Publish local data/cv.json to the bucket configured in CV_DATA_GCS_URI
+upload-cv:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    : "${CV_DATA_GCS_URI:?CV_DATA_GCS_URI not set (e.g. gs://my-bucket/cv.json)}"
+    gcloud storage cp data/cv.json "$CV_DATA_GCS_URI"
+    echo "Published to $CV_DATA_GCS_URI — live within ${CV_REFRESH_SECONDS:-30}s"
 
 # Refresh config/blocked_geo.txt from ipdeny aggregated country zones
 update-geo-blocklist:

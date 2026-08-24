@@ -1,6 +1,7 @@
 import pytest
 from fastapi import HTTPException
 
+from app.cv_source import CvSource
 from app.pdf_generator import PdfService
 
 
@@ -55,7 +56,9 @@ async def test_generate_cv_pdf_async_uses_cache(pdf_service):
 
 
 def test_cache_evicts_least_recently_used_entry(synthetic_cv_path):
-    service = PdfService(synthetic_cv_path, max_entries=1, max_workers=1)
+    service = PdfService(
+        CvSource.for_path(synthetic_cv_path), max_entries=1, max_workers=1
+    )
     service.generate_cv_pdf("classic")
     service.generate_cv_pdf("minimal")
     assert [theme for theme, _ in service._cache] == ["minimal"]

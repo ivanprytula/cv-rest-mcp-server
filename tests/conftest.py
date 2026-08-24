@@ -4,6 +4,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.constants import PDF_CACHE_MAX_ENTRIES, PDF_EXECUTOR_MAX_WORKERS
+from app.cv_source import CvSource
 from app.dependencies import get_pdf_service
 from app.main import app
 from app.pdf_generator import PdfService
@@ -62,7 +63,7 @@ def synthetic_cv_path(tmp_path):
 @pytest.fixture
 def pdf_service(synthetic_cv_path):
     return PdfService(
-        synthetic_cv_path,
+        CvSource.for_path(synthetic_cv_path),
         max_entries=PDF_CACHE_MAX_ENTRIES,
         max_workers=PDF_EXECUTOR_MAX_WORKERS,
     )

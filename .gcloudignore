@@ -1,0 +1,27 @@
+# gcloud builds submit uses this file verbatim (it does NOT merge .gitignore).
+# config/ must stay included (geo blocklist is baked into the image).
+# data/: only cv.example.json goes to the build (placeholder fallback);
+# real cv.json is personal data delivered from GCS at runtime.
+.git/
+.github/
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.md
+tests/
+*.egg-info
+.pytest_cache/
+.ruff_cache/
+.pre-commit-cache/
+.kilo/
+.vscode/
+.learnings/
+dist/
+build/
+.env
+data/*
+!data/cv.example.json
+.dockerignore
+.gcloudignore
+justfile

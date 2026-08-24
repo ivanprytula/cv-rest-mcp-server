@@ -7,12 +7,14 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
+from app.constants import EXAMPLE_CV_PATH
 from app.cv_data import CVData, load_cv_data
-from app.settings import Settings, settings
+from app.settings import Settings
 
 
 def test_cv_data_loads_successfully():
-    data = load_cv_data(settings.cv_data_path)
+    # Structural smoke against the shipped example — never the personal file.
+    data = load_cv_data(EXAMPLE_CV_PATH)
     assert isinstance(data, dict)
     assert isinstance(data["experience"], list)
 

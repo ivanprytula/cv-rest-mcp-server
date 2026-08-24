@@ -29,8 +29,10 @@
 - **Layered access control.** `GuardMiddleware` answers "may this address talk to
   us at all" (allowlist/blocklist/bans/hours) before any work; the slowapi limiter
   answers "how often may this client act". Bans are recorded from both REST 429s
-  and MCP `ToolError`s, and loopback socket peers are always exempt (never
-  header-derived IPs, which are attacker-controllable).
+  and MCP `ToolError`s, and loopback socket peers are exempt unless `TRUST_PROXY`
+  is set (never header-derived IPs, which are attacker-controllable). Behind a
+  proxy every peer looks like loopback, so proxied deployments must set
+  `TRUST_PROXY=true` plus a client-IP strategy or limits silently stop applying.
 - **MCP rate limiting via request-context stubs.** Module-level functions
   decorated with slowapi's limiter are invoked with the request obtained from
   `fastmcp.server.dependencies.get_http_request()`; outside HTTP contexts

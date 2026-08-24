@@ -1,13 +1,13 @@
+"""CV data models and loaders.
+
+Data is no longer a module global; callers must pass an explicit path
+(or use CvSource for file/GCS resolution).
+"""
+
 import json
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, ValidationError
-
-
-"""CV data models and loaders.
-
-Data is no longer a module global; callers must pass an explicit path.
-"""
 
 
 class Experience(BaseModel):
@@ -87,15 +87,8 @@ class CVData(BaseModel):
     volunteering: list[Volunteering] = []
 
 
-def load_cv_data(path: Path) -> dict:
-    if not path.exists():
-        raise FileNotFoundError(
-            f"CV data file not found: {path}. Set CV_DATA_PATH or create data/cv.json."
-        )
-
-    with path.open("r", encoding="utf-8") as f:
-        raw = json.load(f)
-
+def validate_cv_payload(raw) -> dict:
+    """Validate and normalize a raw CV JSON object into the canonical dict."""
     if not isinstance(raw, dict):
         raise ValueError(f"CV data must be a JSON object, got {type(raw).__name__}")
 
@@ -113,3 +106,15 @@ def load_cv_data(path: Path) -> dict:
         raise ValueError("\n".join(lines)) from exc
 
     return cv.model_dump()
+
+
+def load_cv_data(path: Path) -> dict:
+    if not path.exists():
+        raise FileNotFoundError(
+            f"CV data file not found: {path}. Set CV_DATA_PATH or create data/cv.json."
+        )
+
+    with path.open("r", encoding="utf-8") as f:
+        raw = json.load(f)
+
+    return validate_cv_payload(raw)

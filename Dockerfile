@@ -47,6 +47,9 @@ ENV PATH="/app/.venv/bin:$PATH" \
 
 COPY --chown=65532:65532 templates/ ./templates/
 COPY --chown=65532:65532 static/ ./static/
+# .dockerignore reduces data/ to cv.example.json only — the placeholder the
+# app serves until a real CV lands in the GCS bucket. Personal data never
+# enters the image.
 COPY --chown=65532:65532 data/ ./data/
 COPY --chown=65532:65532 config/ ./config/
 COPY --chown=65532:65532 app/ ./app/

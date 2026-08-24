@@ -11,7 +11,8 @@ happens in a thread pool; the async path delegates to it via `asyncio.get_runnin
 | `app/routes.py`          | REST endpoints (`/`, `/health`, `/cv`, `/cv/html`, `/cv/preview`, `/cv/pdf`) |
 | `app/pdf_generator.py`   | `PdfService` class: cache, thread pool, sync/async PDF generation            |
 | `app/renderer.py`        | Jinja2 HTML rendering via `templates/cv_base.html`                           |
-| `app/cv_data.py`         | Pydantic models + `load_cv_data(path)` entry point                           |
+| `app/cv_data.py`         | Pydantic models + `validate_cv_payload` / `load_cv_data(path)`               |
+| `app/cv_source.py`       | CV document resolution: local file or GCS object, hot reload, placeholder fallback |
 | `app/themes/`            | Theme modules exposing `CSS: str`                                            |
 | `app/rate_limiter.py`    | slowapi `Limiter`, client-IP resolution, stacked-limit decorator             |
 | `app/mcp_limits.py`      | Rate limits enforced inside MCP tools (slowapi stubs + request context)       |
@@ -23,16 +24,25 @@ happens in a thread pool; the async path delegates to it via `asyncio.get_runnin
 
 ## Data Flow
 
-1. Request hits FastAPI router.
-2. Route injects `PdfService` via `Depends(get_pdf_service)`.
-3. For PDFs, `PdfService.generate_cv_pdf_async()` checks an LRU cache keyed by
+1. `CvSource` (`app/cv_source.py`) resolves the CV document: a private GCS
+   object (`CV_DATA_GCS_URI`, re-checked every `CV_REFRESH_SECONDS` via the
+   object generation) or a local file. If neither is available yet, it serves
+   the baked-in `data/cv.example.json` placeholder and keeps polling —
+   uploading a real cv.json goes live without a redeploy.
+2. Request hits FastAPI router.
+3. Route injects `PdfService` via `Depends(get_pdf_service)`; `pdf_service.cv_data`
+   reads through `CvSource`.
+4. For PDFs, `PdfService.generate_cv_pdf_async()` checks an LRU cache keyed by
    `(theme, sha256(cv_json))`.
-4. On miss, it submits sync WeasyPrint work to a `ThreadPoolExecutor`.
-5. Rendered PDF bytes are returned; sync path used by MCP tools, async path by REST.
-6. `/cv/html` skips PDF generation entirely — it renders the same
+5. On miss, it submits sync WeasyPrint work to a `ThreadPoolExecutor`.
+6. Rendered PDF bytes are returned; sync path used by MCP tools, async path by REST.
+7. `/cv/html` skips PDF generation entirely — it renders the same
    `templates/cv_base.html` + theme CSS straight to an HTML response.
    `/cv/preview` wraps that endpoint in an iframe inside a toolbar page
    (`templates/preview.html`) so users can inspect a theme before downloading.
+
+`GET /health` reports which payload is live: `"cv_source": "gcs" | "file" |
+"placeholder"`.
 
 ## MCP
 
@@ -61,12 +71,20 @@ limit for an endpoint is evaluated in a single slowapi pass:
 | MCP `generate_cv_pdf_tool`       | 5/15min     | 15/hour    |
 
 REST breaches return 429; MCP breaches surface as `ToolError("Rate limit exceeded")`
-and feed the dynamic ban tracker.
+and feed the dynamic ban tracker. Loopback *socket peers* are exempt from
+limits and bans by default (local dev); `TRUST_PROXY=true` disables those
+exemptions for proxied platforms where every peer appears as 127.0.0.1
+(Cloud Run) — required there alongside a client-IP strategy such as
+`CLIENT_IP_XFF_ENTRY=2`.
 
 ## Access Control
 
-`GuardMiddleware` (`app/guard_middleware.py`) is added last so it runs first,
-before CORS and rate limiting. Pure ASGI; rejects before any handler work.
+`GuardMiddleware` (`app/guard_middleware.py`) and `SecurityHeadersMiddleware`
+are added last so they run first, before CORS and rate limiting; every response
+carries `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, and
+`Referrer-Policy: strict-origin-when-cross-origin`. CORS is public-read:
+wildcard origin, no credentials. Pure-ASGI guard rejects before any handler
+work.
 Evaluation order: allowlist (`ALLOWED_IPS`) → blocklist (`BLOCKED_IPS`) →
 dynamic bans (`FAILBAN_*`) → service hours (`SERVICE_HOURS_*`). Each list may
 be inline (comma-separated) or file-based (`BLOCKED_IPS_FILE` /

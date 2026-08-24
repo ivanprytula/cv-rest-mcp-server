@@ -132,9 +132,51 @@ header-derived IPs (XFF entries, `CLIENT_IP_HEADER`) are attacker-controllable
 behind a proxy — exempting on them would let anyone claim a loopback identity
 and bypass everything.
 
-**Decision.** Exemption checks (`peer_is_loopback`) read only `scope["client"]`.
-Behind Cloud Run the peer is never loopback, so exemptions cannot trigger in
-production by construction.
+**Decision.** Exemption checks (`peer_is_loopback`) read only `scope["client"]`,
+never headers.
 
-**Consequences.** Local development is unlimited by default; production
-behavior is unaffected regardless of header spoofing.
+**Consequences.** Local development is unlimited by default; header spoofing is
+ineffective. *Corrected by ADR-012:* the original assumption that "behind Cloud
+Run the peer is never loopback" was false — Cloud Run's sandbox proxy presents
+`127.0.0.1` as the peer for every request.
+
+## ADR-012: TRUST_PROXY gates loopback exemptions for proxied deployments
+
+**Context.** On fully-managed Cloud Run every inbound connection arrives through
+the sandbox proxy, so the socket peer is `127.0.0.1` for all clients. The
+socket-peer-only exemptions from ADR-011 therefore silently disarmed REST/MCP
+rate limits and failban in production.
+
+**Decision.** `TRUST_PROXY` setting (default `false`). When set, all loopback
+exemptions are disabled: `_exempt_loopback` returns false, failban skips neither
+registration nor loopback keys, so limits and bans apply to everyone as keyed
+by the client-IP strategy (`CLIENT_IP_XFF_ENTRY=2` on Cloud Run). Exemption
+stays on by default for direct-peer local development.
+
+**Consequences.** One explicit knob per environment; no header-spoof surface.
+Forgetting to set it on a proxied platform re-arms the silent bypass — called
+out in `.env.example` and the deploy checklist.
+
+## ADR-013: CV content delivered from GCS; image ships placeholder only
+
+**Context.** Baking `cv.json` into the container image couples content changes
+to redeploys and puts personal data inside build artifacts. A SQL database was
+considered for content management but rejected: the data model is a single
+validated JSON document with no relational needs (see roadmap discussion).
+
+**Decision.** The CV document lives in a private GCS object
+(`CV_DATA_GCS_URI`). `CvSource` loads it at boot, validates against `CVData`,
+and hot-reloads when the object's generation changes (checked every
+`CV_REFRESH_SECONDS`) — publishing an update is `gcloud storage cp` /
+`just upload-cv`, no redeploy. If the object is absent or invalid at boot,
+the service starts anyway on the baked-in `data/cv.example.json` placeholder
+and keeps polling; `/health` reports `"cv_source": "gcs" | "file" |
+"placeholder"`. Runtime refresh failures keep the last good payload.
+
+**Consequences.** Personal CV data never enters images or build sources
+(`.dockerignore` / `.gcloudignore` whitelist only the example file). The
+service is never down due to missing content, but operators must watch the
+`cv_source` field — serving placeholder while believing real data is live is
+the failure mode. Auth for writes is delegated entirely to GCS IAM; no admin
+REST surface exists. Cloud SQL remains deferred until multi-document or
+multi-user requirements actually appear.

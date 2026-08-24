@@ -16,6 +16,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from starlette.types import ASGIApp
 
 from app.constants import PDF_CACHE_MAX_ENTRIES, PDF_EXECUTOR_MAX_WORKERS, STATIC_DIR
+from app.cv_source import build_cv_source_from_settings
 from app.failban import register_violation_from_request
 from app.guard_middleware import GuardMiddleware
 from app.mcp_limits import enforce_mcp_pdf_render_limit, enforce_mcp_read_limit
@@ -131,7 +132,7 @@ mcp_app = mcp.http_app(path="/")
 @asynccontextmanager
 async def lifespan(app):
     pdf_service = PdfService(
-        settings.cv_data_path,
+        build_cv_source_from_settings(),
         max_entries=PDF_CACHE_MAX_ENTRIES,
         max_workers=PDF_EXECUTOR_MAX_WORKERS,
     )
