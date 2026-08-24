@@ -80,14 +80,26 @@ just build && just run
 
 ## GCP Deploy
 
-Single entry point — every stage runs through `scripts/deploy-cloud-run.sh`
-(idempotent; `SVC_NAME` in `.env` names the service/image/service accounts):
+Pushes to `main` run CI and, after both quality and test jobs pass, deploy to
+Cloud Run automatically. Add `[skip deploy]` to a commit message to run CI
+without deploying. GitHub-native `[skip ci]`, `[ci skip]`, `[no ci]`,
+`[skip actions]`, and `[actions skip]` skip the workflow entirely, which can
+leave required checks pending.
+
+The one-time operator setup uses the deploy script (idempotent; `SVC_NAME` in
+`.env` names the service, image, and derived service accounts):
 
 ```bash
-just deploy bootstrap upload-cv build deploy verify   # first full run
-just deploy build deploy verify                       # code change
-just deploy wif                                       # one-time CD wiring
+just deploy bootstrap                                  # first full run
+just deploy upload-cv                                   # publish personal CV data
+just deploy wif                                        # one-time GitHub OIDC wiring
 ```
+
+For a normal code release, push a green change to `main`; do not run the
+build/deploy/verify stages manually. The CD verify job prints the deployed
+URL. It is also visible in Google Cloud Console under Cloud Run, the service,
+then URL. The CLI lookup uses the current `SVC_NAME` and `GCP_REGION`; service
+account IDs do not form part of the URL.
 
 ## Stack
 

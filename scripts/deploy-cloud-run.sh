@@ -4,7 +4,7 @@
 # Mirrors .local/deploy-checklist.md step by step; every stage is idempotent.
 #
 # Usage:
-#   scripts/deploy-cloud-run.sh <stage> [stage...]
+#   scripts/deploy-cloud-run.sh <stage>
 #
 # Stages:
 #   bootstrap   enable APIs, runtime SA, CV bucket + IAM binding   (checklist 0-2)
@@ -13,7 +13,6 @@
 #   deploy      create/update Cloud Run service                    (checklist 4)
 #   verify      health check + smoke URLs                          (checklist 5)
 #   wif         one-time: GitHub OIDC federation for CD            (see checklist 7)
-#   all         bootstrap build deploy verify                      (NOT upload-cv — run explicitly, personal data)
 #
 # Environment:
 #   GCP_PROJECT  required — your EXISTING project id. This script never
@@ -263,18 +262,21 @@ Wire these repository secrets/vars (needs repo admin):
   gh variable set GCP_REGION     --body "$GCP_REGION"
   gh variable set SVC_NAME       --body "$SVC_NAME"
 
-Then trigger: Actions → Deploy → Run workflow.
+Then push a commit to main to trigger CI/CD.
 EOF
 }
 
-case "${1:-}" in
-    # require_project) require_project ;;
-    bootstrap) shift; bootstrap ;;
-    upload-cv) shift; upload_cv ;;
-    build)     shift; build ;;
-    deploy)    shift; deploy ;;
-    verify)    shift; verify ;;
-    wif)       shift; wif ;;
-    all)       shift; bootstrap; build; deploy; verify ;;
+if [[ "$#" -ne 1 ]]; then
+    sed -n '2,25p' "$0"
+    exit 1
+fi
+
+case "$1" in
+    bootstrap) bootstrap ;;
+    upload-cv) upload_cv ;;
+    build)     build ;;
+    deploy)    deploy ;;
+    verify)    verify ;;
+    wif)       wif ;;
     *) sed -n '2,25p' "$0"; exit 1 ;;
 esac

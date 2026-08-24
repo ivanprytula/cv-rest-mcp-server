@@ -207,17 +207,21 @@ are intentionally loose enough to survive doc prose edits while still
 catching format changes; first-line maintenance when an issue fires is
 updating one JSON entry.
 
-## ADR-015: CI on GitHub Actions; CD via dispatch-gated workflow reusing the local deploy script
+## ADR-015: Unified CI/CD workflow with automatic main deployment
 
 **Context.** Deploys were copy-paste gcloud blocks in a checklist. The team
 wanted PR/main CI (lint, types, tests) and a path from manual deploys to
 continuous deployment without long-lived cloud credentials in GitHub.
 
-**Decision.** `.github/workflows/ci.yml` runs ruff check/format-check, ty,
-and pytest on pushes to main and PRs (e2e excluded per pytest config).
-`.github/workflows/deploy.yml` triggers on `workflow_dispatch`, authenticates
-via Workload Identity Federation (`id-token: write`; no key material), and
-executes `scripts/deploy-cloud-run.sh build deploy verify`. That script is
+**Decision.** `.github/workflows/cd.yaml` runs ruff check/format-check, ty,
+and pytest on pull requests targeting main and pushes to main. A successful
+push to main then authenticates via Workload Identity Federation (`id-token:
+write` only on the deploy job; no key material) and executes
+`scripts/deploy-cloud-run.sh build`, then `deploy`, then `verify` as separate
+commands. The deploy job is serialized and `[skip deploy]` skips only that job.
+GitHub-native CI skip tokens skip the entire workflow.
+
+That script is
 the single source of deploy truth — it mirrors the checklist stages
 (bootstrap/upload-cv/build/deploy/verify) and is idempotent; the same file
 serves local runs and CI so the two paths cannot drift. Project creation is
@@ -247,11 +251,13 @@ Cloud Run service, the image tag, and both derived service accounts
 from it, changing `SVC_NAME` means re-running `just deploy wif` locally and
 updating `GCP_DEPLOY_SA` with the freshly printed value — the other three
 wiring values are unaffected. A rename deploys *alongside* the old service;
-delete the old one manually once the new URL is verified.
+delete the old one manually once the new URL is verified. The verify stage
+prints the URL using `gcloud run services describe "$SVC_NAME" --region
+"$GCP_REGION" --format='value(status.url)'`. The same URL is visible in
+Google Cloud Console under Cloud Run, the service, then URL. Service-account
+IDs do not form part of the URL.
 
 **Consequences.** Zero secrets stored in GitHub beyond WIF identifiers;
-deploy provenance is auditable via Actions history; graduating to full CD is
-a trigger change plus a CI gate, with an optional approval gate through a
-GitHub environment. Runtime least-privilege is unchanged: the deployer can
+deploy provenance is auditable via Actions history. Runtime least-privilege is unchanged: the deployer can
 build images and push revisions but holds no data-plane access to the CV
 bucket.

@@ -83,8 +83,7 @@ config/
 └── mcp_clients.json     # MCP tab definitions (snippets, docs links, check markers, verified stamps) — shared with CI drift-check
 
 .github/workflows/
-├── ci.yml               # push(main)/PR: ruff check + format --check, ty, pytest (e2e excluded)
-├── deploy.yml           # manual dispatch → WIF auth → scripts/deploy-cloud-run.sh build deploy verify
+├── cd.yaml              # PR/main CI; green main pushes deploy via WIF
 └── mcp-docs-drift.yml   # monthly vendor-docs marker check (see ADR-014)
 
 scripts/
@@ -111,7 +110,7 @@ docs/
 
 Dockerfile              # Production container image
 .editorconfig           # Editor defaults: Ruff mirror for Python, web-standard indents
-justfile                # Recipes: setup, dev, code-quality, test, test-pdf, build, run, deploy, mcp-* — all GCP ops go through `just deploy <stages>` (scripts/deploy-cloud-run.sh), no direct gcloud recipes
+justfile                # Recipes: setup, dev, code-quality, test, test-pdf, build, run, deploy, mcp-* — operator GCP ops use `just deploy <stage>` (scripts/deploy-cloud-run.sh), no direct gcloud recipes
 pyproject.toml          # Python 3.14+, deps, ruff/ty config, pytest asyncio_mode=auto
 ```
 

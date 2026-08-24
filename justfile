@@ -60,9 +60,10 @@ build:
 run:
     docker run -p 8080:8080 cv-rest-mcp-server
 
-# First full run:  just deploy bootstrap upload-cv build deploy verify
-# Code change:     just deploy build deploy verify
-# One-time CD:     just deploy wif
+# One-time operator setup:
+#   just deploy bootstrap
+#   just deploy upload-cv
+#   just deploy wif
 # Single cloud entry point — every GCP op runs via scripts/deploy-cloud-run.sh
 @deploy *args:
     ./scripts/deploy-cloud-run.sh {{args}}

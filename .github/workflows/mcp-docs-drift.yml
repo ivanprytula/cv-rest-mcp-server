@@ -32,9 +32,13 @@ jobs:
           if gh issue list --state open --search "MCP docs drift detected in:title" | grep -q .; then
             echo "Open drift issue already exists; not duplicating."
           else
+            fence='```'
+            body="$(printf '%s\n\n%s\n%s\n%s\n' \
+              "Monthly marker check failed for one or more MCP clients — landing snippets likely need updating." \
+              "$fence" "$(cat drift-report.log)" "$fence")"
             gh issue create \
               --title "MCP docs drift detected" \
-              --body "$(printf 'Monthly marker check failed for one or more MCP clients — landing snippets likely need updating.\n\n```\n%s\n```\n' "$(cat drift-report.log)")"
+              --body "$body"
           fi
 
       - name: Refresh verified stamps (clean check only)
