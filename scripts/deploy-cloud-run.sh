@@ -131,7 +131,8 @@ build() {
     require_project
     log "Cloud Build: gcr.io/$GCP_PROJECT/$SVC_NAME"
     gcloud builds submit --project "$GCP_PROJECT" \
-        --tag "gcr.io/${GCP_PROJECT}/${SVC_NAME}" --quiet
+        --tag "gcr.io/${GCP_PROJECT}/${SVC_NAME}" \
+        --quiet --suppress-logs
 }
 
 deploy() {
