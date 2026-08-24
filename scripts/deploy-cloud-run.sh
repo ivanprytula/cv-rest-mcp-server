@@ -36,8 +36,21 @@ die()  { printf '\033[1;31mERR:\033[0m %s\n' "$*" >&2; exit 1; }
 
 require_project() {
     : "${GCP_PROJECT:?Set GCP_PROJECT to your EXISTING project id (this script does not create projects)}"
-    gcloud projects describe "$GCP_PROJECT" >/dev/null 2>&1 ||
-        die "Project '$GCP_PROJECT' not found or no access. Create it in the console (billing required), then re-run."
+    local project_error
+    if project_error="$(gcloud projects describe "$GCP_PROJECT" 2>&1 >/dev/null)"; then
+        return 0
+    fi
+    case "$project_error" in
+        *"NOT_FOUND"*|*"not found"*)
+            die "Project '$GCP_PROJECT' does not exist. Set GCP_PROJECT to the existing Google Cloud project ID."
+            ;;
+        *"PERMISSION_DENIED"*|*"permission"*|*"Permission"*)
+            die "The authenticated identity cannot access project '$GCP_PROJECT'. Check the GitHub WIF service account and its project IAM roles."
+            ;;
+        *)
+            die "Could not access project '$GCP_PROJECT': ${project_error:-unknown gcloud error}"
+            ;;
+    esac
 }
 
 ensure_build_permissions() {
@@ -222,6 +235,7 @@ EOF
 }
 
 case "${1:-}" in
+    # require_project) require_project ;;
     bootstrap) shift; bootstrap ;;
     upload-cv) shift; upload_cv ;;
     build)     shift; build ;;
