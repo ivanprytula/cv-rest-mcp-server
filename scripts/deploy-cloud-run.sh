@@ -221,6 +221,13 @@ wif() {
         --member="serviceAccount:$deploy_sa" --role=roles/browser --condition=None >/dev/null
     gcloud projects add-iam-policy-binding "$GCP_PROJECT" \
         --member="serviceAccount:$deploy_sa" --role=roles/cloudbuild.builds.builder --condition=None >/dev/null
+    # gcloud builds submit runs as the project's default Cloud Build SA; the
+    # deployer must be allowed to act as that SA, scoped to this account only.
+    local build_sa
+    build_sa="$(gcloud builds get-default-service-account --project "$GCP_PROJECT")"
+    gcloud iam service-accounts add-iam-policy-binding "$build_sa" \
+        --project "$GCP_PROJECT" --member="serviceAccount:$deploy_sa" \
+        --role=roles/iam.serviceAccountUser --condition=None >/dev/null
     # impersonate the runtime SA during deploys (scoped to that SA only)
     gcloud iam service-accounts add-iam-policy-binding "${RUN_SA_ID}@${GCP_PROJECT}.iam.gserviceaccount.com" \
         --project "$GCP_PROJECT" --member="serviceAccount:$deploy_sa" \

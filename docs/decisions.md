@@ -225,7 +225,8 @@ deliberately out of scope: `GCP_PROJECT` must reference an existing project,
 validated at stage start. A one-time `wif` stage creates the identity pool,
 provider, and least-privilege deployer SA (run.admin + cloudbuild builder +
 browser for the script's project-access probe + serviceAccountUser scoped to
-the runtime SA only) and prints the exact `gh secret set` commands.
+the Cloud Build and runtime service accounts only) and prints the exact
+`gh secret set` commands.
 
 **Repo wiring (one-time, per repo).** The workflow reads plain repo
 *variables* for non-sensitive config and WIF identifiers as *secrets*. The
