@@ -210,6 +210,7 @@ Wire these repository secrets/vars (needs repo admin):
   gh secret set GCP_DEPLOY_SA    --body "$deploy_sa"
   gh variable set GCP_PROJECT    --body "$GCP_PROJECT"
   gh variable set GCP_REGION     --body "$GCP_REGION"
+  gh variable set SVC_NAME       --body "$SVC_NAME"
 
 Then trigger: Actions → Deploy → Run workflow.
 EOF
