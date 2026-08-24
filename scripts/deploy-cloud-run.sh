@@ -86,7 +86,8 @@ bootstrap() {
     require_project
     log "Enabling APIs on $GCP_PROJECT"
     gcloud services enable --project "$GCP_PROJECT" \
-        run.googleapis.com cloudbuild.googleapis.com storage.googleapis.com
+        cloudresourcemanager.googleapis.com run.googleapis.com \
+        cloudbuild.googleapis.com storage.googleapis.com
 
     log "Runtime service account $RUN_SA_ID"
     if gcloud iam service-accounts describe "${RUN_SA_ID}@${GCP_PROJECT}.iam.gserviceaccount.com" \
