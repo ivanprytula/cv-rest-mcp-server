@@ -227,6 +227,27 @@ provider, and least-privilege deployer SA (run.admin + cloudbuild builder +
 serviceAccountUser scoped to the runtime SA only) and prints the exact
 `gh secret set` commands.
 
+**Repo wiring (one-time, per repo).** The workflow reads plain repo
+*variables* for non-sensitive config and WIF identifiers as *secrets*. The
+`wif` stage prints these with real values filled in:
+
+```bash
+gh variable set GCP_PROJECT --body "<project-id>" # required
+gh variable set GCP_REGION  --body "europe-west1" # optional — script default when unset
+gh variable set SVC_NAME    --body "<name>"       # optional — default = repo name
+gh secret set GCP_WIF_PROVIDER --body "<pool-full-path>/providers/gh-actions"
+gh secret set GCP_DEPLOY_SA    --body "<name>-deployer@<project>.iam.gserviceaccount.com"
+```
+
+`SVC_NAME` decouples the deployed identity from the repo name: it names the
+Cloud Run service, the image tag, and both derived service accounts
+(`${SVC_NAME}-runtime`, `${SVC_NAME}-deployer`). Locally it travels via
+`.env`; in Actions via `vars.SVC_NAME`. Because the deployer SA name derives
+from it, changing `SVC_NAME` means re-running `just deploy wif` locally and
+updating `GCP_DEPLOY_SA` with the freshly printed value — the other three
+wiring values are unaffected. A rename deploys *alongside* the old service;
+delete the old one manually once the new URL is verified.
+
 **Consequences.** Zero secrets stored in GitHub beyond WIF identifiers;
 deploy provenance is auditable via Actions history; graduating to full CD is
 a trigger change plus a CI gate, with an optional approval gate through a

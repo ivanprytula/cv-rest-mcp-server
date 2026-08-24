@@ -40,4 +40,5 @@ jobs:
         env:
           GCP_PROJECT: ${{ vars.GCP_PROJECT }}
           GCP_REGION: ${{ vars.GCP_REGION }} # falls back to europe-west1 if unset
+          SVC_NAME: ${{ vars.SVC_NAME }} # optional; falls back to repo default if unset
         run: scripts/deploy-cloud-run.sh build deploy verify
