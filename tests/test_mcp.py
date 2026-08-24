@@ -3,7 +3,7 @@ import base64
 import pytest
 from fastmcp.exceptions import ToolError
 
-from app.main import app, generate_cv_pdf_tool, get_available_themes, get_cv
+from app.main import app, generate_cv_pdf_tool, get_available_themes, get_cv, mcp
 
 
 @pytest.fixture(autouse=True)
@@ -25,6 +25,17 @@ def test_get_available_themes():
     assert "minimal" in result
     assert "modern" in result
     assert "original" in result
+
+
+async def test_mcp_tools_have_descriptions():
+    tools = await mcp.list_tools()
+
+    assert {tool.name for tool in tools} == {
+        "get_cv",
+        "get_available_themes",
+        "generate_cv_pdf_tool",
+    }
+    assert all(tool.description for tool in tools)
 
 
 async def test_generate_cv_pdf_tool_invalid_theme():

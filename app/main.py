@@ -125,6 +125,7 @@ mcp = FastMCP("cv-rest-mcp-server")
 
 @mcp.tool
 def get_cv() -> dict:
+    """Return the complete CV as structured JSON data."""
     enforce_mcp_read_limit()
     pdf_service = app.state.pdf_service
     if pdf_service is None:
@@ -134,6 +135,7 @@ def get_cv() -> dict:
 
 @mcp.tool
 def get_available_themes() -> list[str]:
+    """Return the names of all themes available for CV rendering."""
     enforce_mcp_read_limit()
     pdf_service = app.state.pdf_service
     if pdf_service is None:
@@ -143,6 +145,11 @@ def get_available_themes() -> list[str]:
 
 @mcp.tool
 async def generate_cv_pdf_tool(theme: str) -> str:
+    """Render the CV with the selected theme and return the PDF as base64 text.
+
+    Args:
+        theme: Name of an available CV theme.
+    """
     enforce_mcp_pdf_render_limit()
     pdf_service = app.state.pdf_service
     if pdf_service is None:
