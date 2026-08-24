@@ -1,0 +1,29 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "skills": {
+    "paths": [
+      ".kilo/skills"
+    ]
+  },
+  "mcp": {
+    "chrome-devtools": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "chrome-devtools-mcp@latest",
+        "--autoConnect",
+        "--logFile",
+        "/tmp/chrome-devtools-mcp.log",
+        "--no-usage-statistics",
+        "--no-performance-crux"
+      ],
+      "enabled": true
+    },
+      "cv-mcp-agent": {
+        "enabled": true,
+        "path": "app/main.py",
+        "host": "localhost"
+      }
+    }
+  }

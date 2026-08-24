@@ -4,11 +4,15 @@ __pycache__
 venv/
 .env
 *.md
+tests/
 *.egg-info
 .pytest_cache
 dist/
 build/
 .pre-commit-cache/
+
+data/*
+!data/cv.example.json
 
 Dockerfile
 .dockerignore
