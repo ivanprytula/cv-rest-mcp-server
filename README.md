@@ -12,14 +12,14 @@ Server: `http://localhost:8080` · MCP: `/mcp` (JSON-RPC, not a browser page)
 
 ## REST API
 
-| Method | Path                    | Description                                  |
-| ------ | ----------------------- | -------------------------------------------- |
-| GET    | `/`                     | Landing page                                 |
-| GET    | `/health`               | Health check                                 |
-| GET    | `/cv`                   | CV as JSON                                   |
-| GET    | `/cv/html?theme=<name>` | Rendered CV as HTML                          |
-| GET    | `/cv/preview?theme=<name>` | Preview page with toolbar                 |
-| GET    | `/cv/pdf?theme=<name>`  | CV as PDF (attachment)                       |
+| Method | Path                       | Description               |
+| ------ | -------------------------- | ------------------------- |
+| GET    | `/`                        | Landing page              |
+| GET    | `/health`                  | Health check              |
+| GET    | `/cv`                      | CV as JSON                |
+| GET    | `/cv/html?theme=<name>`    | Rendered CV as HTML       |
+| GET    | `/cv/preview?theme=<name>` | Preview page with toolbar |
+| GET    | `/cv/pdf?theme=<name>`     | CV as PDF (attachment)    |
 
 Interactive OpenAPI docs (Swagger UI): [`/docs`](http://localhost:8080/docs)
 
@@ -65,12 +65,12 @@ Set `CV_DATA_PATH` to point to a different JSON file. See `data/cv.example.json`
 
 Per-IP, in-memory. `localhost` exempt.
 
-| Endpoint    | Limit   |
-| ----------- | ------- |
-| `/`         | 30/min  |
-| `/health`   | 60/min  |
-| `/cv*`      | 30/min  |
-| `/cv/pdf`   | 5/15min |
+| Endpoint  | Limit   |
+| --------- | ------- |
+| `/`       | 30/min  |
+| `/health` | 60/min  |
+| `/cv*`    | 30/min  |
+| `/cv/pdf` | 5/15min |
 
 ## Docker
 
