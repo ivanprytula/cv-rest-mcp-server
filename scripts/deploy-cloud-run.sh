@@ -204,6 +204,14 @@ wif() {
             --display-name="$SVC_NAME GitHub Actions deployer"
     fi
     local deploy_sa="${DEPLOY_SA_ID}@${GCP_PROJECT}.iam.gserviceaccount.com"
+    local pool_full github_principal
+    pool_full="$(gcloud iam workload-identity-pools describe "$pool" --location global \
+        --project "$GCP_PROJECT" --format 'value(name)')"
+    github_principal="principalSet://iam.googleapis.com/${pool_full}/attribute.repository/${REPO}"
+    # Allow this repository's GitHub OIDC principal to impersonate only the deployer SA.
+    gcloud iam service-accounts add-iam-policy-binding "$deploy_sa" \
+        --project "$GCP_PROJECT" --member="$github_principal" \
+        --role=roles/iam.workloadIdentityUser --condition=None >/dev/null
     gcloud projects add-iam-policy-binding "$GCP_PROJECT" \
         --member="serviceAccount:$deploy_sa" --role=roles/run.admin --condition=None >/dev/null
     # require_project validates access via `gcloud projects describe`, which
@@ -218,9 +226,6 @@ wif() {
         --project "$GCP_PROJECT" --member="serviceAccount:$deploy_sa" \
         --role=roles/iam.serviceAccountUser --condition=None >/dev/null
 
-    local pool_full
-    pool_full="$(gcloud iam workload-identity-pools describe "$pool" --location global \
-        --project "$GCP_PROJECT" --format 'value(name)')"
     cat <<EOF
 
 Wire these repository secrets/vars (needs repo admin):
