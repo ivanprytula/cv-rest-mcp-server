@@ -36,6 +36,17 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
 
+      - name: Verify deployment identity
+        env:
+          GCP_PROJECT: ${{ vars.GCP_PROJECT }}
+        run: |
+          echo "Target project: ${GCP_PROJECT}"
+          echo "Authenticated account:"
+          gcloud auth list --filter=status:ACTIVE --format='value(account)'
+          gcloud projects describe "${GCP_PROJECT}" \
+            --format='value(projectId,projectNumber)' \
+            --verbosity=error
+
       - name: Build and deploy
         env:
           GCP_PROJECT: ${{ vars.GCP_PROJECT }}
