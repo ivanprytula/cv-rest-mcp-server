@@ -12,7 +12,9 @@ async def test_root(client, override_pdf_service):
     resp = await client.get("/")
     assert resp.status_code == status.HTTP_200_OK
     assert "text/html" in resp.headers["content-type"]
-    assert "CV REST/MCP Server" in resp.text
+    assert "CV REST/MCP Server" in resp.text  # footer
+    assert "Jane Doe" in resp.text  # hero: author name from cv_data
+    assert "Backend Engineer" in resp.text  # hero: author title from cv_data
     assert "/mcp" in resp.text
     assert "cdn.tailwindcss.com" in resp.text
     assert "/cv/preview" in resp.text

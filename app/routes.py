@@ -1,5 +1,6 @@
 import json
 import re
+import sys
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Request
@@ -88,12 +89,16 @@ def _client_mcp_configs(mcp_url: str) -> list[dict]:
 @router.get("/")
 @limits("30/minute", "120/hour")
 async def root(request: Request, pdf_service=get_pdf_service_dep):
-    """Landing page with ready-to-copy MCP client config and CV download form."""
+    """Landing page introducing the CV owner, with ready-to-copy MCP config and PDF download."""
+    cv = pdf_service.cv_data
     mcp_url = str(request.base_url).rstrip("/") + "/mcp"
     html = render_template(
         "landing.html",
         service_name="CV REST/MCP Server",
-        description="Generate, preview, and download your CV as a themed PDF — or plug it into any MCP client.",
+        cv_name=str(cv.get("name", "")).strip() or "CV REST/MCP Server",
+        cv_title=str(cv.get("title", "")).strip(),
+        description="Generate, preview, and download my CV as a themed PDF — or plug it into any MCP client.",
+        python_version=f"{sys.version_info.major}.{sys.version_info.minor}",
         mcp_clients=_client_mcp_configs(mcp_url),
         themes=pdf_service.list_themes(),
     )
