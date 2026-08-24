@@ -193,6 +193,11 @@ wif() {
     local deploy_sa="${DEPLOY_SA_ID}@${GCP_PROJECT}.iam.gserviceaccount.com"
     gcloud projects add-iam-policy-binding "$GCP_PROJECT" \
         --member="serviceAccount:$deploy_sa" --role=roles/run.admin --condition=None >/dev/null
+    # require_project validates access via `gcloud projects describe`, which
+    # needs projects.get — browser is the least-privilege role for that
+    # (projectViewer is often not grantable under org policy).
+    gcloud projects add-iam-policy-binding "$GCP_PROJECT" \
+        --member="serviceAccount:$deploy_sa" --role=roles/browser --condition=None >/dev/null
     gcloud projects add-iam-policy-binding "$GCP_PROJECT" \
         --member="serviceAccount:$deploy_sa" --role=roles/cloudbuild.builds.builder --condition=None >/dev/null
     # impersonate the runtime SA during deploys (scoped to that SA only)
