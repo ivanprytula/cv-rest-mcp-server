@@ -49,6 +49,14 @@ def _generate_pdf_sync(html: str) -> bytes:
         raise HTTPException(status_code=500, detail="PDF generation failed") from exc
 
 
+def _consent_tag(consent: bool, consent_company: str) -> str:
+    """Normalized cache-key suffix distinguishing consent variants."""
+    if not consent:
+        return ""
+    company = " ".join(consent_company.split()).lower()
+    return f"|consent:{company}"
+
+
 class ThemeNotFoundError(HTTPException):
     def __init__(self, theme: str) -> None:
         super().__init__(status_code=404, detail=f"Theme '{theme}' not found")
@@ -86,10 +94,11 @@ class PdfService:
     def list_themes(self) -> list[str]:
         return list(self.themes.keys())
 
-    def _cache_key(self, theme: str, cv_json: dict) -> tuple[str, str]:
-        cv_hash = hashlib.sha256(
-            json.dumps(cv_json, sort_keys=True).encode()
-        ).hexdigest()
+    def _cache_key(
+        self, theme: str, cv_json: dict, consent_tag: str = ""
+    ) -> tuple[str, str]:
+        payload = json.dumps(cv_json, sort_keys=True) + consent_tag
+        cv_hash = hashlib.sha256(payload.encode()).hexdigest()
         return theme, cv_hash
 
     def _cache_get(self, key: tuple[str, str]) -> bytes | None:
@@ -106,36 +115,72 @@ class PdfService:
             if len(self._cache) > self._max_entries:
                 self._cache.popitem(last=False)
 
-    def _get_or_render_pdf(self, theme: str, cv_json: dict) -> bytes:
-        key = self._cache_key(theme, cv_json)
+    def _get_or_render_pdf(
+        self,
+        theme: str,
+        cv_json: dict,
+        *,
+        consent: bool = False,
+        consent_company: str = "",
+    ) -> bytes:
+        tag = _consent_tag(consent, consent_company)
+        key = self._cache_key(theme, cv_json, tag)
         cached = self._cache_get(key)
         if cached is not None:
             return cached
 
-        html = render_html(cv_json, self.themes[theme].CSS)
+        html = render_html(
+            cv_json,
+            self.themes[theme].CSS,
+            consent=consent,
+            consent_company=consent_company,
+        )
         pdf = _generate_pdf_sync(html)
 
         self._cache_put(key, pdf)
         return pdf
 
-    def generate_cv_pdf(self, theme: str, cv_json: dict | None = None) -> bytes:
+    def generate_cv_pdf(
+        self,
+        theme: str,
+        cv_json: dict | None = None,
+        *,
+        consent: bool = False,
+        consent_company: str = "",
+    ) -> bytes:
         if theme not in self.themes:
             raise ThemeNotFoundError(theme)
-        return self._get_or_render_pdf(theme, cv_json or self.cv_data)
+        return self._get_or_render_pdf(
+            theme,
+            cv_json or self.cv_data,
+            consent=consent,
+            consent_company=consent_company,
+        )
 
     async def generate_cv_pdf_async(
-        self, theme: str, cv_json: dict | None = None
+        self,
+        theme: str,
+        cv_json: dict | None = None,
+        *,
+        consent: bool = False,
+        consent_company: str = "",
     ) -> bytes:
         if theme not in self.themes:
             raise ThemeNotFoundError(theme)
 
         cv_json = cv_json or self.cv_data
-        key = self._cache_key(theme, cv_json)
+        tag = _consent_tag(consent, consent_company)
+        key = self._cache_key(theme, cv_json, tag)
         cached = self._cache_get(key)
         if cached is not None:
             return cached
 
-        html = render_html(cv_json, self.themes[theme].CSS)
+        html = render_html(
+            cv_json,
+            self.themes[theme].CSS,
+            consent=consent,
+            consent_company=consent_company,
+        )
         loop = asyncio.get_running_loop()
         pdf = await loop.run_in_executor(self._executor, _generate_pdf_sync, html)
 

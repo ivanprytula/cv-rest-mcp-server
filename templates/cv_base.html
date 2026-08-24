@@ -87,6 +87,20 @@
             content: counter(page) " of " counter(pages);
         }
 
+        /* Optional GDPR/RODO consent block (recruiter mode).
+           Zero-specificity, so themes always win. */
+        :where(.consent) {
+            margin-top: 8mm;
+            padding-top: 3mm;
+            border-top: 0.3pt solid #94a3b8;
+            font-size: 7.5pt;
+            color: #6b7280;
+        }
+        :where(.consent p) {
+            margin: 0 0 1.5mm;
+            line-height: 1.45;
+        }
+
         /* Semantic-element resets: keep UA defaults (address italics,
            h3 heading sizing) from leaking into the themed layout.
            Zero-specificity, so themes always win. */
@@ -287,6 +301,13 @@
                 <li class="skill-item">{{ lang }}</li>
                 {% endfor %}
             </ul>
+        </section>
+        {% endif %}
+
+        {% if consent_enabled %}
+        <section class="consent">
+            <p lang="pl">Zgodnie z art. 6 ust. 1 lit. a RODO wyrażam zgodę na przetwarzanie moich danych osobowych zawartych w niniejszym dokumencie{% if consent_company %} przez <strong>{{ consent_company }}</strong>{% endif %} dla potrzeb obecnych i przyszłych rekrutacji.</p>
+            <p lang="en">Pursuant to Article 6(1)(a) of the GDPR, I consent to the processing of my personal data contained in this document{% if consent_company %} by <strong>{{ consent_company }}</strong>{% endif %} for current and future recruitment purposes.</p>
         </section>
         {% endif %}
     </main>

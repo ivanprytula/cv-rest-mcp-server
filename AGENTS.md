@@ -90,7 +90,8 @@ tests/
 ├── test_mcp.py          # MCP tool tests
 ├── test_mcp_limits.py   # MCP tool rate-limit tests
 ├── test_pdf_generator.py # PDF generation tests
-└── test_rate_limiter.py # Rate limiter / client-IP strategy tests
+├── test_rate_limiter.py # Rate limiter / client-IP strategy tests
+└── test_consent.py      # GDPR/RODO recruiter-clause tests (HTML/preview/PDF cache)
 
 docs/
 ├── architecture.md      # System components, data flow, endpoints
@@ -109,7 +110,7 @@ pyproject.toml          # Python 3.14+, deps, ruff/ty config, pytest asyncio_mod
 - **Theme styling scope**: themes set ONLY fonts/sizes/colors; structure (list markup, list-style, geometry, fallbacks) lives in `cv_base.html` as zero-specificity `:where()` defaults so theme overrides win regardless of stylesheet order (`{{css}}` is injected BEFORE the base block).
 - **Semantic markup + running-element gotcha**: cv_base.html uses HTML5 semantics (`main`/`header`/`address`/`article`/`h3`/`time`/`footer`) with classes as styling hooks; UA defaults are neutralized via `:where(address)/:where(h3)` resets. The `.cv-footer` running element MUST stay first in `<body>`: CSS GCPM makes a running element available to margin boxes only from its document page onward, so moving it to the end silently drops footers from all but the last page.
 - **PDF visual verification**: when measuring generated PDFs with pdfplumber, check EVERY page and EVERY glyph variant — WeasyPrint's UA stylesheet adds native list markers (duplicate small bullets) unless `list-style: none`, and abs-pos offsets anchor to the padding box. Page-1-only checks have shipped real bugs (overlapped/duplicated bullets in the original theme).
-- **PDF cache**: LRU-bounded (50 entries) `OrderedDict` keyed by `(theme, sha256(cv_json))`. Shared `_get_or_render_pdf()` helper for sync/async paths.
+- **PDF cache**: LRU-bounded (50 entries) `OrderedDict` keyed by `(theme, sha256(cv_json + consent-tag))` — the recruiter GDPR/RODO clause (`consent`/`company` query params) is part of the key, so different companies never share cached PDFs. Shared `_get_or_render_pdf()` helper for sync/async paths.
 - **PDF functions**: `generate_cv_pdf(theme, cv_json)` and `generate_cv_pdf_async(theme, cv_json)` both require explicit `cv_json` dict — no module-level state.
 - **Rate limiting**: slowapi `Limiter` keyed by `get_client_ip` (XFF-entry / header / socket-peer strategies). REST uses the `@limits(...)` stacked decorator (burst + sustained, loopback-socket-peer exempt); MCP tools enforce via `app/mcp_limits.py` stubs + `get_http_request()`. `GuardMiddleware` (added last = runs first) handles allowlist/blocklist/dynamic bans/service hours; `/health` always passes. Loopback exemptions (limits, failban) are gated by `TRUST_PROXY`: proxied platforms (Cloud Run peer = 127.0.0.1 for everyone) MUST set `TRUST_PROXY=true` + `CLIENT_IP_XFF_ENTRY=2` or limits silently stop applying.
 - **IP access lists**: `parse_ip_list` accepts commas, whitespace, and newlines; `#` comments run to end of line (stripped BEFORE comma splitting — a comma inside a comment must not split tokens). Inline env values merge with `*_FILE` files; missing configured file = startup failure. Large geo lists MUST use the file form (execve caps env args at ~128KB); regenerate via `just update-geo-blocklist`.

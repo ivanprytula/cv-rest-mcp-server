@@ -24,6 +24,15 @@ def _pdf_filename(cv: dict) -> str:
     return f"CV_{_safe(cv.get('name', ''))}_{_safe(cv.get('title', ''))}_{stamp}.pdf"
 
 
+def _consent_kwargs(company: str, consent: bool) -> dict:
+    """Normalize recruiter input into render kwargs.
+
+    A non-empty company name implies consent even if the checkbox was missed.
+    """
+    clean = re.sub(r"\s+", " ", company).strip()[:120]
+    return {"consent": consent or bool(clean), "consent_company": clean}
+
+
 @router.get("/")
 @limits("30/minute", "120/hour")
 async def root(request: Request, pdf_service=get_pdf_service_dep):
@@ -65,26 +74,51 @@ async def get_cv_json(request: Request, pdf_service=get_pdf_service_dep):
 @router.get("/cv/html")
 @limits("30/minute", "300/hour")
 async def get_cv_html(
-    request: Request, theme: str = "classic", pdf_service=get_pdf_service_dep
+    request: Request,
+    theme: str = "classic",
+    company: str = "",
+    consent: bool = False,
+    pdf_service=get_pdf_service_dep,
 ):
+    """Render the full CV page as HTML using the given theme (no toolbar chrome).
+
+    With `consent` (or a non-empty `company`), appends the GDPR/RODO
+    recruitment-consent clause, naming the company when provided.
+    """
     if theme not in pdf_service.themes:
         raise ThemeNotFoundError(theme)
-    html = render_html(pdf_service.cv_data, pdf_service.themes[theme].CSS)
+    html = render_html(
+        pdf_service.cv_data,
+        pdf_service.themes[theme].CSS,
+        **_consent_kwargs(company, consent),
+    )
     return HTMLResponse(content=html)
 
 
 @router.get("/cv/preview")
 @limits("30/minute", "300/hour")
 async def preview_cv(
-    request: Request, theme: str = "classic", pdf_service=get_pdf_service_dep
+    request: Request,
+    theme: str = "classic",
+    company: str = "",
+    consent: bool = False,
+    pdf_service=get_pdf_service_dep,
 ):
+    """Interactive preview page: theme picker toolbar embedding the rendered CV (/cv/html).
+
+    Forwards `consent` / `company` to the embedded CV, the theme links,
+    and the download button so previews match the final PDF.
+    """
     if theme not in pdf_service.themes:
         raise ThemeNotFoundError(theme)
+    kwargs = _consent_kwargs(company, consent)
     html = render_template(
         "preview.html",
         cv_name=pdf_service.cv_data.get("name", ""),
         theme=theme,
         themes=pdf_service.list_themes(),
+        consent=kwargs["consent"],
+        company=kwargs["consent_company"],
     )
     return HTMLResponse(content=html)
 
@@ -92,9 +126,20 @@ async def preview_cv(
 @router.get("/cv/pdf")
 @limits("5/15minute", "15/hour")
 async def get_cv_pdf(
-    request: Request, theme: str = "classic", pdf_service=get_pdf_service_dep
+    request: Request,
+    theme: str = "classic",
+    company: str = "",
+    consent: bool = False,
+    pdf_service=get_pdf_service_dep,
 ):
-    pdf_bytes = await pdf_service.generate_cv_pdf_async(theme)
+    """Generate the CV as a themed PDF and return it as a downloadable attachment.
+
+    With `consent` (or a non-empty `company`), the PDF carries the
+    GDPR/RODO recruitment-consent clause on its last page.
+    """
+    pdf_bytes = await pdf_service.generate_cv_pdf_async(
+        theme, **_consent_kwargs(company, consent)
+    )
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",

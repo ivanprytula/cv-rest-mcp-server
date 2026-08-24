@@ -11,9 +11,16 @@ def get_env() -> Environment:
 _ENV = get_env()
 
 
-def render_html(cv: dict, css: str) -> str:
+def render_html(
+    cv: dict, css: str, *, consent: bool = False, consent_company: str = ""
+) -> str:
     template = _ENV.get_template("cv_base.html")
-    return template.render(css=css, **cv)
+    return template.render(
+        css=css,
+        consent_enabled=consent,
+        consent_company=consent_company,
+        **cv,
+    )
 
 
 def render_template(name: str, **context) -> str:
