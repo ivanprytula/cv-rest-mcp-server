@@ -92,7 +92,8 @@ tests/
 ├── test_mcp_limits.py   # MCP tool rate-limit tests
 ├── test_pdf_generator.py # PDF generation tests
 ├── test_rate_limiter.py # Rate limiter / client-IP strategy tests
-└── test_consent.py      # GDPR/RODO recruiter-clause tests (HTML/preview/PDF cache)
+├── test_consent.py      # GDPR/RODO recruiter-clause tests (HTML/preview/PDF cache)
+└── test_e2e.py          # Playwright browser flows (copy, dark mode, consent click-through); run: just test-ui
 
 docs/
 ├── architecture.md      # System components, data flow, endpoints

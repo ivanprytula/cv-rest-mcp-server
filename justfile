@@ -18,6 +18,11 @@ code-quality:
 test:
     uv run pytest
 
+# Browser e2e tests (Playwright); excluded from `just test` by default.
+test-ui:
+    uv run playwright install chromium
+    uv run pytest -m e2e --no-cov
+
 test-pdf:
     curl localhost:8080/cv/pdf?theme=modern -o /tmp/test.pdf
 
