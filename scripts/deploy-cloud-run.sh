@@ -129,7 +129,6 @@ upload_cv() {
 
 build() {
     require_project
-    ensure_build_permissions # self-heal hardened projects on every build
     log "Cloud Build: gcr.io/$GCP_PROJECT/$SVC_NAME"
     gcloud builds submit --project "$GCP_PROJECT" \
         --tag "gcr.io/${GCP_PROJECT}/${SVC_NAME}" --quiet
