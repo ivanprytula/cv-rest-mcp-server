@@ -9,9 +9,5 @@ class Settings(BaseSettings):
     cv_data_path: Path = Path("data/cv.json")
     port: int = 8080
 
-    @property
-    def resolved_cv_data_path(self) -> Path:
-        return self.cv_data_path.resolve()
-
 
 settings = Settings()

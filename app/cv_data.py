@@ -3,7 +3,11 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from app.settings import Settings
+
+"""CV data models and loaders.
+
+Data is no longer a module global; callers must pass an explicit path.
+"""
 
 
 class Experience(BaseModel):
@@ -83,15 +87,13 @@ class CVData(BaseModel):
     volunteering: list[Volunteering] = []
 
 
-def load_cv_data(path: Path | None = None) -> dict:
-    file_path = path or Settings().cv_data_path
-
-    if not file_path.exists():
+def load_cv_data(path: Path) -> dict:
+    if not path.exists():
         raise FileNotFoundError(
-            f"CV data file not found: {file_path}. Set CV_DATA_PATH or create data/cv.json."
+            f"CV data file not found: {path}. Set CV_DATA_PATH or create data/cv.json."
         )
 
-    with file_path.open("r", encoding="utf-8") as f:
+    with path.open("r", encoding="utf-8") as f:
         raw = json.load(f)
 
     if not isinstance(raw, dict):
@@ -111,6 +113,3 @@ def load_cv_data(path: Path | None = None) -> dict:
         raise ValueError("\n".join(lines)) from exc
 
     return cv.model_dump()
-
-
-CV_DATA = load_cv_data()
