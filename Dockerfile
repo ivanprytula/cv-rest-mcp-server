@@ -48,6 +48,7 @@ ENV PATH="/app/.venv/bin:$PATH" \
 COPY --chown=65532:65532 templates/ ./templates/
 COPY --chown=65532:65532 static/ ./static/
 COPY --chown=65532:65532 data/ ./data/
+COPY --chown=65532:65532 config/ ./config/
 COPY --chown=65532:65532 app/ ./app/
 COPY --chown=65532:65532 pyproject.toml ./
 

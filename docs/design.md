@@ -24,17 +24,32 @@
 - **MCP workaround.** FastMCP tools cannot use FastAPI `Depends`, so they access
   `app.state` directly after a `None` guard.
 - **LRU cache.** `OrderedDict` bounded to 50 entries. Keys are `(theme, sha256)`.
-  Invalidation is manual via `PdfService.clear_cache()`.
+  Invalidation is manual via `PdfService.clear_cache()`. Cache probes never hold
+  the lock during rendering — both sync and async paths probe → render → insert.
+- **Layered access control.** `GuardMiddleware` answers "may this address talk to
+  us at all" (allowlist/blocklist/bans/hours) before any work; the slowapi limiter
+  answers "how often may this client act". Bans are recorded from both REST 429s
+  and MCP `ToolError`s, and loopback socket peers are always exempt (never
+  header-derived IPs, which are attacker-controllable).
+- **MCP rate limiting via request-context stubs.** Module-level functions
+  decorated with slowapi's limiter are invoked with the request obtained from
+  `fastmcp.server.dependencies.get_http_request()`; outside HTTP contexts
+  (tests, in-memory transport) enforcement is a no-op.
 
 ## Constraints
 
 - Python 3.14+
-- Stateless between requests (except in-memory cache and rate-limit state)
-- Cloud Run-compatible: reads `PORT`, shuts down executor on lifespan exit
-- No secrets in repo; `CV_DATA_PATH` is the only runtime config knob
+- Stateless between requests (except in-memory caches: PDF LRU, rate-limit
+  buckets, dynamic bans — all single-process)
+- Cloud Run-compatible: reads `PORT`, shuts down executor on lifespan exit;
+  set `CLIENT_IP_XFF_ENTRY=2` behind the GFE for real client IPs
+- No secrets in repo; runtime knobs are documented in `.env.example`
 
 ## Testing
 
 - pytest + `httpx.AsyncClient` + `ASGITransport`
 - `asyncio_mode = "auto"`
 - `PdfService` is instantiated directly in tests; `app.state` is overridden where needed
+- Guard policies are tested by calling `GuardMiddleware` directly with synthetic
+  ASGI scopes; MCP limits use fake non-loopback requests patched into
+  `get_http_request`

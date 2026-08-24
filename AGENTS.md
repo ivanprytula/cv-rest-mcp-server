@@ -46,10 +46,15 @@ app/
 ├── routes.py            # REST endpoints: /, /health, /cv, /cv/html, /cv/preview, /cv/pdf
 ├── cv_data.py           # Pydantic models + load_cv_data(path) entry point
 ├── pdf_generator.py     # PdfService class: cache, executor, sync/async PDF generation
-├── rate_limiter.py      # slowapi Limiter instance
+├── rate_limiter.py      # slowapi Limiter, get_client_ip strategy, @limits stacked decorator
+├── mcp_limits.py        # MCP tool rate limits (slowapi stubs + fastmcp request context)
+├── guard_middleware.py  # Outermost access gate: allowlist/blocklist/bans/hours
+├── ip_lists.py          # IP/CIDR parsing + membership checks
+├── service_hours.py     # Scheduled availability window evaluation
+├── failban.py           # Dynamic ban tracker fed by rate-limit violations
 ├── renderer.py          # Jinja2 rendering: render_html (CV) + render_template (pages)
 ├── dependencies.py      # get_pdf_service(request) dependency
-├── settings.py          # Pydantic Settings (cv_data_path, port)
+├── settings.py          # Pydantic Settings — all runtime knobs, see .env.example
 └── themes/
     ├── __init__.py      # Theme Protocol definition
     ├── classic.py       # CSS string
@@ -70,13 +75,18 @@ static/
 data/
 └── cv.json              # CV content (validated against CVData model)
 
+config/
+└── blocked_geo.txt      # GENERATED geo blocklist (ipdeny RU IR KP BY CU SY VE MM) — refresh: just update-geo-blocklist
+
 tests/
 ├── conftest.py          # AsyncClient fixture via ASGITransport
 ├── test_api.py          # REST endpoint tests
 ├── test_cv_data.py      # Data validation tests
+├── test_guards.py       # ip_lists, service_hours, failban, GuardMiddleware tests
 ├── test_mcp.py          # MCP tool tests
+├── test_mcp_limits.py   # MCP tool rate-limit tests
 ├── test_pdf_generator.py # PDF generation tests
-└── test_rate_limiter.py # Rate limiter tests
+└── test_rate_limiter.py # Rate limiter / client-IP strategy tests
 
 docs/
 ├── architecture.md      # System components, data flow, endpoints
@@ -97,7 +107,8 @@ pyproject.toml          # Python 3.14+, deps, ruff/ty config, pytest asyncio_mod
 - **PDF visual verification**: when measuring generated PDFs with pdfplumber, check EVERY page and EVERY glyph variant — WeasyPrint's UA stylesheet adds native list markers (duplicate small bullets) unless `list-style: none`, and abs-pos offsets anchor to the padding box. Page-1-only checks have shipped real bugs (overlapped/duplicated bullets in the original theme).
 - **PDF cache**: LRU-bounded (50 entries) `OrderedDict` keyed by `(theme, sha256(cv_json))`. Shared `_get_or_render_pdf()` helper for sync/async paths.
 - **PDF functions**: `generate_cv_pdf(theme, cv_json)` and `generate_cv_pdf_async(theme, cv_json)` both require explicit `cv_json` dict — no module-level state.
-- **Rate limiting**: slowapi `Limiter` with `get_remote_address` key func. Wired via `SlowAPIMiddleware` + per-endpoint `@limiter.limit()` decorators.
+- **Rate limiting**: slowapi `Limiter` keyed by `get_client_ip` (XFF-entry / header / socket-peer strategies). REST uses the `@limits(...)` stacked decorator (burst + sustained, loopback-socket-peer exempt); MCP tools enforce via `app/mcp_limits.py` stubs + `get_http_request()`. `GuardMiddleware` (added last = runs first) handles allowlist/blocklist/dynamic bans/service hours; `/health` always passes.
+- **IP access lists**: `parse_ip_list` accepts commas, whitespace, and newlines; `#` comments run to end of line (stripped BEFORE comma splitting — a comma inside a comment must not split tokens). Inline env values merge with `*_FILE` files; missing configured file = startup failure. Large geo lists MUST use the file form (execve caps env args at ~128KB); regenerate via `just update-geo-blocklist`.
 - **MCP tools**: Return base64 string for `generate_cv_pdf_tool` (MCP is JSON-only). Re-raises `ToolError` without wrapping.
 - **Tests**: Use `httpx.AsyncClient` + `ASGITransport` with `asyncio_mode = "auto"` — async tests need no `@pytest.mark.asyncio` marker.
 - **Tests are CV-data-independent**: tests must NOT assert on `data/cv.json` wording, names, or counts (the file is user content that changes often). Use the `SYNTHETIC_CV` fixtures from `tests/conftest.py` (`synthetic_cv`, `synthetic_cv_path`, `pdf_service`, `override_pdf_service`). Only structural smoke checks (e.g., "experience is a list") are allowed against the real file.

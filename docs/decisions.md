@@ -71,3 +71,70 @@ default arguments.
 scope in `app/routes.py` and reference it in signatures.
 
 **Consequences.** Lint passes; semantics are unchanged.
+
+## ADR-008: Rate-limit MCP tools via slowapi stubs + request context
+
+**Context.** The mounted `/mcp` sub-app is invisible to route decorators and
+`SlowAPIMiddleware`, so MCP PDF renders were unthrottled. FastMCP tools cannot
+use FastAPI `Depends`.
+
+**Decision.** Module-level stub functions decorated with the shared `limiter`
+are called inside each tool with the request from
+`fastmcp.server.dependencies.get_http_request()`. No HTTP context (tests,
+in-memory transport) → enforcement no-ops. `RateLimitExceeded` becomes
+`ToolError("Rate limit exceeded")`. The PDF tool is async and routes through
+the bounded executor.
+
+**Consequences.** One limiter instance governs both surfaces; no new
+dependencies; relies on slowapi's decorator wrapper accepting an explicit
+`Request` argument (stable, documented behavior).
+
+## ADR-009: Client-IP resolution strategy for rate limiting
+
+**Context.** Behind Cloud Run's GFE the socket peer is a shared Google IP —
+per-IP buckets would lump all visitors together (self-DoS). GFE *appends* to
+`X-Forwarded-For` rather than overwriting it, so standard ProxyFix math does
+not apply.
+
+**Decision.** `get_client_ip()` uses configurable strategies in order:
+Nth XFF entry from the right (`CLIENT_IP_XFF_ENTRY`; Cloud Run recipe: `2`,
+the penultimate entry = real client, un-spoofable without controlling a hop
+adjacent to GFE), then a raw trusted header (`CLIENT_IP_HEADER`, nginx
+`X-Real-IP` case), then the socket peer.
+
+**Consequences.** Per-client fairness works behind proxies. The raw-header
+mode is spoofable if the app is reachable without that proxy — document
+deployment assumptions. IP rotation remains possible; sustained caps and the
+bounded executor bound total damage regardless of keying.
+
+## ADR-010: GuardMiddleware for static lists, hours, dynamic bans
+
+**Context.** Allowlist/blocklist, scheduled availability windows, and
+fail2ban-style temporary bans are "may this client talk to us at all"
+policies, distinct from per-client throughput limits. They should reject
+before CORS/rate-limiting run and never consume rate slots.
+
+**Decision.** Pure-ASGI `GuardMiddleware` added last (executes first):
+allowlist → blocklist → dynamic ban → service hours. Bans are recorded from
+both REST 429s and MCP `ToolError`s into an in-memory, thread-safe,
+memory-capped tracker. All policies are env-configured and disabled by
+default; with none configured the middleware short-circuits to passthrough.
+`/health` always passes so monitoring survives any policy.
+
+**Consequences.** In-memory state is single-process (matches slowapi storage);
+restart clears bans. Static blocklist intentionally has no loopback exemption
+(operator-explicit config), while dynamic bans never ban loopback.
+
+## ADR-011: Loopback exemptions use socket peer only
+
+**Context.** Dev traffic (localhost) must bypass rate limits and bans, but
+header-derived IPs (XFF entries, `CLIENT_IP_HEADER`) are attacker-controllable
+behind a proxy — exempting on them would let anyone claim a loopback identity
+and bypass everything.
+
+**Decision.** Exemption checks (`peer_is_loopback`) read only `scope["client"]`.
+Behind Cloud Run the peer is never loopback, so exemptions cannot trigger in
+production by construction.
+
+**Consequences.** Local development is unlimited by default; production
+behavior is unaffected regardless of header spoofing.

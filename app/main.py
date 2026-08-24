@@ -15,6 +15,9 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 from app.constants import PDF_CACHE_MAX_ENTRIES, PDF_EXECUTOR_MAX_WORKERS, STATIC_DIR
+from app.failban import register_violation_from_request
+from app.guard_middleware import GuardMiddleware
+from app.mcp_limits import enforce_mcp_pdf_render_limit, enforce_mcp_read_limit
 from app.pdf_generator import PdfService, ThemeNotFoundError
 from app.rate_limiter import limiter
 from app.routes import router
@@ -28,6 +31,7 @@ app.state.limiter = limiter
 
 
 def _handle_rate_limit_exceeded(request: Request, exc: Exception) -> Response:
+    register_violation_from_request(request)
     return _rate_limit_exceeded_handler(request, cast(RateLimitExceeded, exc))
 
 
@@ -35,6 +39,8 @@ app.add_exception_handler(
     RateLimitExceeded,
     _handle_rate_limit_exceeded,
 )
+# Middleware runs in reverse addition order: Guard (added last) executes first,
+# rejecting banned/blocked/out-of-hours clients before they consume rate slots.
 app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(
     CORSMiddleware,
@@ -43,12 +49,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(GuardMiddleware)
 
 mcp = FastMCP("cv-mcp-agent")
 
 
 @mcp.tool
 def get_cv() -> dict:
+    enforce_mcp_read_limit()
     pdf_service = app.state.pdf_service
     if pdf_service is None:
         raise RuntimeError("PDF service not initialized")
@@ -57,6 +65,7 @@ def get_cv() -> dict:
 
 @mcp.tool
 def get_available_themes() -> list[str]:
+    enforce_mcp_read_limit()
     pdf_service = app.state.pdf_service
     if pdf_service is None:
         raise RuntimeError("PDF service not initialized")
@@ -65,6 +74,7 @@ def get_available_themes() -> list[str]:
 
 @mcp.tool
 async def generate_cv_pdf_tool(theme: str) -> str:
+    enforce_mcp_pdf_render_limit()
     pdf_service = app.state.pdf_service
     if pdf_service is None:
         raise RuntimeError("PDF service not initialized")

@@ -18,3 +18,8 @@ data/*
 .vscode/
 
 .learnings/
+
+docs/*
+!docs/architecture.md
+!docs/decisions.md
+!docs/design.md

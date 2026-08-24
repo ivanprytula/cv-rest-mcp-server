@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse, Response
 
 from app.dependencies import get_pdf_service
 from app.pdf_generator import ThemeNotFoundError
-from app.rate_limiter import limiter
+from app.rate_limiter import limiter, limits
 from app.renderer import render_html, render_template
 
 
@@ -25,7 +25,7 @@ def _pdf_filename(cv: dict) -> str:
 
 
 @router.get("/")
-@limiter.limit("30/minute")
+@limits("30/minute", "120/hour")
 async def root(request: Request, pdf_service=get_pdf_service_dep):
     mcp_url = str(request.base_url).rstrip("/") + "/mcp"
     mcp_config = {
@@ -50,13 +50,13 @@ async def health(request: Request):
 
 
 @router.get("/cv")
-@limiter.limit("30/minute")
+@limits("30/minute", "600/hour")
 async def get_cv_json(request: Request, pdf_service=get_pdf_service_dep):
     return pdf_service.cv_data
 
 
 @router.get("/cv/html")
-@limiter.limit("30/minute")
+@limits("30/minute", "300/hour")
 async def get_cv_html(
     request: Request, theme: str = "classic", pdf_service=get_pdf_service_dep
 ):
@@ -67,7 +67,7 @@ async def get_cv_html(
 
 
 @router.get("/cv/preview")
-@limiter.limit("30/minute")
+@limits("30/minute", "300/hour")
 async def preview_cv(
     request: Request, theme: str = "classic", pdf_service=get_pdf_service_dep
 ):
@@ -83,7 +83,7 @@ async def preview_cv(
 
 
 @router.get("/cv/pdf")
-@limiter.limit("5/15minute")
+@limits("5/15minute", "15/hour")
 async def get_cv_pdf(
     request: Request, theme: str = "classic", pdf_service=get_pdf_service_dep
 ):
