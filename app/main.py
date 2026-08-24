@@ -28,7 +28,30 @@ from app.settings import settings
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="CV REST/MCP Server")
+
+def _openapi_contact() -> dict[str, str] | None:
+    contact = {}
+    if settings.contact_name:
+        contact["name"] = settings.contact_name
+    if settings.contact_email:
+        contact["email"] = settings.contact_email
+    return contact or None
+
+
+app = FastAPI(
+    title="CV REST/MCP Server",
+    description=(
+        "Render a structured CV as a themed HTML page or a downloadable PDF.\n\n"
+        "**REST**\n"
+        "- `GET /cv` — raw CV JSON\n"
+        "- `GET /cv/html?theme=` — rendered CV page\n"
+        "- `GET /cv/preview?theme=` — interactive preview toolbar\n"
+        "- `GET /cv/pdf?theme=` — PDF download (rate-limited)\n\n"
+        "**MCP** — mount `/mcp` in any MCP client "
+        "(config snippet on the landing page)."
+    ),
+    contact=_openapi_contact(),
+)
 app.state.limiter = limiter
 
 

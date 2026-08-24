@@ -27,6 +27,7 @@ def _pdf_filename(cv: dict) -> str:
 @router.get("/")
 @limits("30/minute", "120/hour")
 async def root(request: Request, pdf_service=get_pdf_service_dep):
+    """Landing page with ready-to-copy MCP client config and CV download form."""
     mcp_url = str(request.base_url).rstrip("/") + "/mcp"
     mcp_config = {
         "mcpServers": {
@@ -46,6 +47,7 @@ async def root(request: Request, pdf_service=get_pdf_service_dep):
 @router.get("/health")
 @limiter.limit("60/minute")
 async def health(request: Request):
+    """Liveness probe: returns service status and the active CV source kind (file/GCS)."""
     pdf_service = getattr(request.app.state, "pdf_service", None)
     return {
         "status": "ok",
@@ -56,6 +58,7 @@ async def health(request: Request):
 @router.get("/cv")
 @limits("30/minute", "600/hour")
 async def get_cv_json(request: Request, pdf_service=get_pdf_service_dep):
+    """Return the raw CV data as JSON, exactly as served to renderers."""
     return pdf_service.cv_data
 
 

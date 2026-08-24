@@ -33,6 +33,8 @@ just code-quality         # ruff check + ruff format + ty type check
 just test                 # run test suite with coverage (extra args pass through)
 ```
 
+Note: `set dotenv-load` injects `.env` into every just recipe (dev server gets CONTACT_NAME/CONTACT_EMAIL etc.). A manually started uvicorn does NOT read `.env` — source it (`set -a; source .env; set +a`) or Swagger metadata stays empty.
+
 ## Project
 
 FastAPI + FastMCP CV rendering service. PDFs via WeasyPrint. Templates in `templates/`, themes in `app/themes/`.

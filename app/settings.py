@@ -9,6 +9,11 @@ class Settings(BaseSettings):
     cv_data_path: Path = Path("data/cv.json")
     port: int = 8080
 
+    # OpenAPI / Swagger UI metadata shown in /docs. Empty = field omitted.
+    # Kept in env config (not code) so the image stays free of personal data.
+    contact_name: str = ""
+    contact_email: str = ""
+
     # CV content delivery. When set (gs://<bucket>/<object>), the CV document
     # is fetched from a private GCS bucket instead of the local file — the
     # image ships without personal data. The object is re-checked every
