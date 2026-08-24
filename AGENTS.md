@@ -111,7 +111,7 @@ docs/
 
 Dockerfile              # Production container image
 .editorconfig           # Editor defaults: Ruff mirror for Python, web-standard indents
-justfile                # Recipes: setup, dev, code-quality, test, test-pdf, build, run, gcloud-build, mcp-*
+justfile                # Recipes: setup, dev, code-quality, test, test-pdf, build, run, deploy, mcp-* — all GCP ops go through `just deploy <stages>` (scripts/deploy-cloud-run.sh), no direct gcloud recipes
 pyproject.toml          # Python 3.14+, deps, ruff/ty config, pytest asyncio_mode=auto
 ```
 

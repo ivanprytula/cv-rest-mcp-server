@@ -26,14 +26,6 @@ test-ui:
 test-pdf:
     curl localhost:8080/cv/pdf?theme=modern -o /tmp/test.pdf
 
-# Publish local data/cv.json to the bucket configured in CV_DATA_GCS_URI
-upload-cv:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    : "${CV_DATA_GCS_URI:?CV_DATA_GCS_URI not set (e.g. gs://my-bucket/cv.json)}"
-    gcloud storage cp data/cv.json "$CV_DATA_GCS_URI"
-    echo "Published to $CV_DATA_GCS_URI — live within ${CV_REFRESH_SECONDS:-30}s"
-
 # Refresh config/blocked_geo.txt from ipdeny aggregated country zones
 update-geo-blocklist:
     #!/usr/bin/env bash
@@ -68,13 +60,10 @@ build:
 run:
     docker run -p 8080:8080 cv-rest-mcp-server
 
-gcloud-build:
-    gcloud builds submit --tag gcr.io/$$GCP_PROJECT/cv-rest-mcp-server
-
-# Cloud Run lifecycle via scripts/deploy-cloud-run.sh (see checklist §7):
-# just deploy bootstrap upload-cv build deploy verify   — first full run
-# just deploy build deploy verify                       — code change
-# just deploy wif                                       — one-time CD wiring
+# First full run:  just deploy bootstrap upload-cv build deploy verify
+# Code change:     just deploy build deploy verify
+# One-time CD:     just deploy wif
+# Single cloud entry point — every GCP op runs via scripts/deploy-cloud-run.sh
 @deploy *args:
     ./scripts/deploy-cloud-run.sh {{args}}
 

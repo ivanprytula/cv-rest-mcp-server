@@ -168,7 +168,7 @@ validated JSON document with no relational needs (see roadmap discussion).
 (`CV_DATA_GCS_URI`). `CvSource` loads it at boot, validates against `CVData`,
 and hot-reloads when the object's generation changes (checked every
 `CV_REFRESH_SECONDS`) — publishing an update is `gcloud storage cp` /
-`just upload-cv`, no redeploy. If the object is absent or invalid at boot,
+`just deploy upload-cv`, no redeploy. If the object is absent or invalid at boot,
 the service starts anyway on the baked-in `data/cv.example.json` placeholder
 and keeps polling; `/health` reports `"cv_source": "gcs" | "file" |
 "placeholder"`. Runtime refresh failures keep the last good payload.

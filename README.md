@@ -80,9 +80,13 @@ just build && just run
 
 ## GCP Deploy
 
+Single entry point — every stage runs through `scripts/deploy-cloud-run.sh`
+(idempotent; `SVC_NAME` in `.env` names the service/image/service accounts):
+
 ```bash
-just gcloud-build
-gcloud run deploy cv-rest-mcp-server --image gcr.io/$GCP_PROJECT/cv-rest-mcp-server --region us-central1 --platform managed --allow-unauthenticated
+just deploy bootstrap upload-cv build deploy verify   # first full run
+just deploy build deploy verify                       # code change
+just deploy wif                                       # one-time CD wiring
 ```
 
 ## Stack
