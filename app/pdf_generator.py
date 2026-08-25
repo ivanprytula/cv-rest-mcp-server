@@ -227,6 +227,7 @@ class PdfService:
                         if self._inflight.get(key) is completed:
                             del self._inflight[key]
 
-                future.add_done_callback(remove_inflight)
+                loop = asyncio.get_running_loop()
+                future.add_done_callback(lambda f: loop.call_soon(remove_inflight, f))
 
         return await asyncio.shield(asyncio.wrap_future(future))

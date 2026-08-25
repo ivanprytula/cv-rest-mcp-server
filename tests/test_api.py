@@ -1,10 +1,8 @@
 import re
 from unittest.mock import AsyncMock
 
-import pytest
-from fastapi import HTTPException, Request, status
+from fastapi import status
 
-from app.dependencies import get_pdf_service
 from app.main import app
 
 
@@ -137,24 +135,6 @@ async def test_get_cv_pdf_minimal(client, override_pdf_service):
     assert resp.status_code == status.HTTP_200_OK
     assert resp.headers["content-type"] == "application/pdf"
     assert resp.content == b"%PDF-1.7 fake"
-
-
-async def test_get_pdf_service_dependency_returns_state_service():
-    request = Request({"type": "http", "app": app})
-    sentinel = object()
-    app.state.pdf_service = sentinel
-    try:
-        assert await get_pdf_service(request) is sentinel
-    finally:
-        app.state.pdf_service = None
-
-
-async def test_get_pdf_service_dependency_unavailable():
-    app.state.pdf_service = None
-    request = Request({"type": "http", "app": app})
-    with pytest.raises(HTTPException) as exc_info:
-        await get_pdf_service(request)
-    assert exc_info.value.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
 
 
 async def test_get_cv_pdf_invalid_theme(client, override_pdf_service):

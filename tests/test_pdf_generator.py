@@ -44,20 +44,6 @@ def test_deny_all_url_fetcher_rejects_urls(url):
         _deny_all_url_fetcher(url)
 
 
-def test_generate_cv_pdf_with_reserved_key_collisions_succeeds(
-    pdf_service, synthetic_cv
-):
-    cv = {
-        **synthetic_cv,
-        "css": "malicious CSS override",
-        "consent_enabled": True,
-        "consent_company": "untrusted company",
-        "metadata": "harmless extra metadata",
-    }
-    pdf = pdf_service.generate_cv_pdf("classic", cv, consent=False, consent_company="")
-    assert pdf.startswith(b"%PDF")
-
-
 def test_weasyprint_html_uses_deny_all_url_fetcher():
     pdf = HTML(
         string='<img src="file:///etc/passwd">',

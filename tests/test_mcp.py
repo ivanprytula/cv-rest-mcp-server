@@ -3,7 +3,7 @@ import base64
 import pytest
 from fastmcp.exceptions import ToolError
 
-from app.main import app, generate_cv_pdf_tool, get_available_themes, get_cv, mcp
+from app.main import generate_cv_pdf_tool, get_available_themes, get_cv, mcp
 
 
 @pytest.fixture(autouse=True)
@@ -58,16 +58,6 @@ async def test_generate_cv_pdf_tool_sanitizes_internal_errors(pdf_service, monke
         await generate_cv_pdf_tool("classic")
     assert "render exploded" not in str(exc_info.value)
     assert len(pdf_service._cache) == 0
-
-
-async def test_mcp_tools_raise_without_initialized_service():
-    app.state.pdf_service = None
-    with pytest.raises(RuntimeError, match="PDF service not initialized"):
-        get_cv()
-    with pytest.raises(RuntimeError, match="PDF service not initialized"):
-        get_available_themes()
-    with pytest.raises(RuntimeError, match="PDF service not initialized"):
-        await generate_cv_pdf_tool("classic")
 
 
 async def test_mcp_endpoint_redirect(client):

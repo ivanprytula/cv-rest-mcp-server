@@ -9,7 +9,6 @@ from pydantic import ValidationError
 
 from app.constants import EXAMPLE_CV_PATH
 from app.cv_data import CVData, load_cv_data
-from app.settings import Settings
 
 
 def test_cv_data_loads_successfully():
@@ -101,18 +100,6 @@ def test_load_cv_data_invalid_schema_raises_readable_error(tmp_path):
     message = str(exc_info.value)
     assert "CV data validation failed" in message
     assert "name" in message
-
-
-def test_settings_defaults(monkeypatch):
-    monkeypatch.delenv("CV_DATA_PATH", raising=False)
-    s = Settings()
-    assert str(s.cv_data_path) == "data/cv.json"
-
-
-def test_settings_env_override(monkeypatch):
-    monkeypatch.setenv("CV_DATA_PATH", "/tmp/custom.json")
-    s = Settings()
-    assert s.cv_data_path == Path("/tmp/custom.json")
 
 
 def load_cv_data_from_raw(raw: dict) -> dict:

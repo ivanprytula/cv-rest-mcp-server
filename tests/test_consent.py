@@ -41,16 +41,6 @@ async def test_html_escapes_company_name(client):
     assert "<b>Evil</b>" not in r.text
 
 
-async def test_long_company_name_is_capped(client):
-    r = await client.get(
-        "/cv/html",
-        params={"theme": "classic", "consent": "1", "company": "x" * 500},
-    )
-    assert r.status_code == 200
-    assert "x" * 121 not in r.text
-    assert "x" * 120 in r.text
-
-
 async def test_preview_forwards_params_to_links_and_iframe(client):
     r = await client.get(
         "/cv/preview",

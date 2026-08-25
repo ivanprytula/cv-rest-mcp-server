@@ -39,6 +39,8 @@ Note: `set dotenv-load` injects `.env` into every just recipe (dev server gets C
 
 FastAPI + FastMCP CV rendering service. PDFs via WeasyPrint. Templates in `templates/`, themes in `app/themes/`.
 
+Deployed to **GCP Cloud Run** (internet-facing). CV data comes from GCS via `CV_DATA_GCS_URI`. The operator is the sole content author — there is no untrusted user input path.
+
 ## Codebase Map
 
 ```text
@@ -131,6 +133,7 @@ pyproject.toml          # Python 3.14+, deps, ruff/ty config, pytest asyncio_mod
 - **MCP client tabs**: snippets live in `config/mcp_clients.json` (single source of truth with `scripts/check_mcp_docs.py`); `routes.load_mcp_clients()` validates at import and aborts startup on a broken file. The monthly `mcp-docs-drift` workflow re-checks each vendor's docs for the expected markers — drift opens an issue, a clean run auto-commits refreshed `verified` stamps. Never add a second copy of the snippet data in code. Keep the JSON byte-identical to `json.dumps(..., indent=2)` output so stamp bumps produce stamp-only diffs; the file is read once at import, so dev-server reload needs `touch app/routes.py` after editing it.
 - **MCP tools**: Return base64 string for `generate_cv_pdf_tool` (MCP is JSON-only). Re-raises `ToolError` without wrapping.
 - **Tests**: Use `httpx.AsyncClient` + `ASGITransport` with `asyncio_mode = "auto"` — async tests need no `@pytest.mark.asyncio` marker.
+- **No adversarial self-tests**: the operator is the only content author. Tests must not protect against scenarios where the attacker and defender are the same person (e.g. injecting `"css":"evil"` into your own CV JSON). Security-adjacent code (URL fetcher denial, error sanitization) is justified by the public Cloud Run surface; pure self-inflicted edge cases are not.
 - **Tests are CV-data-independent**: tests must NOT assert on `data/cv.json` wording, names, or counts (the file is user content that changes often). Use the `SYNTHETIC_CV` fixtures from `tests/conftest.py` (`synthetic_cv`, `synthetic_cv_path`, `pdf_service`, `override_pdf_service`). Only structural smoke checks (e.g., "experience is a list") are allowed against the real file.
 - **Chrome DevTools MCP privacy**: NEVER attach to or enumerate the user's real browser window/tabs. Always open test pages with `isolatedContext` set (incognito-equivalent) and close them when done.
 
