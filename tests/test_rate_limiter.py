@@ -85,9 +85,9 @@ def _scope_request(ip="127.0.0.1"):
 
     scope = {"type": "http", "headers": []}
     if ip is None:
-        scope["client"] = None
+        scope["client"] = []
     else:
-        scope["client"] = (ip, 12345)
+        scope["client"] = [ip, 12345]
     return Request(scope)
 
 

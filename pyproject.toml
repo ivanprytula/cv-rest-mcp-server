@@ -17,7 +17,7 @@ dependencies = [
     "google-cloud-storage>=3.13.1",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
     "pre-commit>=3.8",
     "ruff>=0.6",

@@ -10,13 +10,10 @@ All dependencies are project-specific and managed by `uv`. Install with:
 uv sync --extra dev
 ```
 
-When running Python commands, use `uv run` to execute within the project virtual environment, or activate it manually:
+When running Python commands, use `uv run` to execute within the project virtual environment.
 
 ```bash
 uv run <command>
-
-# or
-source .venv/bin/activate
 ```
 
 ## Code Style
