@@ -6,6 +6,7 @@ import os
 import threading
 from collections import OrderedDict
 from concurrent.futures import Future, ThreadPoolExecutor
+from typing import NoReturn
 
 from fastapi import HTTPException
 from weasyprint import HTML
@@ -14,6 +15,14 @@ from app.constants import PDF_CACHE_MAX_ENTRIES, PDF_EXECUTOR_MAX_WORKERS, THEME
 from app.cv_source import CvSource
 from app.renderer import render_html
 from app.themes import Theme
+
+
+class _URLFetchDeniedError(Exception):
+    pass
+
+
+def _deny_all_url_fetcher(url: str) -> NoReturn:
+    raise _URLFetchDeniedError(f"URL fetching is disabled: {url}")
 
 
 def load_themes() -> dict[str, Theme]:
@@ -44,7 +53,7 @@ def load_themes() -> dict[str, Theme]:
 
 def _generate_pdf_sync(html: str) -> bytes:
     try:
-        return HTML(string=html).write_pdf()
+        return HTML(string=html, url_fetcher=_deny_all_url_fetcher).write_pdf()
     except Exception as exc:
         raise HTTPException(status_code=500, detail="PDF generation failed") from exc
 

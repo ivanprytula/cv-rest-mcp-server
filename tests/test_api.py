@@ -174,3 +174,26 @@ async def test_cors_allows_any_origin_without_credentials(client):
     response = await client.get("/health", headers={"Origin": "https://example.com"})
     assert response.headers["access-control-allow-origin"] == "*"
     assert "access-control-allow-credentials" not in response.headers
+
+
+async def test_cv_pdf_rate_limit_returns_429_on_sixth_request(
+    override_pdf_service, monkeypatch
+):
+    from httpx import ASGITransport, AsyncClient
+
+    from app.rate_limiter import limiter
+
+    # Non-loopback peer so the loopback exemption does not apply.
+    transport = ASGITransport(app=app, client=("198.51.100.77", 12345))
+    limiter.reset()
+    try:
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            statuses = []
+            for _ in range(6):
+                resp = await ac.get("/cv/pdf?theme=classic")
+                statuses.append(resp.status_code)
+    finally:
+        limiter.reset()
+
+    assert statuses[:5] == [200, 200, 200, 200, 200]
+    assert statuses[5] == status.HTTP_429_TOO_MANY_REQUESTS

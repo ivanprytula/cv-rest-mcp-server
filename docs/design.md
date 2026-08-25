@@ -19,6 +19,13 @@
 - **Vendored browser CSS.** Tailwind utilities are compiled at build time from
   `templates/**/*.html` into `static/css/site.css`; the application does not load
   Tailwind or execute a CSS compiler at runtime.
+- **Separate browser and PDF asset boundaries.** Browser pages may load the
+  committed `/static/css/site.css` asset served by FastAPI. WeasyPrint is given a
+  deny-all URL fetcher, so PDF templates cannot read local files or fetch
+  `http://`, `https://`, `data:`, or other URLs.
+- **Renderer-owned context.** `render_html` removes only the reserved renderer
+  keys (`css`, `consent_enabled`, and `consent_company`) from incoming CV data,
+  preserves other extra metadata, and applies its own values last.
 
 ## Key Patterns
 

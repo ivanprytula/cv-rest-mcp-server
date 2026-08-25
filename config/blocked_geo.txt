@@ -1,7 +1,7 @@
 # Geo blocklist — generated file, do not edit by hand.
 # Refresh: just update-geo-blocklist
 # Source: https://www.ipdeny.com (aggregated IPv4+IPv6 country zones)
-# Countries: RU IR KP BY CU SY VE MM · Generated: 2026-08-24
+# Countries: RU IR KP BY CU SY VE MM · Generated: 2026-08-25
 103.101.16.0/22
 103.103.173.0/24
 103.103.194.0/24
@@ -633,6 +633,7 @@
 153.51.160.0/19
 153.51.32.0/19
 153.51.64.0/18
+153.56.181.0/24
 153.76.160.0/20
 153.76.178.0/23
 153.79.180.0/22

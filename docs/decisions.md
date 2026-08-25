@@ -261,3 +261,48 @@ IDs do not form part of the URL.
 deploy provenance is auditable via Actions history. Runtime least-privilege is unchanged: the deployer can
 build images and push revisions but holds no data-plane access to the CV
 bucket.
+
+## ADR-016: Vendored Tailwind CSS as CSP prerequisite
+
+**Context.** The landing/preview pages loaded Tailwind from a third-party CDN
+via a `<script>` tag with no SRI or nonce — supply-chain risk and a blocker
+for any strict `Content-Security-Policy` (F-09).
+
+**Decision.** Tailwind is compiled at build time with the pinned CLI scanning
+`templates/**/*.html`; the generated `static/css/site.css` is committed and
+served by FastAPI. The runtime never loads Tailwind or executes a CSS
+compiler. CI regenerates the stylesheet and fails on stale output.
+Inline-script hashing/extraction (dropping `'unsafe-inline'`) remains the
+next CSP step; the vendoring itself is complete.
+
+**Consequences.** No third-party runtime dependency; deterministic styling;
+one extra build step (`just css`) that CI keeps honest.
+
+## ADR-017: Phase 5 defense-in-depth — renderer context, PDF fetch guard, uv pin
+
+**Context.** Audit findings F-08/F-10/F-12: WeasyPrint's default URL fetcher
+is latent SSRF/local-file-read; `extra="allow"` plus `**cv` splat let a stray
+`"css"` key in cv.json 500 every render path; the builder image floated on
+`uv:latest`.
+
+**Decision.**
+
+1. `render_html` builds its context through `_build_render_context`, which
+   strips only the renderer-owned keys (`css`, `consent_enabled`,
+   `consent_company`) and applies its own values last; all other extra CV
+   metadata passes through untouched (`CVData` keeps `extra="allow"`).
+
+2. All WeasyPrint construction goes through `_generate_pdf_sync`, which now
+   passes a deny-all `url_fetcher` raising `_URLFetchDeniedError` for every
+   URL scheme, including `file://`, HTTP(S), and `data:`. Browser-served
+   static assets are unaffected — the boundary is PDF rendering only.
+
+3. The Dockerfile pins the builder stage to
+   `ghcr.io/astral-sh/uv:0.12.5@sha256:e85be844203885286c60ffad8a858d48afb6c5a5c237ca0e67f12e74b8f174b1`
+   (multi-platform manifest digest). `python:3.14-slim` stays tag-based by
+   explicit scope decision.
+
+**Consequences.** Renderer controls cannot be shadowed by payload keys; PDF
+templates are structurally unable to reach network or filesystem resources;
+the builder binary is immutable per rebuild. Cost: two private helpers and a
+digest that must be bumped deliberately when uv updates.

@@ -51,6 +51,15 @@ Tailwind CSS is built with the pinned npm dependency using `just css` and scanne
 against `templates/**/*.html`. CI regenerates the stylesheet and fails if the
 committed output is stale; the production image only needs the generated static file.
 
+The renderer builds a context from the CV mapping while excluding its reserved
+`css`, `consent_enabled`, and `consent_company` keys. It then applies those
+renderer-owned values explicitly, so arbitrary extra CV metadata remains
+available without allowing payload collisions to override rendering controls.
+Browser pages use only the committed `static/css/site.css`; static assets are
+served by FastAPI and are not fetched from a CDN or loaded by the PDF renderer.
+WeasyPrint receives a deny-all URL fetcher, so PDF generation rejects local files,
+HTTP(S), `data:` URLs, and every other external URL.
+
 ## MCP
 
 Mounted at `/mcp` via Streamable HTTP. Tools (`get_cv`, `get_available_themes`,
