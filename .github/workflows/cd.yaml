@@ -48,8 +48,17 @@ jobs:
           enable-cache: true
       - name: Install dependencies
         run: uv sync --extra dev
-      - name: Run test suite
-        run: uv run pytest
+      - name: Install pytest-timeout and pytest-xdist for diagnostics
+        run: uv pip install pytest-timeout pytest-xdist
+      - name: Run test suite with diagnostics
+        run: |
+          echo "Starting test run at $(date)"
+          START_TIME=$(date +%s)
+          uv run pytest --timeout=60 --durations=10 -n auto || TEST_EXIT_CODE=$?
+          END_TIME=$(date +%s)
+          echo "Test run completed at $(date)"
+          echo "Total test time: $((END_TIME - START_TIME)) seconds"
+          exit "${TEST_EXIT_CODE:-0}"
 
   deploy:
     needs: [code-quality, tests]
