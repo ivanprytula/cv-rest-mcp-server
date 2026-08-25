@@ -16,7 +16,8 @@ async def test_root(client, override_pdf_service):
     assert "Jane Doe" in resp.text  # hero: author name from cv_data
     assert "Backend Engineer" in resp.text  # hero: author title from cv_data
     assert "/mcp" in resp.text
-    assert "cdn.tailwindcss.com" in resp.text
+    assert "/static/css/site.css" in resp.text
+    assert "cdn.tailwindcss.com" not in resp.text
     assert "/cv/preview" in resp.text
     assert "/static/favicon.svg" in resp.text
 
@@ -26,6 +27,13 @@ async def test_favicon_served(client):
     assert resp.status_code == status.HTTP_200_OK
     assert "image/svg+xml" in resp.headers["content-type"]
     assert "<desc>" in resp.text
+
+
+async def test_site_css_served(client):
+    resp = await client.get("/static/css/site.css")
+    assert resp.status_code == status.HTTP_200_OK
+    assert "text/css" in resp.headers["content-type"]
+    assert ".dark" in resp.text
 
 
 async def test_health(client):

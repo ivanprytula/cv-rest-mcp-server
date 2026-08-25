@@ -16,6 +16,9 @@
   override them with ordinary selectors regardless of stylesheet order. Themes only
   vary typography (font family/size) and colors — no absolute positioning, z-index,
   or padding hacks.
+- **Vendored browser CSS.** Tailwind utilities are compiled at build time from
+  `templates/**/*.html` into `static/css/site.css`; the application does not load
+  Tailwind or execute a CSS compiler at runtime.
 
 ## Key Patterns
 

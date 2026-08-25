@@ -1,26 +1,29 @@
 # Architecture
 
-FastAPI + FastMCP service that renders a CV as JSON or themed PDFs. All PDF generation
-happens in a thread pool; the async path delegates to it via `asyncio.get_running_loop()`.
+FastAPI + FastMCP service that renders a CV as JSON or themed PDFs. Browser styling is
+compiled from the templates into `static/css/site.css` during the build; production
+serves that committed asset without a third-party CDN. All PDF generation happens in
+a bounded thread pool.
 
 ## Components
 
-| Module                   | Responsibility                                                               |
-| ------------------------ | ---------------------------------------------------------------------------- |
-| `app/main.py`            | FastAPI app, middleware stack, MCP tools + `/static` mount, lifespan         |
-| `app/routes.py`          | REST endpoints (`/`, `/health`, `/cv`, `/cv/html`, `/cv/preview`, `/cv/pdf`) |
-| `app/pdf_generator.py`   | `PdfService` class: cache, thread pool, sync/async PDF generation            |
-| `app/renderer.py`        | Jinja2 HTML rendering via `templates/cv_base.html`                           |
-| `app/cv_data.py`         | Pydantic models + `validate_cv_payload` / `load_cv_data(path)`               |
-| `app/cv_source.py`       | CV document resolution: local file or GCS object, hot reload, placeholder fallback |
-| `app/themes/`            | Theme modules exposing `CSS: str`                                            |
-| `app/rate_limiter.py`    | slowapi `Limiter`, client-IP resolution, stacked-limit decorator             |
-| `app/mcp_limits.py`      | Rate limits enforced inside MCP tools (slowapi stubs + request context)       |
-| `app/guard_middleware.py`| Outermost access gate: allowlist/blocklist/bans/service hours                |
-| `app/ip_lists.py`        | IP/CIDR parsing and membership checks                                        |
-| `app/service_hours.py`   | Scheduled availability window evaluation                                     |
-| `app/failban.py`         | Dynamic ban tracker (fail2ban-lite) fed by rate-limit violations             |
-| `app/settings.py`        | All runtime config (see `.env.example`)                                       |
+| Module | Responsibility |
+| --- | --- |
+| `app/main.py` | FastAPI app, middleware stack, MCP tools + `/static` mount, lifespan |
+| `app/routes.py` | REST endpoints (`/`, `/health`, `/cv`, `/cv/html`, `/cv/preview`, `/cv/pdf`) |
+| `app/pdf_generator.py` | `PdfService` class: cache, thread pool, sync/async PDF generation |
+| `app/renderer.py` | Jinja2 HTML rendering via `templates/cv_base.html` |
+| `app/cv_data.py` | Pydantic models + `validate_cv_payload` / `load_cv_data(path)` |
+| `app/cv_source.py` | CV document resolution: local file or GCS object, hot reload, placeholder fallback |
+| `app/themes/` | Theme modules exposing `CSS: str` |
+| `app/rate_limiter.py` | slowapi `Limiter`, client-IP resolution, stacked-limit decorator |
+| `app/mcp_limits.py` | Rate limits enforced inside MCP tools (slowapi stubs + request context) |
+| `app/guard_middleware.py` | Outermost access gate: allowlist/blocklist/bans/service hours |
+| `app/ip_lists.py` | IP/CIDR parsing and membership checks |
+| `app/service_hours.py` | Scheduled availability window evaluation |
+| `app/failban.py` | Dynamic ban tracker (fail2ban-lite) fed by rate-limit violations |
+| `app/settings.py` | All runtime config (see `.env.example`) |
+| `static/css/` | Vendored Tailwind input and generated browser stylesheet |
 
 ## Data Flow
 
@@ -43,6 +46,10 @@ happens in a thread pool; the async path delegates to it via `asyncio.get_runnin
 
 `GET /health` reports which payload is live: `"cv_source": "gcs" | "file" |
 "placeholder"`.
+
+Tailwind CSS is built with the pinned npm dependency using `just css` and scanned
+against `templates/**/*.html`. CI regenerates the stylesheet and fails if the
+committed output is stale; the production image only needs the generated static file.
 
 ## MCP
 

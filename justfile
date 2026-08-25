@@ -26,6 +26,9 @@ test-ui:
 test-pdf:
     curl localhost:8080/cv/pdf?theme=modern -o /tmp/test.pdf
 
+css:
+    npm run css
+
 # Refresh config/blocked_geo.txt from ipdeny aggregated country zones
 update-geo-blocklist:
     #!/usr/bin/env bash

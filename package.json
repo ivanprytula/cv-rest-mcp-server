@@ -1,0 +1,12 @@
+{
+  "name": "cv-rest-mcp-server",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "css": "tailwindcss -c tailwind.config.js -i static/css/input.css -o static/css/site.css --minify"
+  },
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "tailwindcss": "3.4.17"
+  }
+}
