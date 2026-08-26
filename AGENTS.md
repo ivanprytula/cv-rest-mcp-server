@@ -32,6 +32,29 @@ just test                 # run test suite with coverage (extra args pass throug
 
 Note: `set dotenv-load` injects `.env` into every just recipe (dev server gets CONTACT_NAME/CONTACT_EMAIL etc.). A manually started uvicorn does NOT read `.env` — source it (`set -a; source .env; set +a`) or Swagger metadata stays empty.
 
+## CSS Build Sync
+
+`static/css/site.css` is a committed build artifact (Tailwind CSS output). It must be
+rebuilt and committed whenever:
+
+- Template classes change (e.g. adding Tailwind utilities to a new template)
+- `tailwind.config.js` content paths change
+- `node_modules` is recreated (CI does fresh install)
+
+**Local rebuild:**
+
+```bash
+npm install          # install Tailwind + browserslist (first time only)
+npm run css          # rebuild site.css from input.css + Tailwind config
+```
+
+**Pre-commit hooks** do NOT run `npm run css` — you must rebuild manually before
+committing template class changes. If CI fails with a CSS diff, rebuild and commit
+the updated `site.css`.
+
+**CI/CD** runs `npm run css` as part of the build. A stale `site.css` causes a diff
+check failure — the fix is always the same: rebuild locally and commit.
+
 ## Project
 
 FastAPI + FastMCP CV rendering service. PDFs via WeasyPrint. Templates in `templates/`, themes in `app/themes/`.
