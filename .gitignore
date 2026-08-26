@@ -18,11 +18,6 @@ data/*
 .kilo/
 .vscode/
 
-docs/*
-!docs/architecture.md
-!docs/decisions.md
-!docs/design.md
-
 .learnings/
 .local/
 

@@ -1,0 +1,265 @@
+{
+  "title": "Company Culture Bingo",
+  "settings": {
+    "gridSize": 8,
+    "clicksToReveal": 2
+  },
+  "cells": [
+    {
+      "id": "green-01",
+      "content": "Performance Driven\nEmployees are encouraged to see failure as an opportunity to learn."
+    },
+    {
+      "id": "green-02",
+      "content": "Clear Vision\nEveryone is aligned on the same mission."
+    },
+    {
+      "id": "green-03",
+      "content": "Embraces Failure\nThe best culture is driven by performance."
+    },
+    {
+      "id": "green-04",
+      "content": "Values Your Time\nNo pointless meetings or unnecessary overhead."
+    },
+    {
+      "id": "green-05",
+      "content": "Shows Empathy\nTreats everyone with respect and empathy."
+    },
+    {
+      "id": "green-06",
+      "content": "Adapts to Change\nEmbraces change and adapts quickly."
+    },
+    {
+      "id": "green-07",
+      "content": "Open Communication\nCommunication is two-way and clear across hierarchy levels."
+    },
+    {
+      "id": "green-08",
+      "content": "Corrects Bad Behaviour\nBad behaviour is not tolerated and is corrected quickly."
+    },
+    {
+      "id": "green-09",
+      "content": "Empowers Hard Work\nHard work is consistently rewarded."
+    },
+    {
+      "id": "green-10",
+      "content": "Accepts Disagreement\nHealthy debate is understood as critical for success."
+    },
+    {
+      "id": "green-11",
+      "content": "Value Driven\nValues are acted upon, not replaced by perks like bean bags or pizza Fridays."
+    },
+    {
+      "id": "green-12",
+      "content": "Encourages Diversity\nLooks for diversity of thoughts and perspectives."
+    },
+    {
+      "id": "green-13",
+      "content": "Proactive Culture\nEmployees take initiative and are encouraged to act."
+    },
+    {
+      "id": "green-14",
+      "content": "Empowers Employees\nPeople are trusted to make decisions and own their work."
+    },
+    {
+      "id": "green-15",
+      "content": "Proven Track Record\nThe company has a history of delivering on its promises."
+    },
+    {
+      "id": "green-16",
+      "content": "Competitive Salary\nCompensation is fair and transparent."
+    },
+    {
+      "id": "green-17",
+      "content": "Amazing Company Culture\nThe workplace is fun, unique, and genuinely enjoyable."
+    },
+    {
+      "id": "green-18",
+      "content": "Lots of Perks and Benefits\nGenuine benefits — not just a coffee machine."
+    },
+    {
+      "id": "green-19",
+      "content": "Mentorship Program\nNew hires are paired with experienced colleagues."
+    },
+    {
+      "id": "green-20",
+      "content": "Transparent Promotion Path\nPeople know how growth and promotion decisions work."
+    },
+    {
+      "id": "green-21",
+      "content": "Real Work-Life Balance\nTime away from work is genuinely respected."
+    },
+    {
+      "id": "green-22",
+      "content": "Clear Budgets and Tools\nPeople have what they need to do good work."
+    },
+    {
+      "id": "green-23",
+      "content": "Remote-Friendly\nFlexible location is a real policy, not a bait-and-switch."
+    },
+    {
+      "id": "green-24",
+      "content": "Internal Mobility\nPeople grow into new roles inside the company, not just out."
+    },
+    {
+      "id": "green-25",
+      "content": "Learning Budget\nAnnual budget for courses, conferences, and books."
+    },
+    {
+      "id": "green-26",
+      "content": "Clear Hiring Process\nTimelines, steps, and expectations are communicated upfront."
+    },
+    {
+      "id": "red-01",
+      "content": "Dodging salary questions"
+    },
+    {
+      "id": "red-02",
+      "content": "\"We are a family\""
+    },
+    {
+      "id": "red-03",
+      "content": "Unpaid overtime"
+    },
+    {
+      "id": "red-04",
+      "content": "High turnover"
+    },
+    {
+      "id": "red-05",
+      "content": "Badmouthing ex-staff"
+    },
+    {
+      "id": "red-06",
+      "content": "Mandatory pizza parties instead of raises"
+    },
+    {
+      "id": "red-07",
+      "content": "Salary is not listed in the job post"
+    },
+    {
+      "id": "red-08",
+      "content": "No transparent promotion path"
+    },
+    {
+      "id": "red-09",
+      "content": "Time off is discouraged"
+    },
+    {
+      "id": "red-10",
+      "content": "Poor work-life balance"
+    },
+    {
+      "id": "red-11",
+      "content": "Company flaws cannot be discussed openly"
+    },
+    {
+      "id": "red-12",
+      "content": "\"Rockstar\" wanted\nExpects one person to do the work of three."
+    },
+    {
+      "id": "red-13",
+      "content": "\"Thick skin\" required\nCriticism is frequent; feedback is not constructive."
+    },
+    {
+      "id": "red-14",
+      "content": "Unpaid on-call work\nYou're available 24/7 but only paid 9-to-5."
+    },
+    {
+      "id": "red-15",
+      "content": "Social media presence required\nYour personal brand is now the company's marketing."
+    },
+    {
+      "id": "red-16",
+      "content": "Mandatory unpaid trial project\nWork for free to prove you deserve a paid job."
+    },
+    {
+      "id": "red-17",
+      "content": "Equity instead of salary\n\"The startup equity will be worth millions\" — it won't."
+    },
+    {
+      "id": "red-18",
+      "content": "\"Growth opportunities\" = more work\nNo raise, but here's extra responsibility."
+    },
+    {
+      "id": "red-19",
+      "content": "\"Ninja\" / \"Guru\" / \"Wizard\"\nOverused titles masking unrealistic expectations."
+    },
+    {
+      "id": "red-20",
+      "content": "\"Urgently hiring\"\nConstant urgency; planning is an afterthought."
+    },
+    {
+      "id": "red-21",
+      "content": "No psychological safety\nMistakes are punished, not learned from."
+    },
+    {
+      "id": "red-22",
+      "content": "\"Young and dynamic\" code\nAge discrimination disguised as culture fit."
+    },
+    {
+      "id": "red-23",
+      "content": "Micromanagement disguised as transparency\nEvery keystroke is tracked and reported."
+    },
+    {
+      "id": "red-24",
+      "content": "No sick leave policy\nYou're expected to work from your deathbed."
+    },
+    {
+      "id": "red-25",
+      "content": "Multiple rounds of unpaid interviews\n5+ rounds before a decision — respect is absent."
+    },
+    {
+      "id": "red-26",
+      "content": "Non-compete clause\nYou can't leave without losing your career for 2 years."
+    },
+    {
+      "id": "yellow-01",
+      "content": "\"Fast-paced environment\"\nExciting for some, chaotic for others — depends on the team."
+    },
+    {
+      "id": "yellow-02",
+      "content": "\"Wear many hats\"\nGrowth opportunity or scope creep? It depends on boundaries."
+    },
+    {
+      "id": "yellow-03",
+      "content": "\"Work hard, play hard\"\nFun culture or an excuse for long hours?"
+    },
+    {
+      "id": "yellow-04",
+      "content": "\"Hit the ground running\"\nExciting challenge or zero onboarding?"
+    },
+    {
+      "id": "yellow-05",
+      "content": "\"Self-starter\" needed\nAutonomy or abandonment? Depends on support."
+    },
+    {
+      "id": "yellow-06",
+      "content": "\"Startup culture\"\nScrappy innovation or chaotic disorganisation?"
+    },
+    {
+      "id": "yellow-07",
+      "content": "Flexible working hours\nFreedom to manage your time — or always-on expectations?"
+    },
+    {
+      "id": "yellow-08",
+      "content": "Flat hierarchy\nClose to leadership or missing mentorship structure?"
+    },
+    {
+      "id": "yellow-09",
+      "content": "\"Competitive environment\"\nDrives excellence or breeds internal rivalry?"
+    },
+    {
+      "id": "yellow-10",
+      "content": "\"Sense of humour\" required\nFun workplace or avoiding serious conversations?"
+    },
+    {
+      "id": "yellow-11",
+      "content": "Mandatory team events\nBonding opportunity or unpaid social overtime?"
+    },
+    {
+      "id": "yellow-12",
+      "content": "Relaxed dress code\nComfort or lack of professional standards?"
+    }
+  ]
+}

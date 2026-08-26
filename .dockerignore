@@ -25,3 +25,7 @@ justfile
 
 .learnings/
 .local/
+
+.agents/
+.agent/
+.github/prompts/
