@@ -7,7 +7,7 @@ Requires Python 3.14+.
 All dependencies are project-specific and managed by `uv`. Install with:
 
 ```bash
-uv sync --extra dev
+uv sync --group dev
 ```
 
 When running Python commands, use `uv run` to execute within the project virtual environment.
