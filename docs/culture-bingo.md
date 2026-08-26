@@ -1,12 +1,12 @@
 # Company Culture Bingo
 
 Interactive browser game at `/culture-bingo`. Players click tiles to reveal whether
-job-posting phrases signal genuine culture or hidden red flags.
+IT/software job-posting phrases signal genuine engineering culture or hidden red flags.
 
 ## How It Works
 
-- **8x8 grid** (64 cells) with three categories: positive (green), red-flag (red),
-  and ambiguous/yellow-flag (yellow).
+- **8x8 grid** (64 cells) with three categories: positive (26 green), red-flag (22
+  red), and ambiguous/yellow-flag (16 yellow).
 - **First click** on a cell applies a color overlay based on the cell ID prefix
   (`green-*`, `red-*`, `yellow-*`).
 - **Second click** fades the cell out, incrementing the "revealed" counter.
@@ -33,14 +33,15 @@ Game content lives in `config/bingo_content.json`. The structure:
   "title": "Company Culture Bingo",
   "settings": { "gridSize": 8 },
   "cells": [
-    { "id": "green-01", "content": "Cell text (title\\nOptional subtitle)" }
+    { "id": "green-01", "content": "Title*Optional explanation text" }
   ]
 }
 ```
 
 Cell IDs determine the click color: `green-*` = green, `red-*` = red, `yellow-*` =
-yellow. The content JSON is validated at startup; a missing or malformed file causes
-a hard startup failure.
+yellow. The `*` delimiter in content separates the title from an optional explanation;
+the explanation renders as `<small>` (hidden on mobile). The content JSON is validated
+at startup; a missing or malformed file causes a hard startup failure.
 
 ## Responsive Design
 

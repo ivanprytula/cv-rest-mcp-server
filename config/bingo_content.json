@@ -7,107 +7,107 @@
   "cells": [
     {
       "id": "green-01",
-      "content": "Performance Driven\nEmployees are encouraged to see failure as an opportunity to learn."
+      "content": "Performance Driven*Employees are encouraged to see failure as an opportunity to learn."
     },
     {
       "id": "green-02",
-      "content": "Clear Vision\nEveryone is aligned on the same mission."
+      "content": "Clear Vision*Everyone is aligned on the same mission."
     },
     {
       "id": "green-03",
-      "content": "Embraces Failure\nThe best culture is driven by performance."
+      "content": "Embraces Failure*The best culture is driven by performance."
     },
     {
       "id": "green-04",
-      "content": "Values Your Time\nNo pointless meetings or unnecessary overhead."
+      "content": "Values Your Time*No pointless meetings or unnecessary overhead."
     },
     {
       "id": "green-05",
-      "content": "Shows Empathy\nTreats everyone with respect and empathy."
+      "content": "Shows Empathy*Treats everyone with respect and empathy."
     },
     {
       "id": "green-06",
-      "content": "Adapts to Change\nEmbraces change and adapts quickly."
+      "content": "CI/CD pipeline*Deploy to production daily, not quarterly"
     },
     {
       "id": "green-07",
-      "content": "Open Communication\nCommunication is two-way and clear across hierarchy levels."
+      "content": "Open Communication*Communication is two-way and clear across hierarchy levels."
     },
     {
       "id": "green-08",
-      "content": "Corrects Bad Behaviour\nBad behaviour is not tolerated and is corrected quickly."
+      "content": "Corrects Bad Behaviour*Bad behaviour is not tolerated and is corrected quickly."
     },
     {
       "id": "green-09",
-      "content": "Empowers Hard Work\nHard work is consistently rewarded."
+      "content": "Remote-first*Built around async/distributed work, not just \"allowed\""
     },
     {
       "id": "green-10",
-      "content": "Accepts Disagreement\nHealthy debate is understood as critical for success."
+      "content": "Accepts Disagreement*Healthy debate is understood as critical for success."
     },
     {
       "id": "green-11",
-      "content": "Value Driven\nValues are acted upon, not replaced by perks like bean bags or pizza Fridays."
+      "content": "Value Driven*Values are acted upon, not replaced by perks like bean bags or pizza Fridays."
     },
     {
       "id": "green-12",
-      "content": "Encourages Diversity\nLooks for diversity of thoughts and perspectives."
+      "content": "Encourages Diversity*Looks for diversity of thoughts and perspectives."
     },
     {
       "id": "green-13",
-      "content": "Proactive Culture\nEmployees take initiative and are encouraged to act."
+      "content": "Blameless postmortems*Incidents drive improvement, not punishment"
     },
     {
       "id": "green-14",
-      "content": "Empowers Employees\nPeople are trusted to make decisions and own their work."
+      "content": "Empowers Employees*People are trusted to make decisions and own their work."
     },
     {
       "id": "green-15",
-      "content": "Proven Track Record\nThe company has a history of delivering on its promises."
+      "content": "Code review culture*PRs reviewed before merging to main"
     },
     {
       "id": "green-16",
-      "content": "Competitive Salary\nCompensation is fair and transparent."
+      "content": "Competitive Salary*Compensation is fair and transparent."
     },
     {
       "id": "green-17",
-      "content": "Amazing Company Culture\nThe workplace is fun, unique, and genuinely enjoyable."
+      "content": "Open source contributions welcome*Engineers publish under their own names"
     },
     {
       "id": "green-18",
-      "content": "Lots of Perks and Benefits\nGenuine benefits — not just a coffee machine."
+      "content": "Structured onboarding*30/60/90 day plan for new hires"
     },
     {
       "id": "green-19",
-      "content": "Mentorship Program\nNew hires are paired with experienced colleagues."
+      "content": "Conference budget*Learning & development allowance for growth"
     },
     {
       "id": "green-20",
-      "content": "Transparent Promotion Path\nPeople know how growth and promotion decisions work."
+      "content": "Transparent Promotion Path*People know how growth and promotion decisions work."
     },
     {
       "id": "green-21",
-      "content": "Real Work-Life Balance\nTime away from work is genuinely respected."
+      "content": "Real Work-Life Balance*Time away from work is genuinely respected."
     },
     {
       "id": "green-22",
-      "content": "Clear Budgets and Tools\nPeople have what they need to do good work."
+      "content": "Clear Budgets and Tools*People have what they need to do good work."
     },
     {
       "id": "green-23",
-      "content": "Remote-Friendly\nFlexible location is a real policy, not a bait-and-switch."
+      "content": "Remote-Friendly*Flexible location is a real policy, not a bait-and-switch."
     },
     {
       "id": "green-24",
-      "content": "Internal Mobility\nPeople grow into new roles inside the company, not just out."
+      "content": "Internal Mobility*People grow into new roles inside the company, not just out."
     },
     {
       "id": "green-25",
-      "content": "Learning Budget\nAnnual budget for courses, conferences, and books."
+      "content": "Internal tooling investment*Company invests in developer productivity"
     },
     {
       "id": "green-26",
-      "content": "Clear Hiring Process\nTimelines, steps, and expectations are communicated upfront."
+      "content": "Clear Hiring Process*Timelines, steps, and expectations are communicated upfront."
     },
     {
       "id": "red-01",
@@ -123,11 +123,11 @@
     },
     {
       "id": "red-04",
-      "content": "High turnover"
+      "content": "Entry-level, 3-5 years experience required*Senior work at junior pay"
     },
     {
       "id": "red-05",
-      "content": "Badmouthing ex-staff"
+      "content": "Unlimited PTO*Nobody actually takes vacation; untracked = unused"
     },
     {
       "id": "red-06",
@@ -138,128 +138,128 @@
       "content": "Salary is not listed in the job post"
     },
     {
-      "id": "red-08",
-      "content": "No transparent promotion path"
-    },
-    {
       "id": "red-09",
       "content": "Time off is discouraged"
     },
     {
-      "id": "red-10",
-      "content": "Poor work-life balance"
-    },
-    {
-      "id": "red-11",
-      "content": "Company flaws cannot be discussed openly"
-    },
-    {
       "id": "red-12",
-      "content": "\"Rockstar\" wanted\nExpects one person to do the work of three."
+      "content": "\"Rockstar\" wanted*Expects one person to do the work of three."
     },
     {
       "id": "red-13",
-      "content": "\"Thick skin\" required\nCriticism is frequent; feedback is not constructive."
+      "content": "\"Thick skin\" required*Criticism is frequent; feedback is not constructive."
     },
     {
       "id": "red-14",
-      "content": "Unpaid on-call work\nYou're available 24/7 but only paid 9-to-5."
+      "content": "Unpaid on-call work*You're available 24/7 but only paid 9-to-5."
     },
     {
       "id": "red-15",
-      "content": "Social media presence required\nYour personal brand is now the company's marketing."
+      "content": "Must be passionate about the mission*Emotional investment to compensate for low pay"
     },
     {
       "id": "red-16",
-      "content": "Mandatory unpaid trial project\nWork for free to prove you deserve a paid job."
+      "content": "No bureaucracy / minimal process*No documented workflows, tribal knowledge only"
     },
     {
       "id": "red-17",
-      "content": "Equity instead of salary\n\"The startup equity will be worth millions\" — it won't."
-    },
-    {
-      "id": "red-18",
-      "content": "\"Growth opportunities\" = more work\nNo raise, but here's extra responsibility."
+      "content": "Equity instead of salary*\"The startup equity will be worth millions\" — it won't."
     },
     {
       "id": "red-19",
-      "content": "\"Ninja\" / \"Guru\" / \"Wizard\"\nOverused titles masking unrealistic expectations."
+      "content": "\"Ninja\" / \"Guru\" / \"Wizard\"*Overused titles masking unrealistic expectations."
     },
     {
       "id": "red-20",
-      "content": "\"Urgently hiring\"\nConstant urgency; planning is an afterthought."
+      "content": "We are scaling rapidly*Growth without infrastructure; you will be firefighting"
     },
     {
       "id": "red-21",
-      "content": "No psychological safety\nMistakes are punished, not learned from."
+      "content": "No psychological safety*Mistakes are punished, not learned from."
     },
     {
       "id": "red-22",
-      "content": "\"Young and dynamic\" code\nAge discrimination disguised as culture fit."
+      "content": "\"Young and dynamic\" code*Age discrimination disguised as culture fit."
     },
     {
       "id": "red-23",
-      "content": "Micromanagement disguised as transparency\nEvery keystroke is tracked and reported."
+      "content": "Micromanagement disguised as transparency*Every keystroke is tracked and reported."
     },
     {
       "id": "red-24",
-      "content": "No sick leave policy\nYou're expected to work from your deathbed."
+      "content": "Flexible hours + meetings everywhere*The flexibility is theoretical"
     },
     {
       "id": "red-25",
-      "content": "Multiple rounds of unpaid interviews\n5+ rounds before a decision — respect is absent."
+      "content": "Multiple rounds of unpaid interviews*5+ rounds before a decision — respect is absent."
     },
     {
       "id": "red-26",
-      "content": "Non-compete clause\nYou can't leave without losing your career for 2 years."
+      "content": "Non-compete clause*You can't leave without losing your career for 2 years."
     },
     {
       "id": "yellow-01",
-      "content": "\"Fast-paced environment\"\nExciting for some, chaotic for others — depends on the team."
+      "content": "\"Fast-paced environment\"*Exciting for some, chaotic for others — depends on the team."
     },
     {
       "id": "yellow-02",
-      "content": "\"Wear many hats\"\nGrowth opportunity or scope creep? It depends on boundaries."
+      "content": "\"Wear many hats\"*Growth opportunity or scope creep? It depends on boundaries."
     },
     {
       "id": "yellow-03",
-      "content": "\"Work hard, play hard\"\nFun culture or an excuse for long hours?"
+      "content": "\"Work hard, play hard\"*Fun culture or an excuse for long hours?"
     },
     {
       "id": "yellow-04",
-      "content": "\"Hit the ground running\"\nExciting challenge or zero onboarding?"
+      "content": "\"Hit the ground running\"*Exciting challenge or zero onboarding?"
     },
     {
       "id": "yellow-05",
-      "content": "\"Self-starter\" needed\nAutonomy or abandonment? Depends on support."
+      "content": "\"Self-starter\" needed*Autonomy or abandonment? Depends on support."
     },
     {
       "id": "yellow-06",
-      "content": "\"Startup culture\"\nScrappy innovation or chaotic disorganisation?"
+      "content": "\"Startup culture\"*Scrappy innovation or chaotic disorganisation?"
     },
     {
       "id": "yellow-07",
-      "content": "Flexible working hours\nFreedom to manage your time — or always-on expectations?"
+      "content": "Flexible working hours*Freedom to manage your time — or always-on expectations?"
     },
     {
       "id": "yellow-08",
-      "content": "Flat hierarchy\nClose to leadership or missing mentorship structure?"
+      "content": "Flat hierarchy*Close to leadership or missing mentorship structure?"
     },
     {
       "id": "yellow-09",
-      "content": "\"Competitive environment\"\nDrives excellence or breeds internal rivalry?"
+      "content": "\"Competitive environment\"*Drives excellence or breeds internal rivalry?"
     },
     {
       "id": "yellow-10",
-      "content": "\"Sense of humour\" required\nFun workplace or avoiding serious conversations?"
+      "content": "Agile environment*Genuine iterative dev or just standups with no planning?"
     },
     {
       "id": "yellow-11",
-      "content": "Mandatory team events\nBonding opportunity or unpaid social overtime?"
+      "content": "Startup mentality*Honest at 30 people, red flag at 500"
     },
     {
       "id": "yellow-12",
-      "content": "Relaxed dress code\nComfort or lack of professional standards?"
+      "content": "Equity / stock options*Life-changing or worthless lottery tickets?"
+    },
+    {
+      "id": "yellow-13",
+      "content": "Move fast*Fine for MVP, dangerous for fintech/healthcare"
+    },
+    {
+      "id": "yellow-14",
+      "content": "On-call is shared by the team*Fair rotation or always-on?"
+    },
+    {
+      "id": "yellow-15",
+      "content": "Overcommitted deadlines*Ambition or poor planning?"
+    },
+    {
+      "id": "yellow-16",
+      "content": "Flexible work arrangement*Trust-based or policy changes every 6 months?"
     }
   ]
 }
