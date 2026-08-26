@@ -94,8 +94,8 @@ def _compute_csp_hashes() -> str:
     for path in sorted(TEMPLATE_DIR.rglob("*.html")):
         content = path.read_text(encoding="utf-8")
         for script in re.findall(r"<script>(.*?)</script>", content, re.DOTALL):
-            digest = hashlib.sha256(script.encode()).hexdigest()
-            hashes.append(f"'sha256-{digest}'")
+            digest = hashlib.sha256(script.encode()).digest()
+            hashes.append(f"'sha256-{base64.b64encode(digest).decode()}'")
     return " ".join(hashes)
 
 
@@ -104,7 +104,7 @@ _CSP_SCRIPT_HASHES = _compute_csp_hashes()
 _CSP_DIRECTIVE = (
     f"default-src 'none'; "
     f"script-src 'self' {_CSP_SCRIPT_HASHES}; "
-    f"style-src 'self' 'unsafe-inline'; "
+    f"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
     f"img-src 'self'; "
     f"font-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com; "
     f"frame-src 'self'"

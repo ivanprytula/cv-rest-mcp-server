@@ -160,6 +160,7 @@ async def test_csp_header_present(client):
 
 
 async def test_csp_script_hashes_match_templates(client):
+    import base64
     import hashlib
     import re
 
@@ -173,8 +174,8 @@ async def test_csp_script_hashes_match_templates(client):
         for script in re.findall(
             r"<script>(.*?)</script>", path.read_text(), re.DOTALL
         ):
-            digest = hashlib.sha256(script.encode()).hexdigest()
-            expected_hashes.add(f"'sha256-{digest}'")
+            digest = hashlib.sha256(script.encode()).digest()
+            expected_hashes.add(f"'sha256-{base64.b64encode(digest).decode()}'")
 
     assert len(expected_hashes) >= 4
     for h in expected_hashes:
@@ -185,6 +186,8 @@ async def test_csp_allows_google_fonts(client):
     csp = (await client.get("/health")).headers["content-security-policy"]
     assert "fonts.googleapis.com" in csp
     assert "fonts.gstatic.com" in csp
+    style_src = csp.split("style-src")[1].split(";")[0]
+    assert "fonts.googleapis.com" in style_src
 
 
 async def test_csp_frame_src_self(client):
