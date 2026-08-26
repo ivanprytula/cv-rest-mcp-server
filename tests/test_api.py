@@ -150,6 +150,48 @@ async def test_security_headers_present(client):
     assert response.headers["referrer-policy"] == "strict-origin-when-cross-origin"
 
 
+async def test_csp_header_present(client):
+    response = await client.get("/health")
+    assert "content-security-policy" in response.headers
+    csp = response.headers["content-security-policy"]
+    assert "default-src 'none'" in csp
+    assert "script-src 'self'" in csp
+    assert "unsafe-inline" not in csp.split("script-src")[1].split(";")[0]
+
+
+async def test_csp_script_hashes_match_templates(client):
+    import hashlib
+    import re
+
+    from app.constants import TEMPLATE_DIR
+
+    csp = (await client.get("/health")).headers["content-security-policy"]
+    script_directive = csp.split("script-src")[1].split(";")[0]
+
+    expected_hashes = set()
+    for path in sorted(TEMPLATE_DIR.rglob("*.html")):
+        for script in re.findall(
+            r"<script>(.*?)</script>", path.read_text(), re.DOTALL
+        ):
+            digest = hashlib.sha256(script.encode()).hexdigest()
+            expected_hashes.add(f"'sha256-{digest}'")
+
+    assert len(expected_hashes) >= 4
+    for h in expected_hashes:
+        assert h in script_directive
+
+
+async def test_csp_allows_google_fonts(client):
+    csp = (await client.get("/health")).headers["content-security-policy"]
+    assert "fonts.googleapis.com" in csp
+    assert "fonts.gstatic.com" in csp
+
+
+async def test_csp_frame_src_self(client):
+    csp = (await client.get("/health")).headers["content-security-policy"]
+    assert "frame-src 'self'" in csp
+
+
 async def test_cors_allows_any_origin_without_credentials(client):
     response = await client.get("/health", headers={"Origin": "https://example.com"})
     assert response.headers["access-control-allow-origin"] == "*"

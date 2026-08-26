@@ -1,5 +1,7 @@
 import base64
+import hashlib
 import logging
+import re
 import sys
 from contextlib import asynccontextmanager
 from typing import cast
@@ -16,7 +18,12 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from starlette.types import ASGIApp
 
-from app.constants import PDF_CACHE_MAX_ENTRIES, PDF_EXECUTOR_MAX_WORKERS, STATIC_DIR
+from app.constants import (
+    PDF_CACHE_MAX_ENTRIES,
+    PDF_EXECUTOR_MAX_WORKERS,
+    STATIC_DIR,
+    TEMPLATE_DIR,
+)
 from app.cv_source import build_cv_source_from_settings
 from app.failban import register_violation_from_request
 from app.guard_middleware import GuardMiddleware
@@ -76,17 +83,51 @@ app.add_exception_handler(
 )
 
 
+def _compute_csp_hashes() -> str:
+    """Compute SHA-256 hashes for all inline <script> blocks in templates.
+
+    Hashes are computed at import time from the template files so CSP stays
+    in sync with the actual script content.  If a template script changes,
+    the browser blocks it until this value is updated — fail-safe by design.
+    """
+    hashes: list[str] = []
+    for path in sorted(TEMPLATE_DIR.rglob("*.html")):
+        content = path.read_text(encoding="utf-8")
+        for script in re.findall(r"<script>(.*?)</script>", content, re.DOTALL):
+            digest = hashlib.sha256(script.encode()).hexdigest()
+            hashes.append(f"'sha256-{digest}'")
+    return " ".join(hashes)
+
+
+_CSP_SCRIPT_HASHES = _compute_csp_hashes()
+
+_CSP_DIRECTIVE = (
+    f"default-src 'none'; "
+    f"script-src 'self' {_CSP_SCRIPT_HASHES}; "
+    f"style-src 'self' 'unsafe-inline'; "
+    f"img-src 'self'; "
+    f"font-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com; "
+    f"frame-src 'self'"
+)
+
+
 class SecurityHeadersMiddleware:
-    """Attach baseline browser-security headers to every HTTP response.
+    """Attach browser-security headers to every HTTP response.
 
     X-Frame-Options is SAMEORIGIN because /cv/preview embeds /cv/html in an
     iframe; DENY would break that same-origin frame.
+
+    Content-Security-Policy uses per-script SHA-256 hashes so inline scripts
+    run without 'unsafe-inline'.  The hashes are computed from template files
+    at import time; changing a template script requires updating this module
+    (the browser will block the script on hash mismatch — fail-safe).
     """
 
     _HEADERS = (
         (b"x-content-type-options", b"nosniff"),
         (b"x-frame-options", b"SAMEORIGIN"),
         (b"referrer-policy", b"strict-origin-when-cross-origin"),
+        (b"content-security-policy", _CSP_DIRECTIVE.encode()),
     )
 
     def __init__(self, app: ASGIApp) -> None:
