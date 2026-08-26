@@ -14,9 +14,14 @@ tests/
 .pytest_cache/
 .ruff_cache/
 .pre-commit-cache/
+.agents/
 .kilo/
-.vscode/
 .learnings/
+.local/
+.remember/
+.vscode/
+
+node_modules/
 dist/
 build/
 .env
@@ -25,3 +30,7 @@ data/*
 .dockerignore
 .gcloudignore
 justfile
+
+.agents/
+.agent/
+.github/prompts/
