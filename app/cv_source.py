@@ -26,18 +26,17 @@ def parse_gcs_uri(uri: str) -> tuple[str, str]:
 
 
 class CvSource:
-    """Resolves the active CV document: local file, GCS object, or placeholder.
+    """Resolves the active CV document: GCS object, local file, or placeholder.
 
     Boot always succeeds as long as *some* payload is servable:
 
-    - GCS mode: the object is fetched; if it is absent (or unreadable/invalid)
-      the service boots on ``fallback_path`` (cv.example.json) and keeps
-      polling every ``refresh_seconds`` — uploading a real cv.json goes live
-      without a redeploy.
+    - GCS mode: the object is fetched; if absent (or unreadable) the service
+      boots on ``fallback_path`` (cv.example.json) and keeps polling —
+      uploading a real cv.json goes live without a redeploy.
     - File mode: a missing local file falls back to the same placeholder.
 
     Runtime refreshes are best-effort: failures keep the last good payload
-    and log a warning. ``source_kind`` reports which state is being served:
+    and log a warning.  ``source_kind`` reports which state is being served:
     "gcs", "file", or "placeholder".
     """
 
@@ -76,7 +75,7 @@ class CvSource:
                     self._generation,
                 )
             except Exception as exc:
-                self._load_placeholder_or_raise(
+                self._fallback_or_raise(
                     f"CV object gs://{bucket_name}/{object_name} unavailable ({exc})"
                 )
             finally:
@@ -87,13 +86,11 @@ class CvSource:
                 self.source_kind = "file"
                 logger.info("CV source: %s", local_path)
             except (FileNotFoundError, ValueError) as exc:
-                self._load_placeholder_or_raise(
-                    f"CV file {local_path} unusable ({exc})"
-                )
+                self._fallback_or_raise(f"CV file {local_path} unusable ({exc})")
         else:
             raise ValueError("CvSource requires local_path or gcs_uri")
 
-    def _load_placeholder_or_raise(self, reason: str) -> None:
+    def _fallback_or_raise(self, reason: str) -> None:
         if self._fallback_path is None:
             raise RuntimeError(f"{reason}; no fallback CV available") from None
         self._cv = load_cv_data(self._fallback_path)
@@ -106,11 +103,6 @@ class CvSource:
         raw = json.loads(blob.download_as_text())
         return blob.generation, validate_cv_payload(raw)
 
-    @classmethod
-    def for_path(cls, path: Path) -> CvSource:
-        """Local-file source (tests and default local dev)."""
-        return cls(local_path=path)
-
     def get(self) -> dict:
         if self._blob is None:
             return self._cv
@@ -118,40 +110,36 @@ class CvSource:
         now = self._clock()
         with self._lock:
             due = now - self._checked_at >= self._refresh_seconds
+            self._checked_at = now
         if not due:
             return self._cv
 
         try:
             generation, cv = self._fetch(self._blob)
         except NotFound:
-            # Expected pre-upload state, not an incident: one clean line,
-            # no traceback — this fires every refresh until content lands.
             logger.warning(
-                "CV object %s not found; serving %s",
-                self._gcs_uri,
-                self.source_kind,
+                "CV object %s not found; serving %s", self._gcs_uri, self.source_kind
             )
+            return self._cv
         except Exception:
             logger.warning(
                 "CV refresh from %s failed; serving last good payload",
                 self._gcs_uri,
                 exc_info=True,
             )
-        else:
-            with self._lock:
-                if generation != self._generation:
-                    logger.info(
-                        "CV updated from %s (%s -> %s)",
-                        self._gcs_uri,
-                        self._generation,
-                        generation,
-                    )
-                    self._generation = generation
-                    self._cv = cv
-                    self.source_kind = "gcs"
+            return self._cv
 
         with self._lock:
-            self._checked_at = now
+            if generation != self._generation:
+                logger.info(
+                    "CV updated from %s (%s -> %s)",
+                    self._gcs_uri,
+                    self._generation,
+                    generation,
+                )
+                self._generation = generation
+                self._cv = cv
+                self.source_kind = "gcs"
         return self._cv
 
 

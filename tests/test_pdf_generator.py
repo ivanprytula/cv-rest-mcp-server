@@ -112,7 +112,7 @@ async def test_generate_cv_pdf_async_single_flight(pdf_service, monkeypatch):
 
 def test_cache_evicts_least_recently_used_entry(synthetic_cv_path):
     service = PdfService(
-        CvSource.for_path(synthetic_cv_path), max_entries=1, max_workers=1
+        CvSource(local_path=synthetic_cv_path), max_entries=1, max_workers=1
     )
     service.generate_cv_pdf("classic")
     service.generate_cv_pdf("minimal")

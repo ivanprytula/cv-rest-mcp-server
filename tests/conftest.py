@@ -89,7 +89,7 @@ def synthetic_cv_path(tmp_path):
 @pytest.fixture
 def pdf_service(synthetic_cv_path):
     return PdfService(
-        CvSource.for_path(synthetic_cv_path),
+        CvSource(local_path=synthetic_cv_path),
         max_entries=PDF_CACHE_MAX_ENTRIES,
         max_workers=PDF_EXECUTOR_MAX_WORKERS,
     )

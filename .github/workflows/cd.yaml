@@ -106,6 +106,8 @@ jobs:
           GCP_PROJECT: ${{ vars.GCP_PROJECT }}
           GCP_REGION: ${{ vars.GCP_REGION }}
           SVC_NAME: ${{ vars.SVC_NAME }}
+          CONTACT_NAME: ${{ vars.CONTACT_NAME }}
+          CONTACT_EMAIL: ${{ vars.CONTACT_EMAIL }}
         run: scripts/deploy-cloud-run.sh deploy
 
       - name: Verify and print URL
