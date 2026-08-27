@@ -195,6 +195,23 @@ async def test_csp_frame_src_self(client):
     assert "frame-src 'self'" in csp
 
 
+async def test_csp_allows_swaggerui_cdn(client):
+    csp = (await client.get("/health")).headers["content-security-policy"]
+    script_src = csp.split("script-src")[1].split(";")[0]
+    assert "cdn.jsdelivr.net" in script_src
+    style_src = csp.split("style-src")[1].split(";")[0]
+    assert "cdn.jsdelivr.net" in style_src
+    img_src = csp.split("img-src")[1].split(";")[0]
+    assert "fastapi.tiangolo.com" in img_src
+    assert "data:" in img_src
+
+
+async def test_csp_connect_src_self(client):
+    csp = (await client.get("/health")).headers["content-security-policy"]
+    connect_src = csp.split("connect-src")[1].split(";")[0]
+    assert "'self'" in connect_src
+
+
 async def test_cors_allows_any_origin_without_credentials(client):
     response = await client.get("/health", headers={"Origin": "https://example.com"})
     assert response.headers["access-control-allow-origin"] == "*"

@@ -8,7 +8,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.constants import EXAMPLE_CV_PATH
-from app.cv_data import CVData, load_cv_data
+from app.cv_data import CVData, SkillCategory, SkillSubCategory, load_cv_data
 
 
 def test_cv_data_loads_successfully():
@@ -107,3 +107,37 @@ def load_cv_data_from_raw(raw: dict) -> dict:
         raw["education"] = [raw["education"]]
     cv = CVData(**raw)
     return cv.model_dump()
+
+
+def test_skill_category_with_sub_categories():
+    cat = SkillCategory(
+        name="Backend",
+        sub_categories=[
+            SkillSubCategory(name="languages", items=["Python"]),
+            SkillSubCategory(name="frameworks", items=["FastAPI"]),
+        ],
+    )
+    assert cat.name == "Backend"
+    assert len(cat.sub_categories) == 2
+    assert cat.sub_categories[0].items == ["Python"]
+
+
+def test_skill_category_empty_sub_categories():
+    cat = SkillCategory(name="Testing")
+    assert cat.sub_categories == []
+
+
+def test_cv_data_skills_uses_skill_category():
+    cv = CVData(
+        skills=[
+            {
+                "name": "Backend",
+                "sub_categories": [
+                    {"name": "languages", "items": ["Python"]},
+                ],
+            }
+        ]
+    )
+    assert len(cv.skills) == 1
+    assert cv.skills[0].name == "Backend"
+    assert cv.skills[0].sub_categories[0].name == "languages"

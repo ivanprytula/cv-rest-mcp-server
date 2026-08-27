@@ -103,11 +103,14 @@ _CSP_SCRIPT_HASHES = _compute_csp_hashes()
 
 _CSP_DIRECTIVE = (
     f"default-src 'none'; "
-    f"script-src 'self' {_CSP_SCRIPT_HASHES}; "
-    f"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-    f"img-src 'self'; "
+    f"script-src 'self' {_CSP_SCRIPT_HASHES} "
+    f"'sha256-QOOQu4W1oxGqd2nbXbxiA1Di6OHQOLQD+o+G9oWL8YY=' "
+    f"https://cdn.jsdelivr.net; "
+    f"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; "
+    f"img-src 'self' data: https://fastapi.tiangolo.com; "
     f"font-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com; "
-    f"frame-src 'self'"
+    f"frame-src 'self'; "
+    f"connect-src 'self'"
 )
 
 

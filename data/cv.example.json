@@ -8,35 +8,40 @@
   "location": "San Francisco, CA",
   "github": "https://github.com/janedoe",
   "linkedin": "https://www.linkedin.com/in/janedoe/",
+  "websites": [
+    {"name": "Portfolio", "url": "https://janedoe.dev"}
+  ],
   "summary": "Brief professional summary.",
   "skills": [
     {
-      "category": "Backend development",
-      "items": [
-        "Python, FastAPI, Django, DRF, SQLAlchemy, Alembic, Pydantic",
-        "REST API design, OpenAPI/Swagger, request validation, authentication, RBAC"
+      "name": "Backend development",
+      "sub_categories": [
+        {"name": "languages", "items": ["Python"]},
+        {"name": "frameworks", "items": ["FastAPI", "Django", "DRF", "SQLAlchemy", "Alembic", "Pydantic"]},
+        {"name": "practices", "items": ["REST API design, OpenAPI/Swagger, request validation, authentication, RBAC"]}
       ]
     },
     {
-      "category": "Databases",
-      "items": [
-        "PostgreSQL: schema design, migrations, indexing, query optimization",
-        "Redis caching and connection pooling"
+      "name": "Databases",
+      "sub_categories": [
+        {"name": "datastores", "items": [
+          "PostgreSQL: schema design, migrations, indexing, query optimization",
+          "Redis caching and connection pooling"
+        ]}
       ]
     }
   ],
   "additional_skills": [
     {
-      "category": "Containers and CI/CD",
-      "items": [
-        "Docker, Docker Compose, Kubernetes",
-        "GitLab CI/CD, GitHub Actions"
+      "name": "Containers and CI/CD",
+      "sub_categories": [
+        {"name": "tools", "items": ["Docker", "Docker Compose", "Kubernetes", "GitLab CI/CD", "GitHub Actions"]}
       ]
     },
     {
-      "category": "Cloud",
-      "items": [
-        "AWS practical working knowledge of common backend services"
+      "name": "Cloud",
+      "sub_categories": [
+        {"name": "tools", "items": ["AWS practical working knowledge of common backend services"]}
       ]
     }
   ],
