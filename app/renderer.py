@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import Any
+
 from jinja2 import Environment, FileSystemLoader
 
 from app.constants import TEMPLATE_DIR
@@ -6,14 +10,14 @@ from app.constants import TEMPLATE_DIR
 _RENDERER_OWNED_KEYS = frozenset({"css", "consent_enabled", "consent_company"})
 
 
-def _flatten_skills(skills: list[dict]) -> list[dict]:
+def _flatten_skills(skills: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Flatten SkillCategory with sub_categories into flat display list.
 
     Each SkillCategory becomes ``{"category": name, "items": [...]}`` with
     all sub-category items merged in order.  Categories that produce no
     items after flattening are dropped.
     """
-    flat: list[dict] = []
+    flat: list[dict[str, Any]] = []
     for cat in skills:
         parts: list[str] = []
         for sub in cat.get("sub_categories", []):
