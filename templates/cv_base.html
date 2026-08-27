@@ -192,10 +192,16 @@
                 {% for part in contact_parts %}
                 <span>{{ part }}</span>{% if not loop.last %}<span class="sep"></span>{% endif %}
                 {% endfor %}
-                {% if github or linkedin %}
+                {% if github or linkedin or websites %}
                 <br>
+                {% set ns = namespace(sep=false) %}
                 {% for link in [github, linkedin] if link %}
-                <a href="{{ link }}">{{ link }}</a>{% if not loop.last %}<span class="sep"></span>{% endif %}
+                {% if ns.sep %}<span class="sep"></span>{% endif %}<a href="{{ link }}">{{ link }}</a>
+                {% set ns.sep = true %}
+                {% endfor %}
+                {% for site in websites %}
+                {% if ns.sep %}<span class="sep"></span>{% endif %}<a href="{{ site.url }}">{{ site.name or site.url }}</a>
+                {% set ns.sep = true %}
                 {% endfor %}
                 {% endif %}
             </address>
@@ -208,11 +214,11 @@
         </section>
         {% endif %}
 
-        {% if skills %}
+        {% if flat_skills %}
         <section class="section">
             <h2>Skills</h2>
             <ul class="skill-list">
-                {% for skill in skills %}
+                {% for skill in flat_skills %}
                 <li class="skill-item">
                     <span class="skill-category">{{ skill["category"] }}:</span>
                     <span class="skill-text">{{ skill["items"]|join("; ") }}</span>
@@ -222,11 +228,11 @@
         </section>
         {% endif %}
 
-        {% if additional_skills %}
+        {% if flat_additional_skills %}
         <section class="section">
             <h2>Additional Skills</h2>
             <ul class="skill-list">
-                {% for skill in additional_skills %}
+                {% for skill in flat_additional_skills %}
                 <li class="skill-item">
                     <span class="skill-category">{{ skill["category"] }}:</span>
                     <span class="skill-text">{{ skill["items"]|join("; ") }}</span>

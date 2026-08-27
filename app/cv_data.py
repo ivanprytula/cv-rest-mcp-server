@@ -58,9 +58,23 @@ class Volunteering(BaseModel):
     description: str = ""
 
 
-class Skill(BaseModel):
-    category: str = ""
+class Website(BaseModel):
+    name: str = ""
+    url: str = ""
+
+
+class SkillSubCategory(BaseModel):
+    """Typed group within a skill category (e.g. 'frameworks' under 'Backend development')."""
+
+    name: str = ""
     items: list[str] = []
+
+
+class SkillCategory(BaseModel):
+    """Top-level skill category with optional typed sub-groups."""
+
+    name: str = ""
+    sub_categories: list[SkillSubCategory] = []
 
 
 class CVData(BaseModel):
@@ -74,9 +88,10 @@ class CVData(BaseModel):
     location: str = ""
     github: str = ""
     linkedin: str = ""
+    websites: list[Website] = []
     summary: str = ""
-    skills: list[Skill] = []
-    additional_skills: list[Skill] = []
+    skills: list[SkillCategory] = []
+    additional_skills: list[SkillCategory] = []
     experience: list[Experience] = []
     education: list[Education] = []
     languages: list[str] = []

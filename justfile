@@ -23,6 +23,12 @@ test-ui:
     uv run playwright install chromium
     uv run pytest -m e2e --no-cov
 
+# Recompute the SHA-256 hash of FastAPI's /docs inline init script.
+# Run after upgrading FastAPI; paste output into app/main.py _CSP_DIRECTIVE.
+# Requires dev server running on :8080 (just dev).
+csp-swaggerui-hash:
+    python3 scripts/csp_swaggerui_hash.py
+
 test-pdf:
     curl localhost:8080/cv/pdf?theme=modern -o /tmp/test.pdf
 

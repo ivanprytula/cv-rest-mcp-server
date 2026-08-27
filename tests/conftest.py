@@ -44,7 +44,12 @@ SYNTHETIC_CV = {
     "linkedin": "https://www.linkedin.com/in/janedoe/",
     "summary": "Synthetic summary used by the test suite.",
     "skills": [
-        {"category": "Testing", "items": ["pytest", "fixtures"]},
+        {
+            "name": "Testing",
+            "sub_categories": [
+                {"name": "practices", "items": ["pytest", "fixtures"]},
+            ],
+        },
     ],
     "experience": [
         {
