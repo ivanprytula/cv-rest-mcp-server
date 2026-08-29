@@ -29,6 +29,11 @@ test-ui:
 csp-swaggerui-hash:
     python3 scripts/csp_swaggerui_hash.py
 
+# Print a TAILOR_BEARER_TOKEN without ambiguous chars (0O1lI5S2Z).
+# Put it in .env (TAILOR_BEARER_TOKEN) or a 0600 file (TAILOR_BEARER_TOKEN_FILE).
+gen-tailor-token:
+    uv run python3 scripts/gen_tailor_token.py
+
 test-pdf:
     curl localhost:8080/cv/pdf?theme=modern -o /tmp/test.pdf
 
