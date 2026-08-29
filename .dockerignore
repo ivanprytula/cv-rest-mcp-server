@@ -14,6 +14,9 @@ build/
 # Personal data must not be baked into the image (CV comes from GCS).
 data/*
 !data/cv.example.json
+# Skill bank is operator-curated, not personal data. Ship in image so
+# the matcher works out of the box on Cloud Run.
+!data/cv_baseline.json
 
 Dockerfile
 .dockerignore

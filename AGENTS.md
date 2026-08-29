@@ -67,19 +67,31 @@ Deployed to **GCP Cloud Run** (internet-facing). CV data comes from GCS via `CV_
 app/
 ├── main.py              # FastAPI app assembly, MCP tools, lifespan, /mcp mount
 ├── constants.py         # Project paths (TEMPLATE_DIR, THEMES_DIR), cache/worker limits
-├── routes.py            # REST endpoints: /, /health, /cv, /cv/html, /cv/preview, /cv/pdf
+├── routes.py            # REST endpoints: /, /health, /cv, /cv/html, /cv/preview, /cv/pdf, /cv/tailor
 ├── cv_data.py           # Pydantic models + validate_cv_payload/load_cv_data
 ├── cv_source.py         # CvSource: local file or GCS object (generation-checked hot reload, example-file placeholder fallback)
 ├── pdf_generator.py     # PdfService class: cache, executor, sync/async PDF generation
 ├── rate_limiter.py      # slowapi Limiter, get_client_ip strategy, @limits stacked decorator
 ├── mcp_limits.py        # MCP tool rate limits (slowapi stubs + fastmcp request context)
 ├── guard_middleware.py  # Outermost access gate: allowlist/blocklist/bans/hours
+├── tailor_auth.py       # Bearer-token gate for POST /cv/tailor (fail-closed, constant-time compare)
 ├── ip_lists.py          # IP/CIDR parsing + membership checks
 ├── service_hours.py     # Scheduled availability window evaluation
 ├── failban.py           # Dynamic ban tracker fed by rate-limit violations
 ├── renderer.py          # Jinja2 rendering: render_html (CV) + render_template (pages)
 ├── dependencies.py      # get_pdf_service(request) dependency
 ├── settings.py          # Pydantic Settings — all runtime knobs, see .env.example
+├── jd_input.py          # JD format normalization for /cv/tailor: JSON/PDF/DOCX/txt/Markdown
+├── schemas/
+│   └── tailor.py        # TailorRequest (Pydantic body schema for the JSON JD format)
+├── matching/
+│   ├── __init__.py
+│   ├── taxonomy.py      # Alias map, normalize_skill (UK→US word-level canonicalization), build_skill_index
+│   ├── baseline.py      # Skill bank loader: validation, build_atom_index (canonical-first), get_baseline (mtime/size cache)
+│   ├── parser.py        # extract_skills_from_jd (phrase/comma/token 3-phase) + extract_mentions (qualifier→expert/middle/basic, years-based)
+│   ├── matcher.py       # match_skills (exact→substring→fuzzy, threshold≥0.8) + filter_atoms_by_level + sort_atoms_by_priority (bank helpers)
+│   ├── selector.py      # reorder_skill_categories (F-shaped: matched first)
+│   └── tailor.py        # tailor_cv(jd_text, baseline_atoms, live_cv) — bank-driven rebuild: mentions→level→trust→group; company_slug/extract_company
 └── themes/
     ├── __init__.py      # Theme Protocol definition
     ├── classic.py       # CSS string
@@ -98,7 +110,9 @@ static/
 └── favicon.svg          # Favicon served at /static/favicon.svg — swap this file to rebrand
 
 data/
-└── cv.json              # CV content (validated against CVData model)
+├── cv.json              # CV content (validated against CVData model)
+├── cv_baseline.json     # Skill bank: atoms with level/priority/category_hint; SEARCH VOCAB FOR /cv/tailor + MCP match_jd
+└── cv_tailored-*.json  # Tailored revision files written by /cv/tailor into data/tailored/ (settings.cv_tailored_dir)
 
 config/
 ├── blocked_geo.txt      # GENERATED geo blocklist (ipdeny RU IR KP BY CU SY VE MM) — refresh: just update-geo-blocklist
@@ -123,10 +137,22 @@ tests/
 ├── test_pdf_generator.py # PDF generation tests
 ├── test_rate_limiter.py # Rate limiter / client-IP strategy tests
 ├── test_consent.py      # GDPR/RODO recruiter-clause tests (HTML/preview/PDF cache)
+├── test_tailor_auth.py  # TailorAuthMiddleware tests: 401/503 paths, scope, constant-time compare
+├── test_jd_input.py     # JD format dispatch tests (JSON/PDF/DOCX/txt/Markdown) for /cv/tailor
+├── test_matching/       # Skill matching pipeline: taxonomy, parser, matcher, selector, tailor
+│   ├── test_taxonomy.py # Alias map + normalize_skill + build_skill_index
+│   ├── test_parser.py   # extract_skills_from_jd (phrase/comma/token)
+│   ├── test_qualifier.py # extract_mentions — qualifier→level, years-based, dedup, backward-compat
+│   ├── test_properties.py # Hypothesis properties: normalize fixpoint, UK/US canonicalization, mention/match invariants
+│   ├── test_baseline.py # Bank loader validation, atom index (canonical-first), mtime cache, structural real-bank checks
+│   ├── test_matcher.py  # match_skills — exact→substring (fuzz.partial_ratio)→fuzzy + filter_atoms_by_level + sort_atoms_by_priority
+│   ├── test_selector.py # reorder_skill_categories (F-shaped ordering)
+│   └── test_tailor.py   # tailor_cv() bank-driven rebuild: level filter, trust policy, grouping, pass-through
 └── test_e2e.py          # Playwright browser flows (copy, dark mode, consent click-through); run: just test-ui
 
 docs/
 ├── architecture.md      # System components, data flow, endpoints
+├── api.md               # Explicit REST contract: paths, params, bodies, status codes
 ├── design.md            # Design principles, patterns, constraints
 └── decisions.md         # ADR-style decision log
 
@@ -149,10 +175,14 @@ pyproject.toml          # Python 3.14+, deps, ruff/ty config, pytest asyncio_mod
 - **Rate limiting**: slowapi `Limiter` keyed by `get_client_ip` (XFF-entry / header / socket-peer strategies). REST uses the `@limits(...)` stacked decorator (burst + sustained, loopback-socket-peer exempt); MCP tools enforce via `app/mcp_limits.py` stubs + `get_http_request()`. `GuardMiddleware` (added last = runs first) handles allowlist/blocklist/dynamic bans/service hours; `/health` always passes. Loopback exemptions (limits, failban) are gated by `TRUST_PROXY`: proxied platforms (Cloud Run peer = 127.0.0.1 for everyone) MUST set `TRUST_PROXY=true` + `CLIENT_IP_XFF_ENTRY=2` or limits silently stop applying.
 - **IP access lists**: `parse_ip_list` accepts commas, whitespace, and newlines; `#` comments run to end of line (stripped BEFORE comma splitting — a comma inside a comment must not split tokens). Inline env values merge with `*_FILE` files; missing configured file = startup failure. Large geo lists MUST use the file form (execve caps env args at ~128KB); regenerate via `just update-geo-blocklist`.
 - **Image packaging**: the image ships `data/cv.example.json` ONLY (never real cv.json — CV content comes from GCS via `CV_DATA_GCS_URI`) plus `config/` (geo blocklist, MCP tab definitions). `.dockerignore` and `.gcloudignore` both use `data/*` + `!data/cv.example.json`; gcloud builds submit applies `.gcloudignore` verbatim when present, otherwise it derives one from `.gitignore`, which excludes personal data.
+- **Operator edits `data/cv.json` by hand — unannounced**: the operator maintains the live CV directly and does NOT notify sessions of every edit. Always re-read `data/cv.json` (and `data/cv_baseline.json`) freshly at task start; never assume content seen earlier is still current. Re-validate with `validate_cv_payload` before relying on it. Where granularity matters (trust passes only for keyword-only, bank-aligned items), the operator keeps that contract when hand-editing — a task that runs into a dropped atom should check the CURRENT file, not blame stale structure.
 - **Builder image pin**: the Dockerfile builder stage is digest-pinned (`ghcr.io/astral-sh/uv:0.12.5@sha256:...`); bump deliberately via `docker buildx imagetools inspect ghcr.io/astral-sh/uv:<tag>` and update both Dockerfile and docs together. `python:3.14-slim` stays tag-based by scope decision.
 - **CSP hash lifecycle**: `SecurityHeadersMiddleware` computes SHA-256 hashes of all inline `<script>` blocks in `templates/**/*.html` at **import time** and bakes them into `_CSP_DIRECTIVE` (a module-level constant). Changing a template script requires a server restart — the browser blocks scripts whose hash doesn't match the CSP (fail-safe). Dev with uvicorn `--reload` handles this automatically; production (Cloud Run) needs a new revision. `test_csp_script_hashes_match_templates` independently recomputes hashes from templates to catch stale values.
 - **MCP client tabs**: snippets live in `config/mcp_clients.json` (single source of truth with `scripts/check_mcp_docs.py`); `routes.load_mcp_clients()` validates at import and aborts startup on a broken file. The monthly `mcp-docs-drift` workflow re-checks each vendor's docs for the expected markers — drift opens an issue, a clean run auto-commits refreshed `verified` stamps. Never add a second copy of the snippet data in code. Keep the JSON byte-identical to `json.dumps(..., indent=2)` output so stamp bumps produce stamp-only diffs; the file is read once at import, so dev-server reload needs `touch app/routes.py` after editing it.
 - **MCP tools**: Return base64 string for `generate_cv_pdf_tool` (MCP is JSON-only). Re-raises `ToolError` without wrapping.
+- **JD input formats** (`app/jd_input.py`): `/cv/tailor` accepts JSON, PDF (`pypdf`), DOCX (`python-docx`), txt, and Markdown via a `_PARSERS` media-type registry. Generic/unknown content types get magic-byte sniffing (`%PDF`, `PK\x03\x04`); everything else falls back to raw text so pasting a JD just works. 10 MB body cap is enforced once at `parse_jd_input` entry (all branches). Corrupt/undecodable files raise `ValueError` → the route maps it to 422. `.doc` (legacy binary) is intentionally NOT supported — too old/edge-case.
+- **Tailor auth** (`app/tailor_auth.py`): pure-ASGI bearer-token gate for `POST /cv/tailor` AND the `?tailored=` revision reads on `/cv/html`, `/cv/pdf`, `/cv/preview`. Path/method/query-scoped — the public CV surface without a `tailored` selector is untouched. Reason: `/cv/tailor` is Bearer-gated, so its JD-derived output must not be readable publicly (revision names are unguessable but `latest` is a constant). Reads accept the token via `Authorization` **or** `?token=` (a preview iframe can't send headers; the mutation route is header-only). Comparison is constant-time via `secrets.compare_digest`; the presented secret is never logged. **Fail-closed**: when `TAILOR_BEARER_TOKEN` (or its `_FILE` variant) is unset, these endpoints return `503` instead of being silently open. Mounted in `app/main.py` between `GuardMiddleware` and `SecurityHeadersMiddleware` so global geo/failban/service-hours still applies, and 401/503 responses still carry CSP/etc. headers. Auth lives entirely in the middleware layer.
+- **Bank-driven tailoring** (`app/matching/`): `/cv/tailor` + MCP `match_jd` rebuild the CV's skills from `data/cv_baseline.json` bank atoms — NOT the live CV. Pipeline: `extract_mentions` (qualifier→level) sets a required level per canonical (strongest wins) → `filter_atoms_by_level` drops atoms below it (expert 3 > middle 2 > basic 1; a bare mention = no constraint) → bounded fuzzy fallback (300 tokens, `fuzz.partial_ratio`/`fuzz.ratio` ≥ 0.8) catches typos WITHOUT re-matching any word that is already a known index key (else a level-filtered atom gets smuggled back in — regression-tested) → trust policy drops atoms not vouched for on the live CV → survivors group by `category_hint` ("Additional skills > …" → `additional_skills`) ordered by the **live CV's canonical structure** — group → sub_category → item positions from `_canonical_skill_order(live_cv)` in `app/matching/tailor.py` — so "Python" (languages) always heads "Backend development" and top-level groups follow the public CV regardless of JD mention order; unmatched slots keep bank `priority` (high→low), stable. `get_baseline()` (app/matching/baseline.py) validates loudly (`BaselineError`), caches by (path, size, mtime) for hot reload, ignores `deferred`, and inserts canonical names BEFORE aliases so an alias can never shadow a real atom. `/cv/tailor` writes `cv_tailored-<UTC-ts>.json` into `settings.cv_tailored_dir` and returns `saved_to`; a no-match JD yields EMPTY skill sections (deliberate verdict). Tests must point `settings.cv_baseline_path`/`cv_tailored_dir` at test-owned paths — the autouse `tailor_settings` fixture in `tests/conftest.py` does this for every test. **Trust index wants granular items**: the live-CV skill index keys are raw/tokenized item strings, so a bank atom passes trust only when its canonical name appears as its own item — compound comma-joined items (e.g. `"Docker (multi-stage …), Docker Compose"`) fragment into keys like `"docker (multi-stage"` and get dropped. Keep skill items keyword-only, one bank-aligned name each; `normalize_skill` strips trailing `()` and keeps digits for tool names (D2/S3).
 - **Tests**: Use `httpx.AsyncClient` + `ASGITransport` with `asyncio_mode = "auto"` — async tests need no `@pytest.mark.asyncio` marker.
 - **No adversarial self-tests**: the operator is the only content author. Tests must not protect against scenarios where the attacker and defender are the same person (e.g. injecting `"css":"evil"` into your own CV JSON). Security-adjacent code (URL fetcher denial, error sanitization) is justified by the public Cloud Run surface; pure self-inflicted edge cases are not.
 - **Tests are CV-data-independent**: tests must NOT assert on `data/cv.json` wording, names, or counts (the file is user content that changes often). Use the `SYNTHETIC_CV` fixtures from `tests/conftest.py` (`synthetic_cv`, `synthetic_cv_path`, `pdf_service`, `override_pdf_service`). Only structural smoke checks (e.g., "experience is a list") are allowed against the real file.
