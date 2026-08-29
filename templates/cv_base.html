@@ -200,7 +200,7 @@
                 {% set ns.sep = true %}
                 {% endfor %}
                 {% for site in websites %}
-                {% if ns.sep %}<span class="sep"></span>{% endif %}<a href="{{ site.url }}">{{ site.name or site.url }}</a>
+                {% if ns.sep %}<span class="sep"></span>{% endif %}<a href="{{ site.url }}">{{ site.url }}</a>
                 {% set ns.sep = true %}
                 {% endfor %}
                 {% endif %}
@@ -221,7 +221,7 @@
                 {% for skill in flat_skills %}
                 <li class="skill-item">
                     <span class="skill-category">{{ skill["category"] }}:</span>
-                    <span class="skill-text">{{ skill["items"]|join("; ") }}</span>
+                    <span class="skill-text">{{ skill["items"]|join(", ") }}</span>
                 </li>
                 {% endfor %}
             </ul>
@@ -235,7 +235,7 @@
                 {% for skill in flat_additional_skills %}
                 <li class="skill-item">
                     <span class="skill-category">{{ skill["category"] }}:</span>
-                    <span class="skill-text">{{ skill["items"]|join("; ") }}</span>
+                    <span class="skill-text">{{ skill["items"]|join(", ") }}</span>
                 </li>
                 {% endfor %}
             </ul>

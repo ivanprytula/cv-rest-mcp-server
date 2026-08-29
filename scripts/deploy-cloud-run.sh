@@ -160,6 +160,10 @@ deploy() {
     # --set-env-vars REPLACES all vars every time: this line is the single
     # source of truth for runtime config. Contact_* come from .env via
     # just's dotenv-load (empty = omitted from Swagger UI).
+    # TAILOR_BEARER_TOKEN comes from .env; empty = /cv/tailor returns 503
+    # (fail-closed by design). For higher-security deployments, replace the
+    # inline value with a Secret Manager reference (--set-secrets) — the
+    # env-var name stays the same so the app code does not change.
     gcloud run deploy "$SVC_NAME" \
         --project "$GCP_PROJECT" --region "$GCP_REGION" --quiet \
         --image "gcr.io/${GCP_PROJECT}/${SVC_NAME}" \
@@ -167,7 +171,7 @@ deploy() {
         --allow-unauthenticated \
         --cpu 1 --memory 512Mi \
         --max-instances 1 \
-        --set-env-vars "TRUST_PROXY=true,CLIENT_IP_XFF_ENTRY=2,BLOCKED_IPS_FILE=config/blocked_geo.txt,FAILBAN_THRESHOLD=6,CV_DATA_GCS_URI=gs://${CV_BUCKET}/cv.json,CV_REFRESH_SECONDS=30,CONTACT_NAME=${CONTACT_NAME:-},CONTACT_EMAIL=${CONTACT_EMAIL:-}"
+        --set-env-vars "TRUST_PROXY=true,CLIENT_IP_XFF_ENTRY=2,BLOCKED_IPS_FILE=config/blocked_geo.txt,FAILBAN_THRESHOLD=6,CV_DATA_GCS_URI=gs://${CV_BUCKET}/cv.json,CV_REFRESH_SECONDS=30,CONTACT_NAME=${CONTACT_NAME:-},CONTACT_EMAIL=${CONTACT_EMAIL:-},TAILOR_BEARER_TOKEN=${TAILOR_BEARER_TOKEN:-}"
 }
 
 verify() {

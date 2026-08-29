@@ -306,3 +306,107 @@ is latent SSRF/local-file-read; `extra="allow"` plus `**cv` splat let a stray
 templates are structurally unable to reach network or filesystem resources;
 the builder binary is immutable per rebuild. Cost: two private helpers and a
 digest that must be bumped deliberately when uv updates.
+
+## ADR-018: Bearer-token auth for `POST /cv/tailor`
+
+**Context.** The `/cv/tailor` endpoint exists to match a job description
+against the skill bank. The endpoint is otherwise public, which is fine for
+the existing scope (the live CV is the public surface; the tailor flow is
+read-only against the live CV). However, the endpoint consumes a
+`cv_baseline.json` skill bank and writes `cv_tailored-<ts>.json`
+revisions — both of which raise the operator's risk profile: anyone on
+the internet could trigger tailoring and write revision files, and the
+baseline is a source of atoms that affect what recruiters see in tailored
+outputs.
+
+**Options considered.**
+
+1. *IP allowlist via `TailorGuardMiddleware`* — mirrors the existing
+   `GuardMiddleware` shape. Rejected: adds new CIDR parsing/inline+file
+   plumbing, requires the operator to know their egress IP (which
+   changes on Cloud Run), and creates a maintenance burden without
+   buying meaningful security beyond what global `GuardMiddleware`
+   already provides.
+2. *OAuth / session auth* — proper identity. Rejected as overkill for a
+   single-operator endpoint; deferred to a separate project.
+3. *Bearer token via dedicated `TailorAuthMiddleware`* (chosen).
+   Single static token, `Authorization: Bearer <token>`, constant-time
+   compare via `secrets.compare_digest`, fail-closed on missing config.
+   ~50 lines, no new dependencies, works from any IP.
+
+**Decision.** `app/tailor_auth.py::TailorAuthMiddleware`. Path-scoped
+to `POST /cv/tailor` only; mounted between `GuardMiddleware` and
+`SecurityHeadersMiddleware` in `app/main.py` so the global guard still
+applies (geo/failban/service-hours) and the 401/503 responses still
+carry CSP/SAMEORIGIN headers. Token resolved at request time from
+`settings.tailor_bearer_token` (inline) or
+`settings.tailor_bearer_token_file` (file form, preferred for prod,
+file wins on conflict). The presented token is never logged. The
+middleware is a no-op on every other route — the scope test in
+`tests/test_tailor_auth.py` is the regression guard for that.
+
+**Consequences.** `/cv/tailor` is no longer callable anonymously; the
+public surface (`/cv`, `/cv/html`, `/cv/pdf`, `/cv/preview`, `/health`,
+MCP tools) is unchanged. Operationally: a misconfigured deploy returns
+503 (fail-closed), not 401; the startup log line warns when the token
+is unset. Rotation: restart the service with a new `TAILOR_BEARER_TOKEN`
+value. For higher-security deployments, the deploy script can replace
+the inline value with a Secret Manager reference via `--set-secrets`
+without changing app code. Single static token, no replay protection,
+no per-user audit — acceptable for single-operator, not for multi-user.
+
+## ADR-019: Bank-driven tailoring — `/cv/tailor` converges on the skill bank
+
+**Context.** The plan ("bank-driven tailor") calls for matching job
+descriptions against `data/cv_baseline.json` — a separately curated bank:
+atoms carry `level` (expert/middle/basic), `priority` (high/medium/low), and a
+`category_hint` ("Group > Sub"), with optional `aliases`/`presentation` and a
+`deferred` parking lot — instead of against the live CV. Qualifier-aware
+parsing attributes a per-mention level ("Solid experience with X" → expert;
+"5+ years of X" → years-based); a bare mention is "no constraint". The live CV
+remains the trust gate and the pass-through carrier for non-skill sections.
+
+**Options considered.**
+
+1. *Match against the live CV (status quo).* Rejected: the CV's presentation
+   vocabulary is not a canonical match vocabulary, and JD skills the CV does
+   not display could never match.
+2. *Match against the full bank including `deferred`.* Rejected: deferred is
+   the operator's parking lot, not a claimable skill.
+3. *Bank-driven with a trust policy (chosen).* Bank atoms are the authoritative
+   vocabulary plus level/priority/category metadata; the trust policy drops any
+   matched atom whose canonical form is not already vouched for on the live CV,
+   and drops low-level atoms below a JD qualifier.
+
+**Decision.** `tailor_cv(jd_text, baseline_atoms, live_cv, *, title="",
+threshold=0.8)` in `app/matching/tailor.py` rebuilds the tailored CV's
+`skills`/`additional_skills` from matched bank atoms:
+
+- mentions attribute a required level per canonically-normalized atom
+  (strongest mention wins; `parser.extract_mentions`);
+- the level filter rejects atoms below the requirement
+  (`filter_atoms_by_level`, strengths expert 3 / middle 2 / basic 1);
+- a bounded fuzzy fallback (`_FUZZY_MAX_TOKENS=300`, `fuzz.partial_ratio` /
+  `fuzz.ratio` ≥ 0.8) catches typos and paraphrases with no level constraint —
+  words that are (or normalize to) an index key are deliberately skipped, so a
+  level-vetted atom can never be smuggled back in through the fuzzy path;
+- the trust policy (`_trust_filter`) drops unvouched atoms and logs which ones;
+- survivors are grouped by `category_hint` mapping onto the CV skills shape,
+  hints under "Additional skills" land in `additional_skills`, and atoms are
+  priority-ordered (high → low, stable) within a group;
+- all non-skill sections pass through unchanged; `title` optionally overrides.
+
+`POST /cv/tailor` loads the bank lazily via `get_baseline()` (mtime/size-keyed
+cache — generation-checked hot reload, the same spirit as `CvSource`), writes
+`CV_TAILORED_DIR/cv_tailored-<UTC-ts>.json`, and returns the tailored CV plus
+`saved_to`. The MCP `match_jd` tool shares the identical pipeline. Knobs live in
+`settings.cv_baseline_path` / `settings.cv_tailored_dir`; auth per ADR-018.
+
+**Consequences.** A JD that matches nothing yields empty skill sections — a
+faithful match verdict, not a padded copy of the live CV. The bank validates
+loudly (`BaselineError`): schema violations, empty pools, or duplicate atoms
+abort the call. Index insertion is canonical-first, so an alias can never
+shadow a real atom (e.g. the "API security" atom's "Casbin" alias cannot hijack
+the standalone "Casbin" atom). `presentation`/`deferred` are metadata-only
+today. The operator's data files (`data/cv.json`, `data/cv_baseline.json`)
+remain hand-curated and unchanged by tailoring.

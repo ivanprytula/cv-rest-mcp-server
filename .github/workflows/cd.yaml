@@ -108,6 +108,12 @@ jobs:
           SVC_NAME: ${{ vars.SVC_NAME }}
           CONTACT_NAME: ${{ vars.CONTACT_NAME }}
           CONTACT_EMAIL: ${{ vars.CONTACT_EMAIL }}
+          # Deploys are CD-only now (no manual .sh). Repo secret — without it
+          # /cv/tailor fails CLOSED (503). Add under Settings → Secrets and
+          # variables → Actions as TAILOR_BEARER_TOKEN (generate via
+          # `just gen-tailor-token`). /cv/tailor is Bearer-gated, so the secret
+          # must never be added as a plain repo *variable*.
+          TAILOR_BEARER_TOKEN: ${{ secrets.TAILOR_BEARER_TOKEN }}
         run: scripts/deploy-cloud-run.sh deploy
 
       - name: Verify and print URL

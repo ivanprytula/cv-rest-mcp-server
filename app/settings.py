@@ -63,5 +63,21 @@ class Settings(BaseSettings):
     failban_ban_seconds: int = 1800
     failban_max_tracked: int = 10000
 
+    # Bearer-token auth for POST /cv/tailor. Single-operator use: ONE token,
+    # fail-closed. TAILOR_BEARER_TOKEN_FILE is preferred for production so
+    # the secret never lands in shell history or process listings; the inline
+    # value is a convenience for dev. When both are set, the file wins. Read
+    # once at startup; rotate by restarting the service. Enforced only by
+    # TailorAuthMiddleware — does not affect any other route.
+    tailor_bearer_token: str = ""
+    tailor_bearer_token_file: Path | None = None
+
+    # Skill bank used by POST /cv/tailor and the MCP match_jd tool. Lazy-loaded
+    # on first use and memoized per (path, mtime). Defaults are dev-friendly;
+    # point CV_BASELINE_PATH at the bank and CV_TAILORED_DIR at the directory
+    # that receives cv_tailored-<timestamp>.json revision files.
+    cv_baseline_path: Path = Path("data/cv_baseline.json")
+    cv_tailored_dir: Path = Path("data/tailored")
+
 
 settings = Settings()

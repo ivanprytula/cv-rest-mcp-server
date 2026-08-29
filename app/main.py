@@ -4,7 +4,7 @@ import logging
 import re
 import sys
 from contextlib import asynccontextmanager
-from typing import cast
+from typing import Any, cast
 
 import uvicorn
 from fastapi import FastAPI, Request
@@ -32,6 +32,7 @@ from app.pdf_generator import PdfService, ThemeNotFoundError
 from app.rate_limiter import limiter
 from app.routes import router
 from app.settings import settings
+from app.tailor_auth import TailorAuthMiddleware
 
 
 # Cloud Run maps stderr -> ERROR for every line; default logging writes to
@@ -58,12 +59,18 @@ def _openapi_contact() -> dict[str, str] | None:
 app = FastAPI(
     title="CV REST/MCP Server",
     description=(
-        "Render a structured CV as a themed HTML page or a downloadable PDF.\n\n"
-        "**REST**\n"
+        "Render a structured CV as a themed HTML page or a downloadable PDF, "
+        "and tailor it to a job description.\n\n"
+        "**REST** (full contract + status codes in `docs/api.md`)\n"
         "- `GET /cv` — raw CV JSON\n"
         "- `GET /cv/html?theme=` — rendered CV page\n"
         "- `GET /cv/preview?theme=` — interactive preview toolbar\n"
-        "- `GET /cv/pdf?theme=` — PDF download (rate-limited)\n\n"
+        "- `GET /cv/pdf?theme=` — PDF download (rate-limited)\n"
+        "- `POST /cv/tailor` — tailored CV from a JD (Bearer-token protected, "
+        "text/Markdown/JSON/PDF/DOCX)\n"
+        "- `GET /api/games/culture-bingo/content` — bingo tiles JSON\n\n"
+        'Errors use `{"detail": ...}`; documented codes: 404, 413, 422, 429, '
+        "500, 503.\n\n"
         "**MCP** — mount `/mcp` in any MCP client "
         "(config snippet on the landing page)."
     ),
@@ -162,6 +169,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.add_middleware(GuardMiddleware)
+# Middleware order (Starlette wraps inside-out as we add, but runs
+# outside-in on the request): SecurityHeaders is outermost (added last)
+# so it stamps CSP etc. on every response, including the 401/503 from
+# TailorAuth. Guard runs before TailorAuth so geo/failban/service-hours
+# still apply to /cv/tailor, and failban can ban a client before we even
+# bother checking the bearer token. TailorAuth short-circuits on the
+# protected path/method; everything else passes through untouched.
+app.add_middleware(TailorAuthMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 
 mcp = FastMCP("cv-rest-mcp-server")
@@ -210,6 +225,38 @@ async def generate_cv_pdf_tool(theme: str) -> str:
     return base64.b64encode(pdf_bytes).decode("utf-8")
 
 
+@mcp.tool
+def match_jd(jd_text: str, title: str = "") -> dict:
+    """Match a job description against the skill bank and return a tailored version.
+
+    The tailored CV's skills are built from bank atoms whose level meets the
+    JD qualifiers and that are already vouched for on the live CV (trust
+    policy). Skills carry no qualifier level filtering when the JD states
+    none.
+
+    Args:
+        jd_text: Full text of the job description.
+        title: Optional override for the CV title field.
+    """
+    enforce_mcp_read_limit()
+    pdf_service = app.state.pdf_service
+    if pdf_service is None:
+        raise RuntimeError("PDF service not initialized")
+    from app.matching.baseline import BaselineError, get_baseline
+    from app.matching.tailor import tailor_cv
+
+    try:
+        baseline_atoms = get_baseline()
+    except BaselineError as exc:
+        logger.warning("Skill bank unavailable: %s", exc)
+        raise ToolError("CV tailoring failed") from exc
+    try:
+        return tailor_cv(jd_text, baseline_atoms, pdf_service.cv_data, title=title)
+    except Exception:
+        logger.exception("MCP JD tailoring failed")
+        raise ToolError("CV tailoring failed") from None
+
+
 mcp_app = mcp.http_app(path="/")
 
 
@@ -232,6 +279,80 @@ app.router.lifespan_context = lifespan
 app.mount("/mcp", mcp_app)
 app.mount("/static", StaticFiles(directory=STATIC_DIR))
 app.include_router(router)
+
+
+# The /cv/tailor endpoint reads the raw body itself (multi-format: JSON,
+# PDF, DOCX, text, Markdown) so it declares no FastAPI body parameter —
+# FastAPI would otherwise validate any declared param against Content-Type
+# and reject e.g. JSON bodies before the handler runs. Swagger/OpenAPI
+# still needs a requestBody, so we document it here post-generation.
+_TAILOR_REQUEST_BODY = {
+    "required": True,
+    "description": (
+        "Job description in any supported format (max 10 MB): raw text, "
+        'Markdown, JSON ({"jd_text": ..., "title": ...}), PDF, or DOCX. '
+        "For PDF/DOCX set Content-Type accordingly and send the binary body; "
+        "anything else is read as plain text."
+    ),
+    "content": {
+        "text/plain": {
+            "schema": {"type": "string"},
+            "examples": {
+                "raw text": {
+                    "summary": "Pasted JD",
+                    "value": "Required: Python, FastAPI, PostgreSQL\nWork at EPC Network...",
+                },
+                "json": {
+                    "summary": "JSON payload",
+                    "value": '{"jd_text": "Required: Python, FastAPI", "title": ""}',
+                },
+                "markdown": {
+                    "summary": "Markdown JD",
+                    "value": "# The Role\n\nWe need **Python** engineers...",
+                },
+            },
+        },
+        "application/json": {"schema": {"type": "object"}},
+        "application/pdf": {"schema": {"type": "string", "format": "binary"}},
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {
+            "schema": {"type": "string", "format": "binary"}
+        },
+    },
+}
+
+_openapi_getter = app.openapi
+
+# The /cv/tailor route and the `?tailored=` revision reads are Bearer-token
+# gated by TailorAuthMiddleware (ADR-018); Swagger UI needs the security
+# scheme declared on those operations so the Authorize button sends
+# `Authorization: Bearer <token>`. The reads are only protected WHEN a
+# `tailored` selector is present — extra auth headers on the public surface
+# are harmless, so the declaration is unconditional here.
+_TAILOR_SECURITY_SCHEME = {"type": "http", "scheme": "bearer"}
+_TAILOR_SECURE_OPERATIONS = {
+    ("/cv/tailor", "post"),
+    ("/cv/html", "get"),
+    ("/cv/preview", "get"),
+    ("/cv/pdf", "get"),
+}
+
+
+def _openapi_with_tailor_contract() -> dict[str, Any]:
+    schema = _openapi_getter()
+    for path, method in _TAILOR_SECURE_OPERATIONS:
+        operation = schema.get("paths", {}).get(path, {}).get(method)
+        if operation is None:
+            continue
+        operation["security"] = [{"HTTPBearer": []}]
+        if path == "/cv/tailor" and "requestBody" not in operation:
+            operation["requestBody"] = _TAILOR_REQUEST_BODY
+    components = schema.setdefault("components", {})
+    security_schemes = components.setdefault("securitySchemes", {})
+    security_schemes.setdefault("HTTPBearer", _TAILOR_SECURITY_SCHEME)
+    return schema
+
+
+app.openapi = cast(Any, _openapi_with_tailor_contract)
 
 
 if __name__ == "__main__":

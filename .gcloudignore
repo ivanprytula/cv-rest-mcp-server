@@ -2,6 +2,7 @@
 # config/ must stay included (geo blocklist is baked into the image).
 # data/: only cv.example.json goes to the build (placeholder fallback);
 # real cv.json is personal data delivered from GCS at runtime.
+# Skill bank is operator-curated, not personal data; ship in the image.
 .git/
 .github/
 .venv/
@@ -27,6 +28,7 @@ build/
 .env
 data/*
 !data/cv.example.json
+!data/cv_baseline.json
 .dockerignore
 .gcloudignore
 justfile

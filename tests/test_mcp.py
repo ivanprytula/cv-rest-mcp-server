@@ -3,7 +3,7 @@ import base64
 import pytest
 from fastmcp.exceptions import ToolError
 
-from app.main import generate_cv_pdf_tool, get_available_themes, get_cv, mcp
+from app.main import generate_cv_pdf_tool, get_available_themes, get_cv, match_jd, mcp
 
 
 @pytest.fixture(autouse=True)
@@ -34,6 +34,7 @@ async def test_mcp_tools_have_descriptions():
         "get_cv",
         "get_available_themes",
         "generate_cv_pdf_tool",
+        "match_jd",
     }
     assert all(tool.description for tool in tools)
 
@@ -64,3 +65,18 @@ async def test_mcp_endpoint_redirect(client):
     resp = await client.get("/mcp", follow_redirects=False)
     assert resp.status_code in (307, 308)
     assert resp.headers["location"].endswith("/mcp/")
+
+
+def test_match_jd_returns_tailored_cv():
+    jd = "Required: Python, FastAPI, PostgreSQL"
+    result = match_jd(jd)
+    assert "skills" in result
+    assert isinstance(result["skills"], list)
+    # Original CV is not mutated — match_jd should return a new dict
+    assert result["name"] == "Jane Doe"
+
+
+def test_match_jd_with_title_override():
+    jd = "Required: Python"
+    result = match_jd(jd, title="Senior Python Dev")
+    assert result["title"] == "Senior Python Dev"
