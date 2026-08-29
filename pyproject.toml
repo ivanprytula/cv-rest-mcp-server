@@ -15,6 +15,9 @@ dependencies = [
     "pydantic-settings>=2.0",
     "slowapi>=0.1.10",
     "google-cloud-storage>=3.13.1",
+    "pypdf>=6.16.2",
+    "python-docx>=1.2.0",
+    "rapidfuzz>=3.14.5",
 ]
 
 [dependency-groups]
@@ -29,6 +32,7 @@ dev = [
     "pytest-xdist>=3.5",
     "httpx>=0.27",
     "playwright>=1.49",
+    "hypothesis>=6.165.10",
 ]
 
 [project.urls]

@@ -1,0 +1,2501 @@
+{
+  "_schema_version": "1",
+  "last_updated_at": "2026-08-28T15:10:38Z",
+  "_design_notes": {
+    "layout": "Single file. Top-level keys: 'skills' (active, matcher reads this) and 'deferred' (your reminder pool, matcher ignores). To activate a deferred atom, move the entry from 'deferred' to 'skills' and add it to data/cv.json if you want it to pass the trust policy.",
+    "presentation": "keyword=high-level summary visible to recruiters; detailed=only in deep view; both=default. Edit presentation per atom as JD market shifts.",
+    "level": "expert | middle | basic. The matcher filters by JD qualifier (Solid->expert, Experience->middle, Familiarity->basic).",
+    "priority": "high | medium | low. Drives F-shaped reorder (matched first, then by priority within matched).",
+    "trust_policy": "Bank atoms whose canonical form is NOT on data/cv.json are filtered from tailored output. Promote an atom by adding it to the live CV (not by editing the bank).",
+    "edit_style": "Sort by group_id then atom. Change presentation/level/priority/aliases in place. 3-line Git diff per atom. Reorder by editing the file directly.",
+    "deferred_pool": "Same file, top-level 'deferred' key. The matcher never reads this key. Use it as a parking lot while you decide whether a skill deserves to be on the live CV."
+  },
+  "skills": [
+    {
+      "atom": "Claude Code",
+      "group_id": "ai-coding",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "both",
+      "aliases": [
+        "claude-code",
+        "claude code cli"
+      ],
+      "category_hint": "AI integrations and AI coding tools > tools"
+    },
+    {
+      "atom": "Codex",
+      "group_id": "ai-coding",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "both",
+      "aliases": [
+        "openai codex",
+        "codex cli"
+      ],
+      "category_hint": "AI integrations and AI coding tools > tools"
+    },
+    {
+      "atom": "Cursor",
+      "group_id": "ai-coding",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "both",
+      "aliases": [
+        "cursor ide",
+        "cursor editor"
+      ],
+      "category_hint": "AI integrations and AI coding tools > tools"
+    },
+    {
+      "atom": "GitHub Copilot",
+      "group_id": "ai-coding",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "both",
+      "aliases": [
+        "copilot",
+        "gh copilot",
+        "github copilot chat"
+      ],
+      "category_hint": "AI integrations and AI coding tools > tools"
+    },
+    {
+      "atom": "API security",
+      "group_id": "api-rest",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "both",
+      "aliases": [
+        "OAuth2",
+        "JWT",
+        "RBAC",
+        "Casbin",
+        "IP allowlists",
+        "rate limiting"
+      ],
+      "category_hint": "API development > practices"
+    },
+    {
+      "atom": "API versioning",
+      "group_id": "api-rest",
+      "level": "middle",
+      "priority": "medium",
+      "presentation": "both",
+      "aliases": [
+        "api version",
+        "versioning API"
+      ],
+      "category_hint": "API development > practices"
+    },
+    {
+      "atom": "OpenAPI",
+      "group_id": "api-rest",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "detailed",
+      "aliases": [
+        "Swagger",
+        "OpenAPI 3",
+        "openapi spec"
+      ],
+      "category_hint": "API development > practices"
+    },
+    {
+      "atom": "Postman",
+      "group_id": "api-rest",
+      "level": "middle",
+      "priority": "low",
+      "presentation": "both",
+      "aliases": [
+        "postman client",
+        "postman api"
+      ],
+      "category_hint": "API development > practices"
+    },
+    {
+      "atom": "REST API",
+      "group_id": "api-rest",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "keyword",
+      "aliases": [
+        "RESTful",
+        "REST",
+        "RESTful API"
+      ],
+      "category_hint": "API development > practices"
+    },
+    {
+      "atom": "idempotency",
+      "group_id": "api-rest",
+      "level": "middle",
+      "priority": "medium",
+      "presentation": "both",
+      "aliases": [
+        "idempotent API",
+        "idempotency key"
+      ],
+      "category_hint": "API development > practices"
+    },
+    {
+      "atom": "keyset pagination",
+      "group_id": "api-rest",
+      "level": "middle",
+      "priority": "medium",
+      "presentation": "detailed",
+      "aliases": [
+        "cursor pagination",
+        "keyset paging"
+      ],
+      "category_hint": "API development > practices"
+    },
+    {
+      "atom": "third-party API integrations",
+      "group_id": "api-rest",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "both",
+      "aliases": [
+        "Google API",
+        "Microsoft Graph",
+        "Zoom",
+        "3rd-party APIs"
+      ],
+      "category_hint": "API development > practices"
+    },
+    {
+      "atom": "webhooks",
+      "group_id": "api-rest",
+      "level": "middle",
+      "priority": "medium",
+      "presentation": "detailed",
+      "aliases": [
+        "webhook",
+        "webhook processing"
+      ],
+      "category_hint": "API development > practices"
+    },
+    {
+      "atom": "Casbin",
+      "group_id": "auth-security",
+      "level": "middle",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "ABAC",
+        "ACL",
+        "casbin authz"
+      ],
+      "category_hint": "API development > practices"
+    },
+    {
+      "atom": "IP/CIDR allowlists",
+      "group_id": "auth-security",
+      "level": "expert",
+      "priority": "medium",
+      "presentation": "detailed",
+      "aliases": [
+        "ip_lists",
+        "ip allowlist",
+        "cidr allowlist"
+      ],
+      "category_hint": "API development > practices"
+    },
+    {
+      "atom": "JWT",
+      "group_id": "auth-security",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "keyword",
+      "aliases": [
+        "JSON Web Tokens",
+        "jwt token"
+      ],
+      "category_hint": "API development > practices"
+    },
+    {
+      "atom": "OAuth2",
+      "group_id": "auth-security",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "keyword",
+      "aliases": [
+        "OAuth 2",
+        "oauth"
+      ],
+      "category_hint": "API development > practices"
+    },
+    {
+      "atom": "OWASP",
+      "group_id": "auth-security",
+      "level": "middle",
+      "priority": "medium",
+      "presentation": "both",
+      "aliases": [
+        "owasp top 10",
+        "owasp security"
+      ],
+      "category_hint": "API development > practices"
+    },
+    {
+      "atom": "RBAC",
+      "group_id": "auth-security",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "both",
+      "aliases": [
+        "role-based access control"
+      ],
+      "category_hint": "API development > practices"
+    },
+    {
+      "atom": "dynamic bans",
+      "group_id": "auth-security",
+      "level": "middle",
+      "priority": "medium",
+      "presentation": "detailed",
+      "aliases": [
+        "failban",
+        "fail2ban-lite",
+        "rate-limit ban"
+      ],
+      "category_hint": "API development > practices"
+    },
+    {
+      "atom": "rate limiting",
+      "group_id": "auth-security",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "both",
+      "aliases": [
+        "slowapi",
+        "throttling",
+        "rate limit"
+      ],
+      "category_hint": "API development > practices"
+    },
+    {
+      "atom": "security headers",
+      "group_id": "auth-security",
+      "level": "expert",
+      "priority": "medium",
+      "presentation": "detailed",
+      "aliases": [
+        "CSP",
+        "HSTS",
+        "X-Frame-Options"
+      ],
+      "category_hint": "API development > practices"
+    },
+    {
+      "atom": "threat modeling",
+      "group_id": "auth-security",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "threat model"
+      ],
+      "category_hint": "API development > practices"
+    },
+    {
+      "atom": "AWS",
+      "group_id": "cloud-aws",
+      "level": "middle",
+      "priority": "high",
+      "presentation": "keyword",
+      "aliases": [
+        "aws cloud",
+        "amazon web services"
+      ],
+      "category_hint": "Cloud platforms > tools",
+      "_note": "User-engineer level per own self-description. Has used EC2/S3/EBS in production but not at architect tier."
+    },
+    {
+      "atom": "AWS CLI",
+      "group_id": "cloud-aws",
+      "level": "middle",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "awscli",
+        "aws command line"
+      ],
+      "category_hint": "Cloud platforms > tools"
+    },
+    {
+      "atom": "AWS autoscaling",
+      "group_id": "cloud-aws",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "aws autoscaling groups",
+        "asg"
+      ],
+      "category_hint": "Cloud platforms > tools"
+    },
+    {
+      "atom": "EBS",
+      "group_id": "cloud-aws",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "aws ebs",
+        "elastic block store"
+      ],
+      "category_hint": "Cloud platforms > tools"
+    },
+    {
+      "atom": "EC2",
+      "group_id": "cloud-aws",
+      "level": "middle",
+      "priority": "high",
+      "presentation": "both",
+      "aliases": [
+        "aws ec2",
+        "elastic compute cloud"
+      ],
+      "category_hint": "Cloud platforms > tools"
+    },
+    {
+      "atom": "S3",
+      "group_id": "cloud-aws",
+      "level": "middle",
+      "priority": "high",
+      "presentation": "both",
+      "aliases": [
+        "aws s3",
+        "simple storage service"
+      ],
+      "category_hint": "Cloud platforms > tools"
+    },
+    {
+      "atom": "boto3",
+      "group_id": "cloud-aws",
+      "level": "middle",
+      "priority": "medium",
+      "presentation": "detailed",
+      "aliases": [
+        "boto3 python",
+        "aws sdk python"
+      ],
+      "category_hint": "Cloud platforms > tools"
+    },
+    {
+      "atom": "Artifact Registry",
+      "group_id": "cloud-gcp",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "gcp artifact registry",
+        "gar"
+      ],
+      "category_hint": "Cloud platforms > tools"
+    },
+    {
+      "atom": "Azure",
+      "group_id": "cloud-gcp",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "microsoft azure",
+        "azure cloud"
+      ],
+      "category_hint": "Additional skills > tools",
+      "_note": "Live CV: 'foundational familiarity with core services'."
+    },
+    {
+      "atom": "Cloud Build",
+      "group_id": "cloud-gcp",
+      "level": "middle",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "gcp cloud build"
+      ],
+      "category_hint": "Cloud platforms > tools"
+    },
+    {
+      "atom": "Cloud Run",
+      "group_id": "cloud-gcp",
+      "level": "middle",
+      "priority": "medium",
+      "presentation": "detailed",
+      "aliases": [
+        "gcp cloud run",
+        "google cloud run"
+      ],
+      "category_hint": "Cloud platforms > tools"
+    },
+    {
+      "atom": "GCP",
+      "group_id": "cloud-gcp",
+      "level": "middle",
+      "priority": "medium",
+      "presentation": "keyword",
+      "aliases": [
+        "google cloud",
+        "google cloud platform",
+        "gcp cloud"
+      ],
+      "category_hint": "Cloud platforms > tools"
+    },
+    {
+      "atom": "GCP CLI",
+      "group_id": "cloud-gcp",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "gcloud",
+        "gcloud cli"
+      ],
+      "category_hint": "Cloud platforms > tools"
+    },
+    {
+      "atom": "GCS",
+      "group_id": "cloud-gcp",
+      "level": "middle",
+      "priority": "medium",
+      "presentation": "detailed",
+      "aliases": [
+        "google cloud storage",
+        "gcs bucket"
+      ],
+      "category_hint": "Cloud platforms > tools"
+    },
+    {
+      "atom": "WIF",
+      "group_id": "cloud-gcp",
+      "level": "middle",
+      "priority": "medium",
+      "presentation": "detailed",
+      "aliases": [
+        "workload identity federation",
+        "gcp wif"
+      ],
+      "category_hint": "Cloud platforms > tools"
+    },
+    {
+      "atom": "ADRs",
+      "group_id": "collab-docs",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "detailed",
+      "aliases": [
+        "architecture decision records",
+        "decision record"
+      ],
+      "category_hint": "Documentation and collaboration > practices"
+    },
+    {
+      "atom": "API/setup docs",
+      "group_id": "collab-docs",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "both",
+      "aliases": [
+        "api docs",
+        "setup docs",
+        "documentation"
+      ],
+      "category_hint": "Documentation and collaboration > practices"
+    },
+    {
+      "atom": "Confluence",
+      "group_id": "collab-docs",
+      "level": "middle",
+      "priority": "medium",
+      "presentation": "keyword",
+      "aliases": [
+        "atlassian confluence"
+      ],
+      "category_hint": "Documentation and collaboration > collaboration"
+    },
+    {
+      "atom": "D2",
+      "group_id": "collab-docs",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "d2 diagram",
+        "d2lang"
+      ],
+      "category_hint": "Documentation and collaboration > practices"
+    },
+    {
+      "atom": "Discord",
+      "group_id": "collab-docs",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "discord chat"
+      ],
+      "category_hint": "Documentation and collaboration > collaboration"
+    },
+    {
+      "atom": "Git",
+      "group_id": "collab-docs",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "keyword",
+      "aliases": [
+        "git version control"
+      ],
+      "category_hint": "Delivery and production support > tools"
+    },
+    {
+      "atom": "GitHub",
+      "group_id": "collab-docs",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "keyword",
+      "aliases": [
+        "github.com",
+        "git hub"
+      ],
+      "category_hint": "Documentation and collaboration > collaboration"
+    },
+    {
+      "atom": "GitLab",
+      "group_id": "collab-docs",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "keyword",
+      "aliases": [
+        "gitlab.com",
+        "git lab"
+      ],
+      "category_hint": "Documentation and collaboration > collaboration"
+    },
+    {
+      "atom": "Jira",
+      "group_id": "collab-docs",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "keyword",
+      "aliases": [
+        "atlassian jira",
+        "jira board"
+      ],
+      "category_hint": "Documentation and collaboration > collaboration"
+    },
+    {
+      "atom": "MS Teams",
+      "group_id": "collab-docs",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "both",
+      "aliases": [
+        "microsoft teams",
+        "teams"
+      ],
+      "category_hint": "Documentation and collaboration > collaboration"
+    },
+    {
+      "atom": "Mattermost",
+      "group_id": "collab-docs",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "mattermost chat"
+      ],
+      "category_hint": "Documentation and collaboration > collaboration"
+    },
+    {
+      "atom": "Mermaid",
+      "group_id": "collab-docs",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "mermaid diagrams",
+        "mermaid.js"
+      ],
+      "category_hint": "Documentation and collaboration > practices"
+    },
+    {
+      "atom": "Obsidian",
+      "group_id": "collab-docs",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "obsidian notes",
+        "obsidian md"
+      ],
+      "category_hint": "Documentation and collaboration > collaboration"
+    },
+    {
+      "atom": "Scrum/Kanban",
+      "group_id": "collab-docs",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "keyword",
+      "aliases": [
+        "scrum",
+        "kanban",
+        "agile",
+        "agile methodologies"
+      ],
+      "category_hint": "Documentation and collaboration > collaboration"
+    },
+    {
+      "atom": "Slack",
+      "group_id": "collab-docs",
+      "level": "middle",
+      "priority": "low",
+      "presentation": "both",
+      "aliases": [
+        "slack chat"
+      ],
+      "category_hint": "Documentation and collaboration > collaboration"
+    },
+    {
+      "atom": "Sphinx",
+      "group_id": "collab-docs",
+      "level": "middle",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "sphinx docs",
+        "sphinx-doc"
+      ],
+      "category_hint": "Documentation and collaboration > practices"
+    },
+    {
+      "atom": "code reviews",
+      "group_id": "collab-docs",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "keyword",
+      "aliases": [
+        "code review",
+        "PR review"
+      ],
+      "category_hint": "Documentation and collaboration > collaboration"
+    },
+    {
+      "atom": "cross-cultural teams",
+      "group_id": "collab-docs",
+      "level": "middle",
+      "priority": "medium",
+      "presentation": "both",
+      "aliases": [
+        "international teams",
+        "distributed teams"
+      ],
+      "category_hint": "Documentation and collaboration > collaboration"
+    },
+    {
+      "atom": "cross-functional collaboration",
+      "group_id": "collab-docs",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "keyword",
+      "aliases": [
+        "cross-functional work",
+        "XFN"
+      ],
+      "category_hint": "Documentation and collaboration > collaboration"
+    },
+    {
+      "atom": "Docker",
+      "group_id": "containers",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "keyword",
+      "aliases": [
+        "docker container",
+        "dockerfile",
+        "docker image"
+      ],
+      "category_hint": "Delivery and production support > tools"
+    },
+    {
+      "atom": "Docker Compose",
+      "group_id": "containers",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "both",
+      "aliases": [
+        "docker-compose",
+        "compose file",
+        "docker compose v2"
+      ],
+      "category_hint": "Delivery and production support > tools"
+    },
+    {
+      "atom": "Kubernetes",
+      "group_id": "containers",
+      "level": "middle",
+      "priority": "medium",
+      "presentation": "detailed",
+      "aliases": [
+        "K8s",
+        "k8s",
+        "kubectl",
+        "MicroK8s"
+      ],
+      "category_hint": "Delivery and production support > tools",
+      "_note": "Live CV: 'Kubernetes deployment/debugging with DevOps teams'. Middle is honest — operates clusters, doesn't architect multi-cluster from scratch."
+    },
+    {
+      "atom": "Podman",
+      "group_id": "containers",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "podman containers"
+      ],
+      "category_hint": "Delivery and production support > tools"
+    },
+    {
+      "atom": "Terraform",
+      "group_id": "containers",
+      "level": "middle",
+      "priority": "medium",
+      "presentation": "detailed",
+      "aliases": [
+        "terraform iac",
+        "tf files"
+      ],
+      "category_hint": "Cloud platforms > tools"
+    },
+    {
+      "atom": "Apache Spark",
+      "group_id": "data-engineering",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "PySpark",
+        "pyspark",
+        "spark"
+      ],
+      "category_hint": "Databases and data processing > datastores"
+    },
+    {
+      "atom": "CSV/XLSX validation",
+      "group_id": "data-engineering",
+      "level": "middle",
+      "priority": "medium",
+      "presentation": "detailed",
+      "aliases": [
+        "csv validation",
+        "xlsx validation",
+        "data validation"
+      ],
+      "category_hint": "Databases and data processing > practices"
+    },
+    {
+      "atom": "pandas",
+      "group_id": "data-engineering",
+      "level": "middle",
+      "priority": "medium",
+      "presentation": "detailed",
+      "aliases": [
+        "pandas python",
+        "pd"
+      ],
+      "category_hint": "Databases and data processing > practices"
+    },
+    {
+      "atom": "EXPLAIN ANALYZE",
+      "group_id": "databases-sql",
+      "level": "middle",
+      "priority": "medium",
+      "presentation": "detailed",
+      "aliases": [
+        "explain analyze postgres",
+        "query plan analysis"
+      ],
+      "category_hint": "Databases and data processing > datastores"
+    },
+    {
+      "atom": "PostgreSQL",
+      "group_id": "databases-sql",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "keyword",
+      "aliases": [
+        "postgres",
+        "psql",
+        "postgresql"
+      ],
+      "category_hint": "Databases and data processing > datastores"
+    },
+    {
+      "atom": "SQLite",
+      "group_id": "databases-sql",
+      "level": "middle",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "sqlite3"
+      ],
+      "category_hint": "Databases and data processing > datastores"
+    },
+    {
+      "atom": "connection pooling",
+      "group_id": "databases-sql",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "both",
+      "aliases": [
+        "SQLAlchemy pool",
+        "pgbouncer",
+        "pool tuning"
+      ],
+      "category_hint": "Databases and data processing > datastores"
+    },
+    {
+      "atom": "pgAdmin",
+      "group_id": "databases-sql",
+      "level": "middle",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "pgadmin4"
+      ],
+      "category_hint": "Databases and data processing > datastores"
+    },
+    {
+      "atom": "query optimization",
+      "group_id": "databases-sql",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "both",
+      "aliases": [
+        "EXPLAIN ANALYZE",
+        "query tuning",
+        "query optimisation",
+        "sql optimization"
+      ],
+      "category_hint": "Databases and data processing > datastores",
+      "_note": "Renamed from 'EXPLAIN ANALYZE' (now alias) per user directive. The atom covers the whole optimization discipline; EXPLAIN ANALYZE is one tool within it."
+    },
+    {
+      "atom": "BigQuery",
+      "group_id": "datastores-cache",
+      "level": "middle",
+      "priority": "medium",
+      "presentation": "detailed",
+      "aliases": [
+        "GCP BigQuery",
+        "gcp bigquery",
+        "google bigquery"
+      ],
+      "category_hint": "Cloud platforms > tools"
+    },
+    {
+      "atom": "Redis",
+      "group_id": "datastores-cache",
+      "level": "middle",
+      "priority": "medium",
+      "presentation": "both",
+      "aliases": [
+        "redis pub/sub",
+        "redis cache"
+      ],
+      "category_hint": "Databases and data processing > datastores"
+    },
+    {
+      "atom": "CI/CD pipelines",
+      "group_id": "devops-ci",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "keyword",
+      "aliases": [
+        "ci/cd",
+        "continuous integration",
+        "continuous delivery",
+        "ci cd"
+      ],
+      "category_hint": "Delivery and production support > tools"
+    },
+    {
+      "atom": "GitHub Actions",
+      "group_id": "devops-ci",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "both",
+      "aliases": [
+        "GHA",
+        "gh actions",
+        "github actions workflow"
+      ],
+      "category_hint": "Delivery and production support > tools"
+    },
+    {
+      "atom": "GitLab CI/CD",
+      "group_id": "devops-ci",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "both",
+      "aliases": [
+        "gitlab ci",
+        "gitlab-ci",
+        "gitlab pipeline"
+      ],
+      "category_hint": "Delivery and production support > tools"
+    },
+    {
+      "atom": "FastMCP",
+      "group_id": "fastapi-mcp",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "detailed",
+      "aliases": [
+        "MCP",
+        "Model Context Protocol",
+        "fastmcp python"
+      ],
+      "category_hint": "AI integrations and AI coding tools > tools"
+    },
+    {
+      "atom": "Jinja2",
+      "group_id": "fastapi-mcp",
+      "level": "expert",
+      "priority": "medium",
+      "presentation": "detailed",
+      "aliases": [
+        "jinja",
+        "jinja2 templates"
+      ],
+      "category_hint": "Backend development > tools"
+    },
+    {
+      "atom": "MCP clients",
+      "group_id": "fastapi-mcp",
+      "level": "middle",
+      "priority": "medium",
+      "presentation": "detailed",
+      "aliases": [
+        "mcp client",
+        "mcp client integration"
+      ],
+      "category_hint": "AI integrations and AI coding tools > tools"
+    },
+    {
+      "atom": "MCP tools",
+      "group_id": "fastapi-mcp",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "detailed",
+      "aliases": [
+        "mcp tool",
+        "mcp tools framework"
+      ],
+      "category_hint": "AI integrations and AI coding tools > tools"
+    },
+    {
+      "atom": "Streamable HTTP transport",
+      "group_id": "fastapi-mcp",
+      "level": "middle",
+      "priority": "medium",
+      "presentation": "detailed",
+      "aliases": [
+        "mcp streamable http",
+        "streamable-http"
+      ],
+      "category_hint": "AI integrations and AI coding tools > tools"
+    },
+    {
+      "atom": "WeasyPrint",
+      "group_id": "fastapi-mcp",
+      "level": "expert",
+      "priority": "medium",
+      "presentation": "detailed",
+      "aliases": [
+        "weasyprint",
+        "weasy print"
+      ],
+      "category_hint": "Backend development > tools"
+    },
+    {
+      "atom": "CSS3",
+      "group_id": "frontend-basics",
+      "level": "middle",
+      "priority": "low",
+      "presentation": "both",
+      "aliases": [
+        "CSS",
+        "cascading style sheets"
+      ],
+      "category_hint": "Documentation and collaboration > practices"
+    },
+    {
+      "atom": "Figma",
+      "group_id": "frontend-basics",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "figma design"
+      ],
+      "category_hint": "Documentation and collaboration > practices"
+    },
+    {
+      "atom": "HTML5",
+      "group_id": "frontend-basics",
+      "level": "middle",
+      "priority": "low",
+      "presentation": "both",
+      "aliases": [
+        "HTML",
+        "html"
+      ],
+      "category_hint": "Documentation and collaboration > practices"
+    },
+    {
+      "atom": "JavaScript",
+      "group_id": "frontend-basics",
+      "level": "middle",
+      "priority": "low",
+      "presentation": "both",
+      "aliases": [
+        "JS",
+        "javascript"
+      ],
+      "category_hint": "Documentation and collaboration > practices"
+    },
+    {
+      "atom": "React",
+      "group_id": "frontend-basics",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "ReactJS",
+        "reactjs",
+        "react.js"
+      ],
+      "category_hint": "Documentation and collaboration > practices",
+      "_note": "Old CV listed 'basics'. Promote to middle only if a current role uses React day-to-day."
+    },
+    {
+      "atom": "jQuery",
+      "group_id": "frontend-basics",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "jquery"
+      ],
+      "category_hint": "Documentation and collaboration > practices"
+    },
+    {
+      "atom": "Celery Beat",
+      "group_id": "messaging",
+      "level": "middle",
+      "priority": "medium",
+      "presentation": "both",
+      "aliases": [
+        "celery beat scheduler"
+      ],
+      "category_hint": "Async concurrency patterns and workflows > tools"
+    },
+    {
+      "atom": "Redis pub/sub",
+      "group_id": "messaging",
+      "level": "middle",
+      "priority": "low",
+      "presentation": "both",
+      "aliases": [
+        "redis pubsub",
+        "pubsub redis",
+        "redis publish subscribe"
+      ],
+      "category_hint": "Async concurrency patterns and workflows > tools"
+    },
+    {
+      "atom": "idempotent processing",
+      "group_id": "messaging",
+      "level": "expert",
+      "priority": "medium",
+      "presentation": "both",
+      "aliases": [
+        "idempotency",
+        "idempotent task"
+      ],
+      "category_hint": "Async concurrency patterns and workflows > practices"
+    },
+    {
+      "atom": "notifications",
+      "group_id": "messaging",
+      "level": "middle",
+      "priority": "low",
+      "presentation": "both",
+      "aliases": [
+        "notification system",
+        "email notifications",
+        "push notifications"
+      ],
+      "category_hint": "Async concurrency patterns and workflows > practices"
+    },
+    {
+      "atom": "reporting",
+      "group_id": "messaging",
+      "level": "middle",
+      "priority": "low",
+      "presentation": "both",
+      "aliases": [
+        "report generation",
+        "automated reports"
+      ],
+      "category_hint": "Async concurrency patterns and workflows > practices"
+    },
+    {
+      "atom": "retries",
+      "group_id": "messaging",
+      "level": "expert",
+      "priority": "medium",
+      "presentation": "both",
+      "aliases": [
+        "retry logic",
+        "exponential backoff",
+        "tenacity"
+      ],
+      "category_hint": "Async concurrency patterns and workflows > practices"
+    },
+    {
+      "atom": "network diagnostics",
+      "group_id": "networking",
+      "level": "middle",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "ping",
+        "traceroute",
+        "telnet",
+        "netstat"
+      ],
+      "category_hint": "Delivery and production support > tools"
+    },
+    {
+      "atom": "network fundamentals",
+      "group_id": "networking",
+      "level": "middle",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "TCP/IP",
+        "OSI model",
+        "DNS",
+        "DHCP",
+        "HTTP",
+        "FTP",
+        "SSH"
+      ],
+      "category_hint": "Delivery and production support > tools"
+    },
+    {
+      "atom": "requests",
+      "group_id": "networking",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "both",
+      "aliases": [
+        "httpx",
+        "aiohttp",
+        "urllib3",
+        "http client"
+      ],
+      "category_hint": "Backend development > tools"
+    },
+    {
+      "atom": "socket",
+      "group_id": "networking",
+      "level": "middle",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "python socket",
+        "socket module"
+      ],
+      "category_hint": "Backend development > tools"
+    },
+    {
+      "atom": "Grafana",
+      "group_id": "observability",
+      "level": "middle",
+      "priority": "medium",
+      "presentation": "both",
+      "aliases": [
+        "grafana dashboards"
+      ],
+      "category_hint": "Delivery and production support > practices"
+    },
+    {
+      "atom": "OpenSearch",
+      "group_id": "observability",
+      "level": "middle",
+      "priority": "low",
+      "presentation": "both",
+      "aliases": [
+        "opensearch dashboards",
+        "opensearch cluster"
+      ],
+      "category_hint": "Delivery and production support > practices"
+    },
+    {
+      "atom": "Prometheus",
+      "group_id": "observability",
+      "level": "middle",
+      "priority": "medium",
+      "presentation": "both",
+      "aliases": [
+        "prometheus monitoring",
+        "prom"
+      ],
+      "category_hint": "Delivery and production support > practices"
+    },
+    {
+      "atom": "Sentry",
+      "group_id": "observability",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "keyword",
+      "aliases": [
+        "sentry error tracking",
+        "sentry.io"
+      ],
+      "category_hint": "Delivery and production support > practices"
+    },
+    {
+      "atom": "VictoriaLogs",
+      "group_id": "observability",
+      "level": "middle",
+      "priority": "low",
+      "presentation": "both",
+      "aliases": [
+        "victoria logs",
+        "vlogs"
+      ],
+      "category_hint": "Delivery and production support > practices"
+    },
+    {
+      "atom": "VictoriaMetrics",
+      "group_id": "observability",
+      "level": "middle",
+      "priority": "low",
+      "presentation": "both",
+      "aliases": [
+        "victoria metrics",
+        "vmagent"
+      ],
+      "category_hint": "Delivery and production support > practices"
+    },
+    {
+      "atom": "structured logging",
+      "group_id": "observability",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "keyword",
+      "aliases": [
+        "logging",
+        "loguru",
+        "structlog",
+        "json logging"
+      ],
+      "category_hint": "Delivery and production support > practices"
+    },
+    {
+      "atom": "Linux",
+      "group_id": "os-linux",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "keyword",
+      "aliases": [
+        "linux",
+        "gnu/linux"
+      ],
+      "category_hint": "Delivery and production support > tools"
+    },
+    {
+      "atom": "bash",
+      "group_id": "os-linux",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "keyword",
+      "aliases": [
+        "bash scripting",
+        "shell scripting",
+        "bash script"
+      ],
+      "category_hint": "Delivery and production support > tools"
+    },
+    {
+      "atom": "grep/sed/awk",
+      "group_id": "os-linux",
+      "level": "expert",
+      "priority": "medium",
+      "presentation": "detailed",
+      "aliases": [
+        "grep",
+        "sed",
+        "awk",
+        "text processing"
+      ],
+      "category_hint": "Delivery and production support > tools"
+    },
+    {
+      "atom": "htop",
+      "group_id": "os-linux",
+      "level": "middle",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "htop process monitor"
+      ],
+      "category_hint": "Delivery and production support > tools"
+    },
+    {
+      "atom": "ps/top/kill/nice/bg/fg",
+      "group_id": "os-linux",
+      "level": "middle",
+      "priority": "medium",
+      "presentation": "detailed",
+      "aliases": [
+        "process management",
+        "ps",
+        "top",
+        "kill",
+        "nice",
+        "bg",
+        "fg"
+      ],
+      "category_hint": "Delivery and production support > tools"
+    },
+    {
+      "atom": "tmux",
+      "group_id": "os-linux",
+      "level": "middle",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "tmux terminal multiplexer"
+      ],
+      "category_hint": "Delivery and production support > tools"
+    },
+    {
+      "atom": "user management",
+      "group_id": "os-linux",
+      "level": "middle",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "useradd",
+        "usermod",
+        "linux users"
+      ],
+      "category_hint": "Delivery and production support > tools"
+    },
+    {
+      "atom": "zsh",
+      "group_id": "os-linux",
+      "level": "middle",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "oh-my-zsh",
+        "zsh shell"
+      ],
+      "category_hint": "Delivery and production support > tools"
+    },
+    {
+      "atom": "async SQLAlchemy",
+      "group_id": "python-async",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "detailed",
+      "aliases": [
+        "sqlalchemy async",
+        "sqlalchemy 2.0 async"
+      ],
+      "category_hint": "Backend development > frameworks"
+    },
+    {
+      "atom": "asyncio",
+      "group_id": "python-async",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "both",
+      "aliases": [
+        "async/await",
+        "asyncio python"
+      ],
+      "category_hint": "Async concurrency patterns and workflows > practices"
+    },
+    {
+      "atom": "Python",
+      "group_id": "python-core",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "keyword",
+      "aliases": [
+        "python3",
+        "cpython"
+      ],
+      "category_hint": "Backend development > languages"
+    },
+    {
+      "atom": "design patterns",
+      "group_id": "python-core",
+      "level": "middle",
+      "priority": "medium",
+      "presentation": "detailed",
+      "aliases": [
+        "GoF patterns",
+        "SOLID"
+      ],
+      "category_hint": "Testing, performance, and code quality > practices"
+    },
+    {
+      "atom": "introspection",
+      "group_id": "python-core",
+      "level": "middle",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "python introspection",
+        "dir()",
+        "getattr"
+      ],
+      "category_hint": "Backend development > tools"
+    },
+    {
+      "atom": "profiling",
+      "group_id": "python-core",
+      "level": "middle",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "cProfile",
+        "py-spy",
+        "profiling tools"
+      ],
+      "category_hint": "Backend development > tools"
+    },
+    {
+      "atom": "Alembic",
+      "group_id": "python-frameworks",
+      "level": "middle",
+      "priority": "medium",
+      "presentation": "detailed",
+      "aliases": [
+        "alembic migrations",
+        "alembic"
+      ],
+      "category_hint": "Backend development > frameworks"
+    },
+    {
+      "atom": "Celery",
+      "group_id": "python-frameworks",
+      "level": "middle",
+      "priority": "medium",
+      "presentation": "both",
+      "aliases": [
+        "celery beat",
+        "celery worker"
+      ],
+      "category_hint": "Async concurrency patterns and workflows > tools"
+    },
+    {
+      "atom": "Django",
+      "group_id": "python-frameworks",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "keyword",
+      "aliases": [
+        "django"
+      ],
+      "category_hint": "Backend development > frameworks"
+    },
+    {
+      "atom": "Django REST Framework",
+      "group_id": "python-frameworks",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "both",
+      "aliases": [
+        "DRF",
+        "django-rest-framework"
+      ],
+      "category_hint": "Backend development > frameworks"
+    },
+    {
+      "atom": "FastAPI",
+      "group_id": "python-frameworks",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "keyword",
+      "aliases": [
+        "fast-api",
+        "fast api",
+        "fastapi"
+      ],
+      "category_hint": "Backend development > frameworks"
+    },
+    {
+      "atom": "Pydantic",
+      "group_id": "python-frameworks",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "both",
+      "aliases": [
+        "pydantic v2",
+        "pydantic 2"
+      ],
+      "category_hint": "Backend development > frameworks"
+    },
+    {
+      "atom": "SQLAlchemy",
+      "group_id": "python-frameworks",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "both",
+      "aliases": [
+        "sqlalchemy 2.0",
+        "sqlalchemy"
+      ],
+      "category_hint": "Backend development > frameworks"
+    },
+    {
+      "atom": "aiogram",
+      "group_id": "python-frameworks",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "aiogram bot"
+      ],
+      "category_hint": "Backend development > frameworks"
+    },
+    {
+      "atom": "bandit",
+      "group_id": "python-quality",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "bandit security"
+      ],
+      "category_hint": "Testing, performance, and code quality > practices"
+    },
+    {
+      "atom": "mypy",
+      "group_id": "python-quality",
+      "level": "middle",
+      "priority": "medium",
+      "presentation": "detailed",
+      "aliases": [
+        "mypy check"
+      ],
+      "category_hint": "Testing, performance, and code quality > practices",
+      "_note": "Classic tool, used heavily 2-3 years ago. Can toggle mypy/ty/pyright/pyrefly easily. Recruiters rarely pre-screen."
+    },
+    {
+      "atom": "pre-commit",
+      "group_id": "python-quality",
+      "level": "expert",
+      "priority": "medium",
+      "presentation": "both",
+      "aliases": [
+        "git hooks",
+        "pre-commit hooks"
+      ],
+      "category_hint": "Testing, performance, and code quality > practices"
+    },
+    {
+      "atom": "pyright",
+      "group_id": "python-quality",
+      "level": "middle",
+      "priority": "medium",
+      "presentation": "detailed",
+      "aliases": [
+        "pyright check",
+        "pylance"
+      ],
+      "category_hint": "Testing, performance, and code quality > practices"
+    },
+    {
+      "atom": "ruff",
+      "group_id": "python-quality",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "detailed",
+      "aliases": [
+        "ruff check",
+        "ruff format"
+      ],
+      "category_hint": "Testing, performance, and code quality > practices"
+    },
+    {
+      "atom": "ty",
+      "group_id": "python-quality",
+      "level": "middle",
+      "priority": "medium",
+      "presentation": "detailed",
+      "aliases": [
+        "ty check"
+      ],
+      "category_hint": "Testing, performance, and code quality > practices",
+      "_note": "Active project uses ty. Middle because usage is project-specific, not the depth of typing knowledge."
+    },
+    {
+      "atom": "type hints",
+      "group_id": "python-quality",
+      "level": "middle",
+      "priority": "medium",
+      "presentation": "both",
+      "aliases": [
+        "typing",
+        "PEP 484",
+        "type hinting",
+        "type annotations"
+      ],
+      "category_hint": "Testing, performance, and code quality > practices",
+      "_note": "Tool-agnostic vocabulary; 'type hints' appears verbatim in JDs. Expert signal implicit in Pydantic/SQLAlchemy 2.0. Knows mypy/ty/pyright/pyrefly — recruiters rarely pre-screen on this."
+    },
+    {
+      "atom": "Testcontainers",
+      "group_id": "testing",
+      "level": "middle",
+      "priority": "medium",
+      "presentation": "both",
+      "aliases": [
+        "testcontainers python",
+        "testcontainers-python"
+      ],
+      "category_hint": "Testing, performance, and code quality > practices"
+    },
+    {
+      "atom": "coverage",
+      "group_id": "testing",
+      "level": "expert",
+      "priority": "medium",
+      "presentation": "both",
+      "aliases": [
+        "pytest-cov",
+        "code coverage",
+        "coverage.py"
+      ],
+      "category_hint": "Testing, performance, and code quality > practices"
+    },
+    {
+      "atom": "mocking/patching",
+      "group_id": "testing",
+      "level": "expert",
+      "priority": "medium",
+      "presentation": "both",
+      "aliases": [
+        "unittest.mock",
+        "mock library",
+        "pytest mock",
+        "monkeypatch"
+      ],
+      "category_hint": "Testing, performance, and code quality > practices"
+    },
+    {
+      "atom": "mutation testing",
+      "group_id": "testing",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "mutmut",
+        "cosmic-ray"
+      ],
+      "category_hint": "Testing, performance, and code quality > practices"
+    },
+    {
+      "atom": "pytest",
+      "group_id": "testing",
+      "level": "expert",
+      "priority": "high",
+      "presentation": "keyword",
+      "aliases": [
+        "pytest framework",
+        "py.test"
+      ],
+      "category_hint": "Testing, performance, and code quality > practices"
+    },
+    {
+      "atom": "BeautifulSoup",
+      "group_id": "web-scraping",
+      "level": "middle",
+      "priority": "medium",
+      "presentation": "both",
+      "aliases": [
+        "bs4",
+        "beautifulsoup4",
+        "beautiful soup"
+      ],
+      "category_hint": "Backend development > tools"
+    },
+    {
+      "atom": "CSS/XPath selectors",
+      "group_id": "web-scraping",
+      "level": "middle",
+      "priority": "medium",
+      "presentation": "detailed",
+      "aliases": [
+        "xpath",
+        "css selectors",
+        "xpath selectors"
+      ],
+      "category_hint": "Backend development > tools"
+    },
+    {
+      "atom": "Playwright",
+      "group_id": "web-scraping",
+      "level": "middle",
+      "priority": "medium",
+      "presentation": "both",
+      "aliases": [
+        "playwright python",
+        "playwright-python",
+        "playwright e2e"
+      ],
+      "category_hint": "Backend development > tools"
+    },
+    {
+      "atom": "RegExp",
+      "group_id": "web-scraping",
+      "level": "middle",
+      "priority": "medium",
+      "presentation": "detailed",
+      "aliases": [
+        "regex",
+        "regular expressions",
+        "re module"
+      ],
+      "category_hint": "Backend development > tools"
+    },
+    {
+      "atom": "Scrapy",
+      "group_id": "web-scraping",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "both",
+      "aliases": [
+        "scrapy framework"
+      ],
+      "category_hint": "Backend development > tools"
+    },
+    {
+      "atom": "Selenium",
+      "group_id": "web-scraping",
+      "level": "middle",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "selenium webdriver",
+        "selenium python"
+      ],
+      "category_hint": "Backend development > tools"
+    },
+    {
+      "atom": "ethical scraping",
+      "group_id": "web-scraping",
+      "level": "middle",
+      "priority": "medium",
+      "presentation": "detailed",
+      "aliases": [
+        "scraping ethics",
+        "robots.txt"
+      ],
+      "category_hint": "Backend development > tools"
+    },
+    {
+      "atom": "schema validation",
+      "group_id": "web-scraping",
+      "level": "middle",
+      "priority": "medium",
+      "presentation": "detailed",
+      "aliases": [
+        "pydantic validation",
+        "jsonschema",
+        "schema validate"
+      ],
+      "category_hint": "Backend development > tools"
+    },
+    {
+      "atom": "sync/async HTTP clients",
+      "group_id": "web-scraping",
+      "level": "middle",
+      "priority": "medium",
+      "presentation": "detailed",
+      "aliases": [
+        "requests",
+        "httpx",
+        "aiohttp",
+        "urllib3"
+      ],
+      "category_hint": "Backend development > tools"
+    }
+  ],
+  "deferred": [
+    {
+      "atom": "GraphQL",
+      "group_id": "api-rest",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "graphql api",
+        "apollo graphql"
+      ],
+      "category_hint": "API development > practices",
+      "_note": "Last professional use unclear. Promote to active if a GraphQL role comes up."
+    },
+    {
+      "atom": "SOAP",
+      "group_id": "api-rest",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "soap api",
+        "wsdl"
+      ],
+      "category_hint": "API development > practices"
+    },
+    {
+      "atom": "gRPC",
+      "group_id": "api-rest",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "grpc python",
+        "protocol buffers"
+      ],
+      "category_hint": "API development > practices"
+    },
+    {
+      "atom": "Burp Suite",
+      "group_id": "auth-security",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "burp"
+      ],
+      "category_hint": "API development > practices"
+    },
+    {
+      "atom": "Metasploit",
+      "group_id": "auth-security",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "metasploit framework"
+      ],
+      "category_hint": "API development > practices"
+    },
+    {
+      "atom": "Nmap",
+      "group_id": "auth-security",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "nmap scanning"
+      ],
+      "category_hint": "API development > practices",
+      "_note": "Only if you actually use pentest tools professionally."
+    },
+    {
+      "atom": "SSLyze",
+      "group_id": "auth-security",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "sslyze"
+      ],
+      "category_hint": "API development > practices"
+    },
+    {
+      "atom": "cryptography",
+      "group_id": "auth-security",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "pyca cryptography",
+        "pyca"
+      ],
+      "category_hint": "API development > practices"
+    },
+    {
+      "atom": "pyOpenSSL",
+      "group_id": "auth-security",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "pyopenssl"
+      ],
+      "category_hint": "API development > practices"
+    },
+    {
+      "atom": "pyjwt",
+      "group_id": "auth-security",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "pyjwt library",
+        "jwt python"
+      ],
+      "category_hint": "API development > practices"
+    },
+    {
+      "atom": "OpenStack",
+      "group_id": "cloud-aws",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "openstack cloud"
+      ],
+      "category_hint": "Cloud platforms > tools"
+    },
+    {
+      "atom": "Bitbucket",
+      "group_id": "collab-docs",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "bitbucket pipelines",
+        "atlassian bitbucket"
+      ],
+      "category_hint": "Documentation and collaboration > collaboration"
+    },
+    {
+      "atom": "Ansible",
+      "group_id": "containers",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "ansible automation"
+      ],
+      "category_hint": "Delivery and production support > tools"
+    },
+    {
+      "atom": "Chef",
+      "group_id": "containers",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "chef infra"
+      ],
+      "category_hint": "Delivery and production support > tools"
+    },
+    {
+      "atom": "Docker Swarm",
+      "group_id": "containers",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "swarm mode"
+      ],
+      "category_hint": "Delivery and production support > tools"
+    },
+    {
+      "atom": "Helm",
+      "group_id": "containers",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "helm charts",
+        "kubernetes helm"
+      ],
+      "category_hint": "Delivery and production support > tools",
+      "_note": "Promote to active if you start using it day-to-day; Kubernetes expertise usually expects Helm familiarity."
+    },
+    {
+      "atom": "Nomad",
+      "group_id": "containers",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "hashicorp nomad"
+      ],
+      "category_hint": "Delivery and production support > tools"
+    },
+    {
+      "atom": "Puppet",
+      "group_id": "containers",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "puppet config management"
+      ],
+      "category_hint": "Delivery and production support > tools"
+    },
+    {
+      "atom": "SaltStack",
+      "group_id": "containers",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "salt",
+        "saltstack config"
+      ],
+      "category_hint": "Delivery and production support > tools"
+    },
+    {
+      "atom": "Vagrant",
+      "group_id": "containers",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "hashicorp vagrant"
+      ],
+      "category_hint": "Delivery and production support > tools"
+    },
+    {
+      "atom": "Dask",
+      "group_id": "data-engineering",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "dask python"
+      ],
+      "category_hint": "Databases and data processing > practices"
+    },
+    {
+      "atom": "Hadoop",
+      "group_id": "data-engineering",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "apache hadoop",
+        "hdfs"
+      ],
+      "category_hint": "Databases and data processing > datastores"
+    },
+    {
+      "atom": "Kafka",
+      "group_id": "data-engineering",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "apache kafka",
+        "kafka broker"
+      ],
+      "category_hint": "Async concurrency patterns and workflows > tools"
+    },
+    {
+      "atom": "Pydoop",
+      "group_id": "data-engineering",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "pydoop hadoop"
+      ],
+      "category_hint": "Databases and data processing > practices"
+    },
+    {
+      "atom": "Cassandra",
+      "group_id": "databases-nosql",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "apache cassandra"
+      ],
+      "category_hint": "Databases and data processing > datastores"
+    },
+    {
+      "atom": "MongoDB",
+      "group_id": "databases-nosql",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "mongo",
+        "mongodb atlas"
+      ],
+      "category_hint": "Databases and data processing > datastores",
+      "_note": "Installed on dev box but no recent professional corroboration. Promote cautiously."
+    },
+    {
+      "atom": "MySQL",
+      "group_id": "databases-sql",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "mysql server",
+        "mysql database"
+      ],
+      "category_hint": "Databases and data processing > datastores"
+    },
+    {
+      "atom": "CircleCI",
+      "group_id": "devops-ci",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "circle ci",
+        "circleci.com"
+      ],
+      "category_hint": "Delivery and production support > tools"
+    },
+    {
+      "atom": "Jenkins",
+      "group_id": "devops-ci",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "jenkins ci",
+        "jenkins pipeline"
+      ],
+      "category_hint": "Delivery and production support > tools"
+    },
+    {
+      "atom": "TeamCity",
+      "group_id": "devops-ci",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "jetbrains teamcity"
+      ],
+      "category_hint": "Delivery and production support > tools"
+    },
+    {
+      "atom": "TravisCI",
+      "group_id": "devops-ci",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "travis ci",
+        "travis-ci.org"
+      ],
+      "category_hint": "Delivery and production support > tools"
+    },
+    {
+      "atom": "Angular",
+      "group_id": "frontend-basics",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "angular js",
+        "angular.js"
+      ],
+      "category_hint": "Documentation and collaboration > practices"
+    },
+    {
+      "atom": "Bootstrap",
+      "group_id": "frontend-basics",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "bootstrap css",
+        "bootstrap 5"
+      ],
+      "category_hint": "Documentation and collaboration > practices"
+    },
+    {
+      "atom": "RabbitMQ",
+      "group_id": "messaging",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "rabbitmq broker"
+      ],
+      "category_hint": "Async concurrency patterns and workflows > tools"
+    },
+    {
+      "atom": "Jupyter",
+      "group_id": "ml",
+      "level": "middle",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "jupyter notebooks",
+        "jupyterlab",
+        "jupyter lab"
+      ],
+      "category_hint": "Databases and data processing > practices"
+    },
+    {
+      "atom": "Keras",
+      "group_id": "ml",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "keras"
+      ],
+      "category_hint": "Databases and data processing > practices"
+    },
+    {
+      "atom": "PyTorch",
+      "group_id": "ml",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "pytorch"
+      ],
+      "category_hint": "Databases and data processing > practices"
+    },
+    {
+      "atom": "TensorFlow",
+      "group_id": "ml",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "tf",
+        "tensorflow"
+      ],
+      "category_hint": "Databases and data processing > practices"
+    },
+    {
+      "atom": "scikit-learn",
+      "group_id": "ml",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "sklearn"
+      ],
+      "category_hint": "Databases and data processing > practices"
+    },
+    {
+      "atom": "Datadog",
+      "group_id": "observability",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "datadog apm",
+        "datadog monitoring"
+      ],
+      "category_hint": "Delivery and production support > practices"
+    },
+    {
+      "atom": "ELK",
+      "group_id": "observability",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "elasticsearch",
+        "logstash",
+        "kibana"
+      ],
+      "category_hint": "Delivery and production support > practices",
+      "_note": "Live CV mentions VictoriaLogs/OpenSearch; ELK is the older default. Promote if a role specifically asks for ELK."
+    },
+    {
+      "atom": "Zabbix",
+      "group_id": "observability",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "zabbix monitoring"
+      ],
+      "category_hint": "Delivery and production support > practices"
+    },
+    {
+      "atom": "PowerShell",
+      "group_id": "os-linux",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "powershell",
+        "pwsh"
+      ],
+      "category_hint": "Delivery and production support > tools"
+    },
+    {
+      "atom": "algorithms",
+      "group_id": "python-core",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "algorithmic problem solving",
+        "data structures and algorithms"
+      ],
+      "category_hint": "Backend development > tools",
+      "_note": "Mentioned in source 4 (generic template). Keep deferred until a role specifically asks."
+    },
+    {
+      "atom": "Flask",
+      "group_id": "python-frameworks",
+      "level": "middle",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "flask python",
+        "flask web framework"
+      ],
+      "category_hint": "Backend development > frameworks",
+      "_note": "Not in recent sources. Keep in deferred pool in case a Flask role comes up."
+    },
+    {
+      "atom": "PyQt6",
+      "group_id": "python-frameworks",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "pyqt",
+        "pyqt6 python"
+      ],
+      "category_hint": "Backend development > frameworks",
+      "_note": "Old CV: 'basic'. Promote if a Qt role comes up."
+    },
+    {
+      "atom": "Pyramid",
+      "group_id": "python-frameworks",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "pyramid web framework"
+      ],
+      "category_hint": "Backend development > frameworks",
+      "_note": "Generic template mention only. Defensive — niche framework."
+    },
+    {
+      "atom": "Tornado",
+      "group_id": "python-frameworks",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "tornado web server"
+      ],
+      "category_hint": "Backend development > frameworks",
+      "_note": "Generic template mention only."
+    },
+    {
+      "atom": "Poetry",
+      "group_id": "python-quality",
+      "level": "middle",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "poetry python",
+        "poetry dependency manager"
+      ],
+      "category_hint": "Testing, performance, and code quality > practices",
+      "_note": "Project uses uv; Poetry is the older equivalent. Promote for legacy-codebase roles."
+    },
+    {
+      "atom": "pip-tools",
+      "group_id": "python-quality",
+      "level": "middle",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "pip-compile",
+        "piptools"
+      ],
+      "category_hint": "Testing, performance, and code quality > practices",
+      "_note": "Project uses uv; pip-tools is the older equivalent."
+    },
+    {
+      "atom": "behave",
+      "group_id": "testing",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "behave bdd"
+      ],
+      "category_hint": "Testing, performance, and code quality > practices"
+    },
+    {
+      "atom": "locust",
+      "group_id": "testing",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "locust load testing",
+        "locustio"
+      ],
+      "category_hint": "Testing, performance, and code quality > practices"
+    },
+    {
+      "atom": "nose",
+      "group_id": "testing",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "nosetests"
+      ],
+      "category_hint": "Testing, performance, and code quality > practices",
+      "_note": "Deprecated since 2015. Only keep as a historical reminder."
+    },
+    {
+      "atom": "tox",
+      "group_id": "testing",
+      "level": "basic",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "tox python"
+      ],
+      "category_hint": "Testing, performance, and code quality > practices"
+    },
+    {
+      "atom": "unittest",
+      "group_id": "testing",
+      "level": "middle",
+      "priority": "low",
+      "presentation": "detailed",
+      "aliases": [
+        "python unittest",
+        "unittest framework"
+      ],
+      "category_hint": "Testing, performance, and code quality > practices",
+      "_note": "Covered by pytest in practice. Keep deferred as a reminder for legacy codebases."
+    }
+  ]
+}
