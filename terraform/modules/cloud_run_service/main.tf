@@ -1,0 +1,66 @@
+resource "google_cloud_run_v2_service" "service" {
+  name     = var.name
+  location = var.region
+  project  = var.project
+
+  ingress = var.ingress
+
+  template {
+    execution_environment = var.execution_environment
+    timeout               = "${var.timeout_seconds}s"
+
+    scaling {
+      min_instance_count = var.min_instances
+      max_instance_count = var.max_instances
+    }
+
+    containers {
+      image = var.image
+
+      dynamic "env" {
+        for_each = var.env_vars
+        content {
+          name  = env.key
+          value = env.value
+        }
+      }
+
+      dynamic "env" {
+        for_each = var.secrets
+        content {
+          name = env.key
+          value_source {
+            secret_key_ref {
+              secret  = env.value.secret_id
+              version = env.value.version
+            }
+          }
+        }
+      }
+
+      resources {
+        cpu_idle          = var.min_instances == 0 ? true : false
+        startup_cpu_boost = true
+        limits = {
+          cpu    = tostring(var.cpu)
+          memory = var.memory
+        }
+      }
+    }
+
+    service_account = var.service_account_email
+  }
+}
+
+# Serverless NEG so the Load Balancer can route to this service. The NEG
+# authenticates to Cloud Run with default service identity and the URL-map
+# host rule targets it; direct public access is governed by `ingress`.
+resource "google_compute_region_network_endpoint_group" "neg" {
+  name                  = "${var.name}-neg"
+  project               = var.project
+  region                = var.region
+  network_endpoint_type = "SERVERLESS"
+  cloud_run {
+    service = google_cloud_run_v2_service.service.name
+  }
+}

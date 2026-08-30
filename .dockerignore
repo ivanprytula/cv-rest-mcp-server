@@ -23,6 +23,9 @@ Dockerfile
 
 justfile
 
+# IaC — build context only; infra state/secrets/tfvars never ship in the image.
+terraform/
+
 .kilo/
 .vscode/
 

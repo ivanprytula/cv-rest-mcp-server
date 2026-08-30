@@ -8,6 +8,8 @@
 #
 # Stages:
 #   bootstrap   enable APIs, runtime SA, CV bucket + IAM binding   (checklist 0-2)
+#   bootstrap-state  create versioned TF remote-state bucket + init (Phase 1a)
+#   bootstrap-secrets create secret manager secrets (Phase 1c)
 #   upload-cv   publish data/cv.json to the bucket                 (checklist 2)
 #   build       Cloud Build image                                  (checklist 3)
 #   deploy      create/update Cloud Run service                    (checklist 4)
@@ -16,18 +18,26 @@
 #
 # Environment:
 #   GCP_PROJECT  required — your EXISTING project id. This script never
-#                creates projects (that is a billing/console decision).#   GCP_REGION   default europe-west1
+#                creates projects (that is a billing/console decision).
+#   GCP_ENV      default production (e.g. dev, stage, production)
+#   GCP_REGION   default europe-west1
 #   SVC_NAME     default cv-rest-mcp-server
 #   REPO         owner/name for `wif`; derived from git remote when unset.
 
 set -euo pipefail
 
 GCP_PROJECT="${GCP_PROJECT:-}"   # required; validated per-stage by require_project
+GCP_ENV="${GCP_ENV:-production}"
 GCP_REGION="${GCP_REGION:-europe-west1}"
 SVC_NAME="${SVC_NAME:-cv-rest-mcp-server}"
 RUN_SA_ID="${SVC_NAME}-runtime"
 DEPLOY_SA_ID="${SVC_NAME}-deployer"
 CV_BUCKET="${GCP_PROJECT}-cv-data"
+# Terraform remote state (Phase 1a). The SAME versioned bucket provides both
+# state storage and lock coordination — the GCS backend locks via an object
+# write-hold in this bucket, so there is no separate "lock bucket" to create.
+TF_STATE_BUCKET="${TF_STATE_BUCKET:-${GCP_PROJECT}-${GCP_ENV}-tfstate}"
+TF_STATE_PREFIX="${TF_STATE_PREFIX:-terraform/state}"
 
 log()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33mWARN:\033[0m %s\n' "$*" >&2; }
@@ -86,7 +96,9 @@ bootstrap() {
     log "Enabling APIs on $GCP_PROJECT"
     gcloud services enable --project "$GCP_PROJECT" \
         cloudresourcemanager.googleapis.com run.googleapis.com \
-        cloudbuild.googleapis.com storage.googleapis.com
+        cloudbuild.googleapis.com storage.googleapis.com \
+        compute.googleapis.com dns.googleapis.com \
+        secretmanager.googleapis.com
 
     log "Runtime service account $RUN_SA_ID"
     if gcloud iam service-accounts describe "${RUN_SA_ID}@${GCP_PROJECT}.iam.gserviceaccount.com" \
@@ -116,6 +128,50 @@ bootstrap() {
 
     ensure_build_permissions
     warn "No keys created anywhere: Cloud Run injects short-lived credentials automatically."
+}
+
+# Phase 1a Terraform remote state. Versioning on the state bucket is what makes
+# the GCS backend's write-lock (state locking) and crash-safe history work, so
+# creating it is the whole "remote state + lock" story. Runs once, idempotent.
+bootstrap_state() {
+    require_project
+    log "Terraform remote-state bucket gs://$TF_STATE_BUCKET (versioned = locking + history)"
+    if gcloud storage buckets describe "gs://$TF_STATE_BUCKET" >/dev/null 2>&1; then
+        echo "exists, skipping create"
+    else
+        gcloud storage buckets create "gs://$TF_STATE_BUCKET" \
+            --location="$GCP_REGION" --default-storage-class=STANDARD \
+            --public-access-prevention
+    fi
+    # Object versioning is the GCS locking + rollback mechanism (idempotent).
+    gcloud storage buckets update "gs://$TF_STATE_BUCKET" --versioning
+
+    log "Configuring Terraform backend (gcs, prefix=$TF_STATE_PREFIX)"
+    (
+        cd terraform
+        terraform init -force-copy \
+            -backend-config="bucket=$TF_STATE_BUCKET" \
+            -backend-config="prefix=$TF_STATE_PREFIX"
+    )
+    cat <<EOF
+
+Remote state + locking ready.
+Next: just tf-plan  /  just tf-apply  (see terraform/terraform.tfvars.example for required vars)
+EOF
+}
+
+# Phase 1c. Create Secrets for JWT, Pepper, and Tailor Token. Runs once, idempotent.
+bootstrap_secrets() {
+    require_project
+    log "Ensuring Secret Manager secrets exist"
+    for secret in cv-jwt-signing-key cv-refresh-token-pepper cv-tailor-bearer-token; do
+        if gcloud secrets describe "$secret" --project "$GCP_PROJECT" >/dev/null 2>&1; then
+            echo "$secret exists, skipping create"
+        else
+            gcloud secrets create "$secret" --project "$GCP_PROJECT" --replication-policy="automatic"
+            echo "Created $secret. Add initial version with: gcloud secrets versions add $secret --data-file=-"
+        fi
+    done
 }
 
 upload_cv() {
@@ -171,7 +227,8 @@ deploy() {
         --allow-unauthenticated \
         --cpu 1 --memory 512Mi \
         --max-instances 1 \
-        --set-env-vars "TRUST_PROXY=true,CLIENT_IP_XFF_ENTRY=2,BLOCKED_IPS_FILE=config/blocked_geo.txt,FAILBAN_THRESHOLD=6,CV_DATA_GCS_URI=gs://${CV_BUCKET}/cv.json,CV_REFRESH_SECONDS=30,CONTACT_NAME=${CONTACT_NAME:-},CONTACT_EMAIL=${CONTACT_EMAIL:-},TAILOR_BEARER_TOKEN=${TAILOR_BEARER_TOKEN:-}"
+        --set-secrets "JWT_SIGNING_KEY=cv-jwt-signing-key:latest,REFRESH_TOKEN_PEPPER=cv-refresh-token-pepper:latest,TAILOR_BEARER_TOKEN=cv-tailor-bearer-token:latest" \
+        --set-env-vars "TRUST_PROXY=true,CLIENT_IP_XFF_ENTRY=2,BLOCKED_IPS_FILE=config/blocked_geo.txt,FAILBAN_THRESHOLD=6,CV_DATA_GCS_URI=gs://${CV_BUCKET}/cv.json,CV_REFRESH_SECONDS=30,CONTACT_NAME=${CONTACT_NAME:-},CONTACT_EMAIL=${CONTACT_EMAIL:-}"
 }
 
 verify() {
@@ -257,6 +314,13 @@ wif() {
         --project "$GCP_PROJECT" --member="serviceAccount:$deploy_sa" \
         --role=roles/iam.serviceAccountUser --condition=None >/dev/null
 
+    # Allow deployer to read secrets for deployment injection.
+    for secret in cv-jwt-signing-key cv-refresh-token-pepper cv-tailor-bearer-token; do
+        gcloud secrets add-iam-policy-binding "$secret" \
+            --project "$GCP_PROJECT" --member="serviceAccount:$deploy_sa" \
+            --role=roles/secretmanager.secretAccessor --condition=None >/dev/null
+    done
+
     cat <<EOF
 
 Wire these repository secrets/vars (needs repo admin):
@@ -265,8 +329,6 @@ Wire these repository secrets/vars (needs repo admin):
   gh variable set GCP_PROJECT    --body "$GCP_PROJECT"
   gh variable set GCP_REGION     --body "$GCP_REGION"
   gh variable set SVC_NAME       --body "$SVC_NAME"
-
-Then push a commit to main to trigger CI/CD.
 EOF
 }
 
@@ -277,6 +339,8 @@ fi
 
 case "$1" in
     bootstrap) bootstrap ;;
+    bootstrap-state) bootstrap_state ;;
+    bootstrap-secrets) bootstrap_secrets ;;
     upload-cv) upload_cv ;;
     build)     build ;;
     deploy)    deploy ;;
