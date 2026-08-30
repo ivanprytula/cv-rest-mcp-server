@@ -29,3 +29,36 @@ repos:
         language: system
         types: [python]
         pass_filenames: true
+      - id: terraform-fmt
+        name: terraform fmt (format)
+        entry: terraform fmt -check -recursive
+        files: ^terraform/
+        language: system
+        pass_filenames: false
+      - id: terraform-tflint
+        name: tflint (terraform logic)
+        # --config is resolved relative to --chdir (terraform/), hence .tflint.hcl.
+        entry: tflint --chdir terraform --config .tflint.hcl
+        files: ^terraform/
+        language: system
+        pass_filenames: false
+      - id: terraform-checkov
+        name: checkov (terraform security)
+        # Isolated via uvx — checkov pins packaging<24.0 and would conflict
+        # with fastmcp (packaging>=24.0) in the project venv.
+        # CKV_GCP_62/114/28 are skipped because the ALLOWLISTED Cloud CDN origin
+        # bucket must stay publicly readable (that IS the CDN access model); the
+        # path-scoped deny-public guarantee for every other bucket is enforced by
+        # the terraform-deny-public hook right below.
+        entry: uvx --from 'checkov' checkov -d terraform --quiet --compact --skip-check CKV_GCP_62,CKV_GCP_114,CKV_GCP_28
+        files: ^terraform/
+        language: system
+        pass_filenames: false
+      - id: terraform-deny-public
+        name: terraform deny-public bucket guard
+        # Path-scoped: fails if ANY non-CDN bucket lacks public_access_prevention=
+        # "enforced" + uniform access, or if any bucket gets an anonymous WRITE.
+        entry: uv run python scripts/ensure_deny_public.py terraform --cdn-origin-resource terraform/modules/static_bucket/main.tf:google_storage_bucket.bucket
+        files: ^terraform/
+        language: system
+        pass_filenames: false

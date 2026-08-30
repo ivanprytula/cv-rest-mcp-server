@@ -1,0 +1,14 @@
+# Terraform GCS backend config for the single managed environment.
+# Copy to terraform.tfbackend (gitignored) and fill the real bucket, or pass
+# values directly to `terraform init`:
+#
+#   just deploy bootstrap-state      # creates the versioned bucket and inits (recommended)
+#   terraform init -backend-config="bucket=PROJECT-tfstate" -backend-config="prefix=terraform/state"
+
+bucket = "PROJECT-tfstate"
+prefix = "terraform/state"
+
+# Security note: the GCS backend provides state LOCKING via an object write-hold
+# in this same bucket — there is no separate lock bucket (that is an AWS
+# DynamoDB concept). Bucket versioning (enabled by `bootstrap-state`) is what
+# makes the lock + crash-safe history work, so never disable versioning here.

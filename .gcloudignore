@@ -33,6 +33,11 @@ data/*
 .gcloudignore
 justfile
 
+# IaC — build context only; infra state/secrets/tfvars never ship in the image.
+terraform/
+# (state/backend patterns would all live under terraform/, covered by the line
+#  above; leave separate patterns here only if state moves outside that dir)
+
 .agents/
 .agent/
 .github/prompts/
