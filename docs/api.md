@@ -6,8 +6,14 @@ from code; this document is the readable form of that contract.
 
 ## Conventions
 
-- **Base URL**: the deployed origin (GCP Cloud Run). Local dev: `http://localhost:8000`.
-- **Versioning**: current API is unversioned (paths under `/cv`, `/api`, `/health`).
+- **Base URL**: the deployed origin behind the HTTPS Load Balancer (Phase 1a).
+  Hosts: `https://api.<apex>` (api-core), `https://www.<apex>` (Jinja landing,
+  same api-core workload), `https://app.<apex>` (private React SPA), and
+  `https://games.<apex>` (api-games). Local dev: `http://localhost:8000`.
+- **Versioning**: current REST surface is unversioned (paths under `/cv`,
+  `/api`, `/health`) and — per Phase 1a — **kept on the same paths** regardless
+  of which subdomain front them, so recruiter links and `config/mcp_clients.json`
+  base URLs keep working. New auth/SPA endpoints arrive as `/api/v1/*` (Phase 1c).
 - **Errors**: every non-2xx response is JSON `{"detail": "<message>"}` — a single
   `detail` string. FastAPI's automatic validation errors are the exception and
   also carry `detail`.
@@ -25,16 +31,16 @@ from code; this document is the readable form of that contract.
 ## Status codes
 
 <!-- markdownlint-disable MD060 -->
-| Code | Meaning                                                                                            | Typical source                                                  |
-| ---- | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| 200  | Success (JSON document or rendered representation)                                                 | all endpoints                                                   |
-| 401  | Missing/malformed `Authorization` header, or invalid token                                         | `POST /cv/tailor`; `?tailored=` reads                              |
-| 404  | Unknown theme, or tailored revision not found                                                     | `/cv/html`, `/cv/pdf`, `/cv/preview`                            |
-| 413  | JD body exceeds the 10 MB payload cap                                                              | `POST /cv/tailor`                                               |
-| 422  | Malformed/empty JD body, or FastAPI query-param validation                                         | `/cv/*`, `/cv/tailor`                                           |
-| 429  | Rate limit exceeded (see table below)                                                              | all endpoints                                                   |
-| 500  | Unexpected internal error (sanitized; no internals leaked)                                         | `POST /cv/tailor`                                               |
-| 503  | CV source / PDF service not initialized; **or** tailor endpoint requested without a bearer token   | `/cv*` (via `Depends`); `/cv/tailor` + `?tailored=` reads (auth) |
+| Code | Meaning                                                                                          | Typical source                                                   |
+| ---- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------- |
+| 200  | Success (JSON document or rendered representation)                                               | all endpoints                                                    |
+| 401  | Missing/malformed `Authorization` header, or invalid token                                       | `POST /cv/tailor`; `?tailored=` reads                            |
+| 404  | Unknown theme, or tailored revision not found                                                    | `/cv/html`, `/cv/pdf`, `/cv/preview`                             |
+| 413  | JD body exceeds the 10 MB payload cap                                                            | `POST /cv/tailor`                                                |
+| 422  | Malformed/empty JD body, or FastAPI query-param validation                                       | `/cv/*`, `/cv/tailor`                                            |
+| 429  | Rate limit exceeded (see table below)                                                            | all endpoints                                                    |
+| 500  | Unexpected internal error (sanitized; no internals leaked)                                       | `POST /cv/tailor`                                                |
+| 503  | CV source / PDF service not initialized; **or** tailor endpoint requested without a bearer token | `/cv*` (via `Depends`); `/cv/tailor` + `?tailored=` reads (auth) |
 <!-- markdownlint-enable MD060 -->
 
 ## Rate limits
@@ -75,13 +81,13 @@ curl -s https://<origin>/cv | jq '.name, .title'
 
 Rendered CV page (HTML, no toolbar chrome).
 
-| Item         | Value                                                                                                         |
-| ------------ | ------------------------------------------------------------------------------------------------------------- |
-| Content-Type | `text/html; charset=utf-8`                                                                                    |
-| Query params | `theme` (default `classic`), `company`, `consent`, `tailored`                                                 |
+| Item         | Value                                                                                                                                                                                                                                     |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Content-Type | `text/html; charset=utf-8`                                                                                                                                                                                                                |
+| Query params | `theme` (default `classic`), `company`, `consent`, `tailored`                                                                                                                                                                             |
 | Params notes | `company` is whitespace-collapsed and **truncated to 120 chars**; non-empty `company` implies `consent=true`. `tailored` (requires auth) is a bare `cv_tailored-<ts>.json` revision name or `latest` — see "Reading a tailored revision". |
-| Success      | `200` — themed CV HTML                                                                                        |
-| Errors       | `401`, `404` (unknown theme / revision), `422` (bad query params), `429`, `503`                               |
+| Success      | `200` — themed CV HTML                                                                                                                                                                                                                    |
+| Errors       | `401`, `404` (unknown theme / revision), `422` (bad query params), `429`, `503`                                                                                                                                                           |
 
 ```bash
 curl -s "https://<origin>/cv/html?theme=minimal" -o cv.html
@@ -93,11 +99,11 @@ curl -s "https://<origin>/cv/html?theme=minimal" -o cv.html
 
 Interactive toolbar page embedding `/cv/html` in an iframe (human UI).
 
-| Item         | Value                                                              |
-| ------------ | ------------------------------------------------------------------ |
-| Content-Type | `text/html`                                                        |
+| Item         | Value                                                                                     |
+| ------------ | ----------------------------------------------------------------------------------------- |
+| Content-Type | `text/html`                                                                               |
 | Query params | as `/cv/html`; forwarded to the embedded frame and download button (incl. auth `?token=`) |
-| Errors       | `401`, `404`, `429`, `503`                                                                  |
+| Errors       | `401`, `404`, `429`, `503`                                                                |
 
 ---
 
@@ -109,9 +115,9 @@ Downloadable PDF, attachment via `Content-Disposition`.
 | ------------ | ---------------------------------------------------------------------------------------------------- |
 | Content-Type | `application/pdf`                                                                                    |
 | Headers      | `Content-Disposition: attachment; filename="CV_<name>_<title>_<ts>.pdf"`                             |
-| Query params | as `/cv/html` (theme/company/consent/`tailored`)                                                      |
+| Query params | as `/cv/html` (theme/company/consent/`tailored`)                                                     |
 | Success      | `200` — PDF bytes (single page + optional last-page GDPR/RODO consent clause, part of the cache key) |
-| Errors       | `401`, `404` (unknown theme / revision), `422`, `429`, `503`                                          |
+| Errors       | `401`, `404` (unknown theme / revision), `422`, `429`, `503`                                         |
 
 ---
 
@@ -151,10 +157,10 @@ Content-Type works). Format is chosen by:
 payload wins for the JSON format).
 
 <!-- markdownlint-disable MD060 -->
-| Item    | Value                                                                                                                                                 |
-| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Item    | Value                                                                                                                                                                 |
+| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Success | `200` — tailored CV object: same shape as `/cv` with `skills`/`additional_skills` rebuilt from matched bank atoms, plus `saved_to` (`cv_tailored-<UTC-ts>.json` path) |
-| Errors  | `401`, `413`, `422`, `429`, `500`, `503` (see below)                                                                                                |
+| Errors  | `401`, `413`, `422`, `429`, `500`, `503` (see below)                                                                                                                  |
 <!-- markdownlint-enable MD060 -->
 
 **Error details for `POST /cv/tailor`:**

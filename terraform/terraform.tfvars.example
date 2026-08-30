@@ -1,0 +1,111 @@
+# Copy to terraform.tfvars (gitignored) and fill the real values.
+# Single managed environment — this file is the whole deployment.
+#
+# Prereq: run `just deploy bootstrap-state` once (creates the GCS state bucket
+# and writes terraform/backend.tfbackend). Without it, `terraform init` has no
+# backend and `just tf-plan` will fail.
+#
+# Standard pattern: {project}-{environment}-tfstate (e.g. cv-rest-mcp-server-production-tfstate).
+# Currently production-only; add dev/stage/qa prefixes when those envs are added.
+# Example: cv-rest-mcp-server-dev-tfstate, cv-rest-mcp-server-stage-tfstate, cv-rest-mcp-server-qa-tfstate
+# This naming convention helps with multi-environment management and CI/CD pipelines.
+# When adding new environments, update both the state bucket name and the
+# corresponding service account emails in the services block.
+
+project_id = "cv-rest-mcp-server"
+region     = "europe-west1"
+
+# Real apex domain (register + verify first; see .local/custom-domain-plan.md).
+apex_domain = "example.com"
+# dns_name = "example.com."   # default: derived from apex_domain
+create_dns_zone = true
+# subdomains = ["@", "www", "api", "app", "games"]
+
+# Distinct Cloud Run workloads. Service account emails follow the existing
+# <svc>-runtime@<project>.iam.gserviceaccount.com convention (created by
+# scripts/deploy-cloud-run.sh wif/bootstrap before Phase 1a).
+services = {
+  api-core = {
+    image                 = "gcr.io/cv-rest-mcp-server/api-core:latest"
+    service_account       = "api-core-runtime@cv-rest-mcp-server.iam.gserviceaccount.com"
+    allow_unauthenticated = true
+    env_vars = {
+      TRUST_PROXY          = "true"
+      CLIENT_IP_XFF_ENTRY  = "2"
+      BLOCKED_IPS_FILE     = "config/blocked_geo.txt"
+      FAILBAN_THRESHOLD    = "6"
+      CV_DATA_GCS_URI      = "gs://cv-rest-mcp-server-cv-data/cv.json"
+      CV_REFRESH_SECONDS   = "30"
+      # Phase-1c: CORS pinned to the SPA origin. Only the refresh endpoint
+      # (`/api/v1/auth/refresh`) sets `Access-Control-Allow-Credentials: true`;
+      # every other CORS response is credential-less. Update when the apex
+      # domain changes — keep aligned with app.<apex> from host_routing.
+      CORS_ORIGINS         = "https://app.example.com"
+    }
+    # Phase-1c: ES256 issuer. Private key in Secret Manager; version is
+    # "latest" for now (rotate by re-uploading + bumping below).
+    # secrets = {
+    #   JWT_SIGNING_KEY = { secret_id = "cv-rest-mcp-server-jwt-signing-key", version = "latest" }
+    # }
+    max_instances = 1
+    memory        = "512Mi"
+  }
+  api-games = {
+    image                 = "gcr.io/cv-rest-mcp-server/api-games:latest"
+    service_account       = "api-games-runtime@cv-rest-mcp-server.iam.gserviceaccount.com"
+    allow_unauthenticated = true
+    max_instances         = 1
+  }
+  spa-origin = {
+    image                 = "gcr.io/cv-rest-mcp-server/spa-origin:latest"
+    service_account       = "spa-origin-runtime@cv-rest-mcp-server.iam.gserviceaccount.com"
+    allow_unauthenticated = true
+    max_instances         = 1
+  }
+  # workers = {
+  #   image                 = "gcr.io/cv-rest-mcp-server/workers:latest"
+  #   service_account       = "workers-runtime@cv-rest-mcp-server.iam.gserviceaccount.com"
+  #   allow_unauthenticated = false   # private: invoked via Pub/Sub/Cloud Tasks, never public
+  #   max_instances         = 1
+  # }
+}
+
+# hostname -> workload name. GCP URL-map host rules match EXACTLY (no wildcard
+# propagation): the bare apex and www are separate rules, and both route to
+# api-core (Jinja landing + /cv*). Add the bare apex here too if you want
+# https://<apex> to work without the www prefix — the DNS side already resolves
+# it via the subdomains "@" entry.
+host_routing = {
+  "example.com"       = "api-core"   # bare apex -> landing (no www prefix)
+  "www.example.com"   = "api-core"
+  "api.example.com"   = "api-core"
+  "app.example.com"   = "spa-origin"
+  "games.example.com" = "api-games"
+}
+
+# --- Cloud CDN static-asset serving (optional) ---
+# Creates the GCS bucket (public-read origin), enables Cloud CDN, and prefixes
+# <host><prefix> (e.g. https://app.example.com/assets/*) to the CDN bucket while
+# <host>/ stays on the spa-origin container. `host` must already be in
+# host_routing. Assets are usually loaded by index.html with asset URLs pointing
+# at this origin. See docs/cloud-cdn.md for how it works.
+# static_assets = {
+#   enabled      = true
+#   bucket_name  = "myproj-static"
+#   location     = "EU"
+#   host         = "app.example.com"
+#   prefix       = "/assets/"
+#   cors_origins = ["https://app.example.com"]
+# }
+
+# --- Private user-content upload bucket (optional, currently DISABLED) ---
+# Avatars/photos for auth-protected APIs. Deny-public enforced, no CDN; the UI
+# uploads exclusively via server-generated V4 signed URLs. app_sa = the app
+# service account email.
+# Keep this commented together with module "uploads" in main.tf until ready.
+# uploads = {
+#   bucket_name    = "myproj-uploads"
+#   location       = "EU"
+#   app_sa         = "api-core-sa@myproj.iam.gserviceaccount.com"
+#   write_prefixes = ["avatars/", "photos/"]
+# }

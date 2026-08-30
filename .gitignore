@@ -1,5 +1,10 @@
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+*.swp
+*.swo
+*.swpx
 .venv/
 venv/
 node_modules/
@@ -28,3 +33,19 @@ data/*
 .agents/
 .agent/
 .github/prompts/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+terraform.tfvars
+terraform.tfvars.json
+!terraform.tfvars.example
+*.tfbackend
+!*.tfbackend.example
+
+# Scripts and temporary files
+scripts/ensure_deny_public.py
+
+tfplan

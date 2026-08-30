@@ -47,6 +47,7 @@ ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
+COPY --chown=65532:65532 shared/ ./shared/
 COPY --chown=65532:65532 templates/ ./templates/
 COPY --chown=65532:65532 static/ ./static/
 # .dockerignore reduces data/ to cv.example.json only — the placeholder the

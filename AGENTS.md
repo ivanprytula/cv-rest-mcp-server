@@ -124,7 +124,23 @@ config/
 
 scripts/
 ├── check_mcp_docs.py    # marker check + verified-stamp bump for config/mcp_clients.json
-└── deploy-cloud-run.sh  # checklist stages as idempotent stages; never creates the GCP project
+└── deploy-cloud-run.sh  # checklist stages as idempotent stages; never creates the GCP project; + bootstrap-state (TF remote-state bucket)
+
+terraform/              # Phase 1a edge IaC (single managed env, no per-env split)
+├── main.tf             # composes run + edge_lb + dns modules; separates workloads from host_routing
+├── versions.tf         # google provider pin + commented GCS remote-state backend (bootstrap via `just deploy bootstrap-state`)
+├── variables.tf        # project/region/apex_domain, services (Cloud Run), host_routing, static_assets (uploads now commented out)
+├── outputs.tf          # LB IP, service/neg names, DNS nameservers, static/uploads bucket names
+├── .tflint.hcl         # tflint config (built-in ruleset only; no init/network needed)
+├── terraform.tfvars.example  # shape reference; real terraform.tfvars is gitignored
+├── backend.tfbackend.example # GCS backend config (bucket/prefix); real .tfbackend gitignored
+├── .terraform.lock.hcl # committed provider lock
+└── modules/
+    ├── cloud_run_service/  # reusable Cloud Run service + serverless NEG (api-core/api-games/spa-origin/workers)
+    ├── edge_lb/            # global IP, managed certs, NEG backend services, URL map + CDN path_routes (assets prefix)
+    ├── static_bucket/      # public-read GCS origin for Cloud CDN (the ONE allowlisted exception)
+    ├── uploads/            # PRIVATE user-content bucket (deny-public, enforced) — signed-URL only; commented out in root
+    └── dns/                # Cloud DNS zone (DNSSEC on) + A records for apex + www/api/app/games -> LB IP
 
 tests/
 ├── conftest.py          # AsyncClient fixture via ASGITransport
@@ -139,6 +155,7 @@ tests/
 ├── test_consent.py      # GDPR/RODO recruiter-clause tests (HTML/preview/PDF cache)
 ├── test_tailor_auth.py  # TailorAuthMiddleware tests: 401/503 paths, scope, constant-time compare
 ├── test_jd_input.py     # JD format dispatch tests (JSON/PDF/DOCX/txt/Markdown) for /cv/tailor
+├── test_deny_public.py  # ensure_deny_public guard: enforce/deny-public + CDN-origin exception
 ├── test_matching/       # Skill matching pipeline: taxonomy, parser, matcher, selector, tailor
 │   ├── test_taxonomy.py # Alias map + normalize_skill + build_skill_index
 │   ├── test_parser.py   # extract_skills_from_jd (phrase/comma/token)
@@ -177,6 +194,7 @@ pyproject.toml          # Python 3.14+, deps, ruff/ty config, pytest asyncio_mod
 - **Image packaging**: the image ships `data/cv.example.json` ONLY (never real cv.json — CV content comes from GCS via `CV_DATA_GCS_URI`) plus `config/` (geo blocklist, MCP tab definitions). `.dockerignore` and `.gcloudignore` both use `data/*` + `!data/cv.example.json`; gcloud builds submit applies `.gcloudignore` verbatim when present, otherwise it derives one from `.gitignore`, which excludes personal data.
 - **Operator edits `data/cv.json` by hand — unannounced**: the operator maintains the live CV directly and does NOT notify sessions of every edit. Always re-read `data/cv.json` (and `data/cv_baseline.json`) freshly at task start; never assume content seen earlier is still current. Re-validate with `validate_cv_payload` before relying on it. Where granularity matters (trust passes only for keyword-only, bank-aligned items), the operator keeps that contract when hand-editing — a task that runs into a dropped atom should check the CURRENT file, not blame stale structure.
 - **Builder image pin**: the Dockerfile builder stage is digest-pinned (`ghcr.io/astral-sh/uv:0.12.5@sha256:...`); bump deliberately via `docker buildx imagetools inspect ghcr.io/astral-sh/uv:<tag>` and update both Dockerfile and docs together. `python:3.14-slim` stays tag-based by scope decision.
+- **Terraform IaC (Phase 1a edge + 1b CDN/uploads)**: single managed env, flat `terraform/` (no per-env split). Workloads (distinct Cloud Run services) are separate from `host_routing` (hostname → workload) because `www.` and `api.` both route to `api-core`. Pre-commit enforces `terraform fmt` (format), `tflint` (logic, built-in ruleset only — no `--init`), `checkov` (security, isolated via `uvx --from 'checkov'` — NOT a dev-dep because checkov pins `packaging<24.0` vs `fastmcp` `>=24.0`), and the `terraform-deny-public` guard. checkov runs with `--skip-check CKV_GCP_62,CKV_GCP_114,CKV_GCP_28` because the ONE public-read Cloud CDN origin bucket (`modules/static_bucket`, `allUsers` objectViewer) can't satisfy them; that is the only allowlisted exception. The path-scoped guarantee that every OTHER bucket has `public_access_prevention="enforced"` + uniform access and no anonymous write is enforced by `scripts/ensure_deny_public.py` (see `tests/test_deny_public.py`) — inline `#checkov:skip` is unreliable in the pinned checkov (measured "Skipped: 0"), and checkov `skip-check` can't be path-scoped, hence the custom guard. `modules/uploads` is a PRIVATE deny-public bucket for user avatars/photos, signed-V4-URL-only (writes/reads via server-minted short-TTL object-scoped URLs; `user_id`-scoped keys) — currently **commented out** in root `main.tf`+`variables.tf`+`outputs.tf` so the operator can practice `tf plan`/`apply` on the CDN piece first; uncomment all three together. Remote state + locking: `just deploy bootstrap-state` creates the versioned GCS bucket — the GCS backend locks via an object write-hold in that SAME bucket, so there is **no separate lock bucket**; never disable versioning on it. Infra deep-dive + signed-URL recipes: `docs/cloud-cdn.md`. Any infra file that fails `terraform validate` or the pre-commit gates must be fixed before landing.
 - **CSP hash lifecycle**: `SecurityHeadersMiddleware` computes SHA-256 hashes of all inline `<script>` blocks in `templates/**/*.html` at **import time** and bakes them into `_CSP_DIRECTIVE` (a module-level constant). Changing a template script requires a server restart — the browser blocks scripts whose hash doesn't match the CSP (fail-safe). Dev with uvicorn `--reload` handles this automatically; production (Cloud Run) needs a new revision. `test_csp_script_hashes_match_templates` independently recomputes hashes from templates to catch stale values.
 - **MCP client tabs**: snippets live in `config/mcp_clients.json` (single source of truth with `scripts/check_mcp_docs.py`); `routes.load_mcp_clients()` validates at import and aborts startup on a broken file. The monthly `mcp-docs-drift` workflow re-checks each vendor's docs for the expected markers — drift opens an issue, a clean run auto-commits refreshed `verified` stamps. Never add a second copy of the snippet data in code. Keep the JSON byte-identical to `json.dumps(..., indent=2)` output so stamp bumps produce stamp-only diffs; the file is read once at import, so dev-server reload needs `touch app/routes.py` after editing it.
 - **MCP tools**: Return base64 string for `generate_cv_pdf_tool` (MCP is JSON-only). Re-raises `ToolError` without wrapping.

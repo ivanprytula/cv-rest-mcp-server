@@ -2,6 +2,13 @@ version = 1
 revision = 3
 requires-python = ">=3.14"
 
+[manifest]
+members = [
+    "api-core",
+    "cv-games",
+    "cv-rest-mcp-server",
+]
+
 [[package]]
 name = "aiofile"
 version = "3.12.3"
@@ -43,6 +50,11 @@ sdist = { url = "https://files.pythonhosted.org/packages/61/cc/a381afa6efea9f496
 wheels = [
     { url = "https://files.pythonhosted.org/packages/da/35/f2287558c17e29fafc8ef3daf819bb9834061cfa43bff8014f7df7f63bdc/anyio-4.14.2-py3-none-any.whl", hash = "sha256:9f505dda5ac9f0c8309b5e8bd445a8c2bf7246f3ce950121e45ea15bc41d1494", size = 125813, upload-time = "2026-07-12T20:29:05.763Z" },
 ]
+
+[[package]]
+name = "api-core"
+version = "0.1.0"
+source = { virtual = "app" }
 
 [[package]]
 name = "attrs"
@@ -467,6 +479,41 @@ wheels = [
 ]
 
 [[package]]
+name = "cv-games"
+version = "0.1.0"
+source = { virtual = "services/games" }
+dependencies = [
+    { name = "fastapi" },
+    { name = "jinja2" },
+    { name = "pydantic-settings" },
+    { name = "slowapi" },
+    { name = "uvicorn", extra = ["standard"] },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "httpx" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastapi", specifier = ">=0.115.0" },
+    { name = "jinja2", specifier = ">=3.1,<4.0" },
+    { name = "pydantic-settings", specifier = ">=2.0" },
+    { name = "slowapi", specifier = ">=0.1.10" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.30.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "httpx", specifier = ">=0.28.0" },
+    { name = "pytest", specifier = ">=8.3.0" },
+    { name = "pytest-asyncio", specifier = ">=0.24.0" },
+]
+
+[[package]]
 name = "cv-rest-mcp-server"
 version = "0.1.0"
 source = { virtual = "." }
@@ -478,6 +525,7 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "pypdf" },
     { name = "python-docx" },
+    { name = "python-dotenv" },
     { name = "rapidfuzz" },
     { name = "slowapi" },
     { name = "uvicorn", extra = ["standard"] },
@@ -508,6 +556,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.0" },
     { name = "pypdf", specifier = ">=6.16.2" },
     { name = "python-docx", specifier = ">=1.2.0" },
+    { name = "python-dotenv", specifier = ">=1.2.3" },
     { name = "rapidfuzz", specifier = ">=3.14.5" },
     { name = "slowapi", specifier = ">=0.1.10" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34,<1.0" },

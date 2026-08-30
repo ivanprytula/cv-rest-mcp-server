@@ -38,12 +38,6 @@ async def test_culture_bingo_page_links_back(client):
     assert 'href="/"' in resp.text
 
 
-async def test_landing_page_links_to_bingo(client, override_pdf_service):
-    resp = await client.get("/")
-    assert resp.status_code == status.HTTP_200_OK
-    assert "/culture-bingo" in resp.text
-
-
 async def test_culture_bingo_page_randomizes_cell_order(client):
     """Two page loads should produce different cell orderings."""
     ids_pattern = re.compile(r'data-id="([^"]+)"')

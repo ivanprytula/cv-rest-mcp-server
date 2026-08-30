@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Print a TAILOR_BEARER_TOKEN without visually-confusable characters (0O1lI5S2Z)."""
+"""Generate secure, readable secrets without ambiguous characters (0O1lI5S2Z)."""
 
 import secrets
 from string import ascii_lowercase, ascii_uppercase, digits
@@ -11,10 +11,12 @@ _ALPHABET = "".join(
 )
 
 
-def gen_token(length: int = 48) -> str:
+def gen_token(length: int = 32) -> str:
     """Sample *length* independent characters from the unambiguous alphabet."""
     return "".join(secrets.choice(_ALPHABET) for _ in range(length))
 
 
 if __name__ == "__main__":
-    print(gen_token())
+    print(f"TAILOR_BEARER_TOKEN:  {gen_token(48)}")
+    print(f"JWT_SIGNING_KEY:      {gen_token(64)}")
+    print(f"REFRESH_TOKEN_PEPPER: {gen_token(32)}")

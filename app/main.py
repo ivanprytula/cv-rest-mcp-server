@@ -67,8 +67,7 @@ app = FastAPI(
         "- `GET /cv/preview?theme=` — interactive preview toolbar\n"
         "- `GET /cv/pdf?theme=` — PDF download (rate-limited)\n"
         "- `POST /cv/tailor` — tailored CV from a JD (Bearer-token protected, "
-        "text/Markdown/JSON/PDF/DOCX)\n"
-        "- `GET /api/games/culture-bingo/content` — bingo tiles JSON\n\n"
+        "text/Markdown/JSON/PDF/DOCX)\n\n"
         'Errors use `{"detail": ...}`; documented codes: 404, 413, 422, 429, '
         "500, 503.\n\n"
         "**MCP** — mount `/mcp` in any MCP client "

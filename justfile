@@ -5,7 +5,7 @@ set dotenv-load
 
 setup:
     uv venv
-    uv sync --extra dev
+    uv sync --group dev
 
 dev:
     uv run uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload --reload-include '*.html'
@@ -28,11 +28,6 @@ test-ui:
 # Requires dev server running on :8080 (just dev).
 csp-swaggerui-hash:
     python3 scripts/csp_swaggerui_hash.py
-
-# Print a TAILOR_BEARER_TOKEN without ambiguous chars (0O1lI5S2Z).
-# Put it in .env (TAILOR_BEARER_TOKEN) or a 0600 file (TAILOR_BEARER_TOKEN_FILE).
-gen-tailor-token:
-    uv run python3 scripts/gen_tailor_token.py
 
 test-pdf:
     curl localhost:8080/cv/pdf?theme=modern -o /tmp/test.pdf
@@ -67,6 +62,76 @@ update-geo-blocklist:
         cat "$tmp"/*.zone | sort -u
     } > "$out"
     echo "Wrote $out ($(grep -vc '^#' "$out") networks)"
+
+# ── Phase 1a edge IaC (single managed environment; terraform/ dir) ──────────
+# Remote state + locking: just deploy bootstrap-state (once)
+tf:
+    cd terraform && terraform init
+
+tf-plan:
+    cd terraform && terraform plan -out=tfplan
+
+tf-apply:
+    cd terraform && terraform apply "tfplan"
+
+# Generate architecture diagram from terraform graph + graphviz
+tf-graph:
+    cd terraform && terraform graph -type=plan | dot -Tpng > ../docs/graph.png
+
+# ── Local multi-service dev (Docker Compose) ─────────────────────────────────
+
+up:
+    docker compose up --build --remove-orphans
+
+down:
+    docker compose down
+
+logs:
+    docker compose logs --follow
+
+tf-fmt:
+    cd terraform && terraform fmt -recursive && terraform validate
+
+tf-lint:
+    cd terraform && tflint --config .tflint.hcl
+
+# ── Phased apply (learn TF incrementally) ─────────────────────────────────────
+# Run `just tf` (init) once before using these.
+# Phase 1: static bucket — fully standalone, no dependencies
+# Example: just tf-apply1
+tf-apply1:
+    cd terraform && terraform apply -target=module.static_bucket
+
+# Phase 2: Cloud Run services — needs Docker image built + pushed first
+# Example: just tf-apply2
+tf-apply2:
+    cd terraform && terraform apply -target=module.run
+
+# Phase 3: HTTPS load balancer + Cloud CDN — needs NEGs from phase 2
+# Example: just tf-apply3
+tf-apply3:
+    cd terraform && terraform apply -target=module.edge_lb
+
+# Phase 4: DNS records — needs LB IP from phase 3
+# Example: just tf-apply4
+tf-apply4:
+    cd terraform && terraform apply -target=module.dns
+
+# Apply all remaining resources (catch-all, after phased steps)
+tf-apply-rest:
+    cd terraform && terraform apply
+
+tf-sec:
+    cd terraform && uvx --from 'checkov' checkov -d . --quiet --compact --skip-check CKV_GCP_62,CKV_GCP_114,CKV_GCP_28
+    uv run python scripts/ensure_deny_public.py terraform --cdn-origin-resource terraform/modules/static_bucket/main.tf:google_storage_bucket.bucket
+
+# Path-scoped deny-public guard alone (no checkov). CDN origin is the sole exception.
+tf-deny-public:
+    uv run python scripts/ensure_deny_public.py terraform --cdn-origin-resource terraform/modules/static_bucket/main.tf:google_storage_bucket.bucket
+
+# Invalidate the Cloud CDN cache for a path prefix after changing a file in place.
+tf-cdn-invalidate path='/assets/':
+    gcloud compute url-maps invalidate-cdn-cache cv-edge-url-map --path '{{path}}'
 
 build:
     docker buildx build -t cv-rest-mcp-server .

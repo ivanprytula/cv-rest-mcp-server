@@ -1,6 +1,5 @@
 import json
 import logging
-import random
 import re
 import sys
 from datetime import UTC, datetime
@@ -9,7 +8,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 
-from app.constants import BINGO_CONTENT_PATH, CONFIG_DIR
+from app.constants import CONFIG_DIR
 from app.dependencies import get_pdf_service
 from app.jd_input import PayloadTooLargeError, parse_jd_input
 from app.matching.baseline import BaselineError, get_baseline
@@ -92,38 +91,6 @@ def load_mcp_clients(path) -> list[dict]:
 
 
 _MCP_CLIENTS = load_mcp_clients(MCP_CLIENTS_PATH)
-
-
-_BINGO_REQUIRED_KEYS = {"id", "content"}
-
-
-def load_bingo_content(path) -> dict:
-    """Parse and validate the bingo game content.
-
-    A broken file aborts startup instead of silently serving an empty game.
-    """
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError as exc:
-        raise RuntimeError(f"Bingo content missing: {path}") from exc
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(f"Bingo content is not valid JSON ({path}): {exc}") from exc
-
-    if not isinstance(data, dict) or "cells" not in data:
-        raise RuntimeError(f"{path}: expected object with 'cells' key")
-    if not isinstance(data["cells"], list) or not data["cells"]:
-        raise RuntimeError(f"{path}: 'cells' must be a non-empty list")
-
-    for cell in data["cells"]:
-        missing = _BINGO_REQUIRED_KEYS - cell.keys()
-        if missing:
-            raise RuntimeError(
-                f"{path}: cell {cell.get('id', '?')!r} missing keys {sorted(missing)}"
-            )
-    return data
-
-
-_BINGO_CONTENT = load_bingo_content(BINGO_CONTENT_PATH)
 
 
 def _pdf_filename(cv: dict) -> str:
@@ -389,26 +356,3 @@ async def tailor_cv_endpoint(
         raise HTTPException(status_code=500, detail="CV tailoring failed") from exc
 
     return {**tailored, "saved_to": str(revision_path)}
-
-
-@router.get("/culture-bingo", tags=["Pages"], responses=_responses(429))
-@limits("30/minute", "120/hour")
-async def culture_bingo(request: Request):
-    """Company Culture Bingo: interactive browser game with click-to-reveal tiles."""
-    cells = list(_BINGO_CONTENT["cells"])
-    random.shuffle(cells)
-    html = render_template(
-        "games/culture_bingo.html",
-        title=_BINGO_CONTENT.get("title", "Company Culture Bingo"),
-        cells=cells,
-    )
-    return HTMLResponse(content=html)
-
-
-@router.get(
-    "/api/games/culture-bingo/content", tags=["Games"], responses=_responses(429)
-)
-@limits("30/minute", "120/hour")
-async def bingo_content(request: Request):
-    """Return the bingo game content as JSON."""
-    return _BINGO_CONTENT

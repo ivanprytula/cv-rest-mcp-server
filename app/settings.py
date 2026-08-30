@@ -72,6 +72,10 @@ class Settings(BaseSettings):
     tailor_bearer_token: str = ""
     tailor_bearer_token_file: Path | None = None
 
+    # Phase-1c Auth secrets.
+    jwt_signing_key: str = ""
+    refresh_token_pepper: str = ""
+
     # Skill bank used by POST /cv/tailor and the MCP match_jd tool. Lazy-loaded
     # on first use and memoized per (path, mtime). Defaults are dev-friendly;
     # point CV_BASELINE_PATH at the bank and CV_TAILORED_DIR at the directory

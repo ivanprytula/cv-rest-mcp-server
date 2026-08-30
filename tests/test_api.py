@@ -245,7 +245,7 @@ async def test_cv_pdf_rate_limit_returns_429_on_sixth_request(
 ):
     from httpx import ASGITransport, AsyncClient
 
-    from app.rate_limiter import limiter
+    from shared.rate_limiter import limiter
 
     # Non-loopback peer so the loopback exemption does not apply.
     transport = ASGITransport(app=app, client=("198.51.100.77", 12345))
