@@ -1,34 +1,22 @@
 """Async user store (ADR-022, Phase 2) — DDD-flavored + 12-factor config.
 
-Boundaries (see docs/phase2-auth-pattern.md):
-- **Domain**: `User` entity (identity + roles) and a `PasswordHasher` port.
-- **Persistence**: `UserRepository` port with an async SQLAlchemy implementation
-  on `aiosqlite` for the interim. The repo exposes raw load/save of a `UserRow`
-  (which carries `hashed_password`); business rules (auth, seeding) live in the
-  application service, so swapping the DB replaces only the repo impl — domain
-  and service stay put.
-- **Application service**: `authenticate()` / `seed_first_admin()` orchestrate
-  repo + hasher (the template's `crud.authenticate`, async-native).
+Boundaries:
+- **Domain**: `User` entity (identity + roles) and a `PasswordHasher` class.
+- **Persistence**: `UserRepository` async SQLAlchemy implementation on `aiosqlite`.
+  Exposes raw load/save of `UserRow` (which carries `hashed_password`); business
+  logic lives in `UserService`, so swapping DB (Phase-2 Postgres: one-line driver
+  change to `asyncpg`) only replaces the repo, not the service.
+- **Application service**: `UserService` orchestrates repo + hasher for auth and
+  seeding. Engine lifecycle (init_schema, close) is managed by the app lifespan
+  in main.py, not the repo.
 
-Async-native (borrowed from the 45k-star full-stack template, adapted):
-`create_async_engine` + async sessions. Because the repo talks to the engine,
-Phase-2 Postgres is a one-line driver change (`asyncpg`) with identical async
-session code — no rewrite, easy to scale across services.
-
-12-factor: all config via env (`settings`). The store is bound to
-`settings.user_db_path` at construction; a plain file path is the production form.
-
-Model split mirrors the template: the ORM `UserRow` carries `hashed_password`
-(never serialized); the domain `User` schema is what auth/API code sees.
-
-Refresh-token families stay in-memory (`token_store.RefreshTokenStore`) — the DB
+Refresh-token families stay in-memory (`token_store.RefreshTokenStore`); the DB
 stores users, not sessions.
 """
 
 from __future__ import annotations
 
 import uuid
-from abc import ABC, abstractmethod
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -36,6 +24,7 @@ import bcrypt
 from pydantic import BaseModel, ConfigDict, EmailStr
 from sqlalchemy import String, select
 from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
@@ -99,18 +88,8 @@ class User(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Persistence port + SQLAlchemy implementation
+# Persistence + SQLAlchemy implementation
 # ---------------------------------------------------------------------------
-
-
-class UserRepository(ABC):
-    """Port: raw load/save of users. Phase-2 Postgres adds another impl."""
-
-    @abstractmethod
-    async def get_by_username(self, username: str) -> UserRow | None: ...
-
-    @abstractmethod
-    async def create(self, *, user: UserRow) -> UserRow: ...
 
 
 class Base(DeclarativeBase):
@@ -140,8 +119,9 @@ class UserRow(Base):
         )
 
 
-class SqlAlchemyUserRepository(UserRepository):
-    """Async SQLAlchemy implementation of the user repository (`aiosqlite`)."""
+class UserRepository:
+    """Async SQLAlchemy user repository (`aiosqlite`). Engine lifecycle
+    (init_schema, close) is managed by the app lifespan, not the repo."""
 
     def __init__(self, db_url: str) -> None:
         self._engine = create_async_engine(db_url, future=True)
@@ -149,12 +129,9 @@ class SqlAlchemyUserRepository(UserRepository):
             self._engine, expire_on_commit=False, class_=AsyncSession
         )
 
-    async def init_schema(self) -> None:
-        async with self._engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-
-    async def close(self) -> None:
-        await self._engine.dispose()
+    @property
+    def engine(self) -> AsyncEngine:
+        return self._engine
 
     async def get_by_username(self, username: str) -> UserRow | None:
         async with self._session_factory() as session:
@@ -183,8 +160,7 @@ _DUMMY_HASH: str = bcrypt.hashpw(b"timing-sentinel", bcrypt.gensalt()).decode("u
 
 
 class UserService:
-    """Application service orchestrating repo + hasher (the seam swapped at
-    Phase 2 Postgres is only the repo constructor)."""
+    """Application service orchestrating repo + hasher."""
 
     def __init__(
         self, repo: UserRepository, hasher: PasswordHasher | None = None
@@ -238,21 +214,11 @@ class UserService:
         )
         return created.to_domain()
 
-    async def init_schema(self) -> None:
-        if isinstance(self._repo, SqlAlchemyUserRepository):
-            await self._repo.init_schema()
-
-    async def close(self) -> None:
-        if isinstance(self._repo, SqlAlchemyUserRepository):
-            await self._repo.close()
-
 
 # Module singleton used by the auth routes. Bound at import from settings (the
 # engine is lazy — no disk touch until a login/seed actually runs). Tests
 # replace this with a per-test repo/service via the fixture (like token_store).
-user_service = UserService(
-    SqlAlchemyUserRepository(sqlite_url_for(settings.user_db_path))
-)
+user_service = UserService(UserRepository(sqlite_url_for(settings.user_db_path)))
 
 
 async def seed_first_admin_from_settings(

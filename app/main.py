@@ -23,7 +23,7 @@ from app.auth import (
     JWTAuthMiddleware,
     auth_router,
 )
-from app.auth.user_store import seed_first_admin_from_settings, user_service
+from app.auth.user_store import Base, seed_first_admin_from_settings, user_service
 from app.constants import (
     PDF_CACHE_MAX_ENTRIES,
     PDF_EXECUTOR_MAX_WORKERS,
@@ -277,15 +277,16 @@ async def lifespan(app):
     )
     app.state.pdf_service = pdf_service
 
-    # Auth user store: create schema + idempotently seed the first admin.
+    # Auth user store: initialize engine schema + idempotently seed the first admin.
     # Routes reach the same singleton via app/auth/user_store.py.
-    await user_service.init_schema()
+    async with user_service._repo.engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
     await seed_first_admin_from_settings(user_service)
 
     async with mcp_app.lifespan(app):
         yield
 
-    await user_service.close()
+    await user_service._repo.engine.dispose()
     pdf_service._executor.shutdown(wait=False)
 
 

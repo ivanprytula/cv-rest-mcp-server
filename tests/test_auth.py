@@ -199,16 +199,19 @@ async def test_authenticate_unknown_username(user_service):
 
 async def test_authenticate_unconfigured_returns_none():
     from app.auth.user_store import (
-        SqlAlchemyUserRepository,
+        Base,
+        UserRepository,
         UserService,
         sqlite_url_for,
     )
 
     # No users seeded -> authenticate returns None (fail-closed on login).
-    svc = UserService(SqlAlchemyUserRepository(sqlite_url_for(":memory:")))
-    await svc.init_schema()
+    repo = UserRepository(sqlite_url_for(":memory:"))
+    svc = UserService(repo)
+    async with repo.engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
     assert await svc.authenticate("anything", "anything") is None
-    await svc.close()
+    await repo.engine.dispose()
 
 
 async def test_seed_is_idempotent(user_service):
@@ -361,17 +364,20 @@ async def test_login_fail_closed_when_unconfigured(auth_client, monkeypatch):
     # generic 401 — never a 200, and no hint about the store's state.
     import app.auth.user_store as user_store_module
     from app.auth.user_store import (
-        SqlAlchemyUserRepository,
+        Base,
+        UserRepository,
         UserService,
         sqlite_url_for,
     )
 
-    empty = UserService(SqlAlchemyUserRepository(sqlite_url_for(":memory:")))
-    await empty.init_schema()
+    repo = UserRepository(sqlite_url_for(":memory:"))
+    empty = UserService(repo)
+    async with repo.engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
     monkeypatch.setattr(user_store_module, "user_service", empty)
     resp = await login(auth_client)
     assert resp.status_code == 401  # generic message, no reveal
-    await empty.close()
+    await repo.engine.dispose()
 
 
 async def test_login_requires_username_and_password(auth_client):

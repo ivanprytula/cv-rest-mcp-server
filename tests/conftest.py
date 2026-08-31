@@ -241,15 +241,21 @@ async def user_service(auth_settings, tmp_path, monkeypatch):
     """
     from app.auth import user_store as user_store_module
     from app.auth.user_store import (
-        SqlAlchemyUserRepository,
+        Base,
+        UserRepository,
         UserService,
         sqlite_url_for,
     )
     from app.settings import settings
 
     db_path = tmp_path / "auth_test.db"
-    service = UserService(SqlAlchemyUserRepository(sqlite_url_for(db_path)))
-    await service.init_schema()
+    repo = UserRepository(sqlite_url_for(db_path))
+    service = UserService(repo)
+
+    # Initialize schema (moved from service to lifecycle in main.py).
+    async with repo.engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
     await service.seed_first_admin(
         username="operator",
         email="operator@example.com",
@@ -260,7 +266,7 @@ async def user_service(auth_settings, tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "user_db_path", db_path)
     monkeypatch.setattr(user_store_module, "user_service", service)
     yield service
-    await service.close()
+    await repo.engine.dispose()
 
 
 @pytest.fixture
