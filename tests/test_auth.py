@@ -9,6 +9,8 @@ CORS behavior. All tests are offline and use ephemeral keys seeded via the
 
 from __future__ import annotations
 
+import os
+
 import jwt
 import pytest
 
@@ -522,9 +524,113 @@ async def test_protected_api_v1_requires_token(auth_client):
     assert resp.status_code == 401
 
 
+async def test_api_v1_options_preflight_not_gated(auth_client):
+    # A CORS preflight (OPTIONS) never carries credentials — browsers refuse to
+    # attach Authorization to it — so JWTAuthMiddleware must let it fall
+    # through to CORSMiddleware rather than 401 it, or a browser's
+    # cross-origin Authorization-bearing GET/POST to /api/v1/* never gets past
+    # preflight. Covers the /api/v1/revisions (SPA) and /api/v1/auth/me case.
+    resp = await auth_client.options(
+        "/api/v1/auth/me",
+        headers={
+            "Origin": "https://app.example.com",
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "authorization",
+        },
+    )
+    assert resp.status_code != 401
+
+
+# ---------------------------------------------------------------------------
+# routes: revisions list
+# ---------------------------------------------------------------------------
+
+
+async def test_list_revisions_without_token(auth_client):
+    resp = await auth_client.get("/api/v1/revisions")
+    assert resp.status_code == 401
+
+
+async def test_list_revisions_requires_read_scope(auth_settings):
+    # A token with no cv:read scope is authenticated but insufficiently scoped.
+    from httpx import ASGITransport, AsyncClient
+
+    from app.auth.crypto import sign_access_token
+    from app.main import app
+
+    token = sign_access_token("someone", [], role="user")
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        resp = await ac.get(
+            "/api/v1/revisions", headers={"Authorization": f"Bearer {token}"}
+        )
+    assert resp.status_code == 403
+
+
+async def test_list_revisions_empty(auth_client):
+    access, _ = await _do_login_and_capture_cookie(auth_client)
+    resp = await auth_client.get(
+        "/api/v1/revisions", headers={"Authorization": f"Bearer {access}"}
+    )
+    assert resp.status_code == 200
+    assert resp.json() == {"revisions": []}
+
+
+async def test_list_revisions_newest_first(auth_client):
+    access, _ = await _do_login_and_capture_cookie(auth_client)
+    tailored_dir = settings.cv_tailored_dir
+    tailored_dir.mkdir(parents=True, exist_ok=True)
+    older = tailored_dir / "cv_tailored-2026-01-01_00-00-00.json"
+    newer = tailored_dir / "cv_tailored-2026-01-02_00-00-00.json"
+    older.write_text("{}", encoding="utf-8")
+    newer.write_text("{}", encoding="utf-8")
+    os.utime(older, (1, 1))
+    os.utime(newer, (2, 2))
+
+    resp = await auth_client.get(
+        "/api/v1/revisions", headers={"Authorization": f"Bearer {access}"}
+    )
+    assert resp.status_code == 200
+    names = [r["name"] for r in resp.json()["revisions"]]
+    assert names == [newer.name, older.name]
+
+
 # ---------------------------------------------------------------------------
 # credentialed CORS for /api/v1/auth/refresh
 # ---------------------------------------------------------------------------
+
+
+async def test_cors_login_preflight_pinned_origin(auth_client):
+    # Login (token) also needs credentialed CORS to set the __Host-refresh_token
+    # cookie from a cross-origin SPA; without it, the browser blocks the whole
+    # request and the cookie is never set, causing the login to silently appear
+    # to fail on the client side.
+    resp = await auth_client.options(
+        "/api/v1/auth/token",
+        headers={
+            "Origin": "https://app.example.com",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "Content-Type",
+        },
+    )
+    assert resp.status_code == 204
+    assert resp.headers.get("access-control-allow-origin") == "https://app.example.com"
+    assert resp.headers.get("access-control-allow-credentials") == "true"
+    assert "POST" in resp.headers.get("access-control-allow-methods", "")
+
+
+async def test_cors_login_actual_request_sets_credentials(auth_client):
+    # A cross-origin login request from the pinned SPA origin gets the
+    # credentialed headers so the __Host-refresh_token cookie is sent back
+    # and accepted by the browser.
+    resp = await auth_client.post(
+        "/api/v1/auth/token",
+        headers={"Origin": "https://app.example.com"},
+        json={"username": "operator", "password": "correct-password"},
+    )
+    assert resp.status_code == 200
+    assert resp.headers.get("access-control-allow-origin") == "https://app.example.com"
+    assert resp.headers.get("access-control-allow-credentials") == "true"
 
 
 async def test_cors_preflight_pinned_origin(auth_client):

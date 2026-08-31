@@ -216,6 +216,7 @@ def auth_settings(synthetic_baseline_path, tmp_path, monkeypatch):
 
     signing_key = "test-hs256-secret-that-is-long-enough-for-signing"
 
+    monkeypatch.setattr(settings, "environment", "production")
     monkeypatch.setattr(settings, "jwt_signing_key", signing_key)
     monkeypatch.setattr(settings, "refresh_token_pepper", "test-pepper")
     monkeypatch.setattr(settings, "jwt_audience", "cv-rest-mcp-server")

@@ -4,8 +4,14 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="")
+    # env_file is the sole .env loader (justfile's dotenv-load was removed
+    # deliberately): every var in .env must be a declared field here, or
+    # startup fails fast (extra="forbid", the default) instead of silently
+    # ignoring a typo'd setting. Deploy-only vars (e.g. SVC_NAME) belong in
+    # the deploy script's own env, not .env.
+    model_config = SettingsConfigDict(env_prefix="", env_file=".env")
 
+    environment: str = "development"
     cv_data_path: Path = Path("data/cv.json")
     port: int = 8080
 

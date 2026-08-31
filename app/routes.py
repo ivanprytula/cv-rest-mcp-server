@@ -151,6 +151,15 @@ def _load_tailored_revision(name: str, *, default: dict) -> dict:
     return revision
 
 
+def _revision_summary(path: Path) -> dict:
+    stat = path.stat()
+    return {
+        "name": path.name,
+        "created_at": datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat(),
+        "size_bytes": stat.st_size,
+    }
+
+
 def _client_mcp_configs(mcp_url: str) -> list[dict]:
     """Per-client MCP snippets in each agent's native config format."""
     return [
@@ -356,3 +365,18 @@ async def tailor_cv_endpoint(
         raise HTTPException(status_code=500, detail="CV tailoring failed") from exc
 
     return {**tailored, "saved_to": str(revision_path)}
+
+
+@router.get("/api/v1/revisions", tags=["CV"], responses=_responses(429, 503))
+@limits("30/minute", "300/hour")
+async def list_tailored_revisions(request: Request):
+    """List tailored CV revisions written by ``/cv/tailor``, newest first.
+
+    Requires the `cv:read` scope (same as the `?tailored=` revision reads).
+    """
+    revisions = sorted(
+        settings.cv_tailored_dir.glob("cv_tailored-*.json"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    return {"revisions": [_revision_summary(p) for p in revisions]}

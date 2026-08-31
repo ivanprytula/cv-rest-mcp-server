@@ -14,6 +14,9 @@ requests, fail-closed. It gates two families of routes:
    - `GET /cv/html|pdf|preview` WITH a `?tailored=` selector — requires a JWT
      with the `cv:read` scope, via Authorization header, or via `?token=` for
      the preview page whose embedded iframe cannot send a header.
+   - `GET /api/v1/revisions` — requires a JWT with the `cv:read` scope (same
+     as the tailored reads); lists the tailored CV revisions on disk for the
+     SPA's revisions screen.
 
 The tailor mutation is gated on the JWT `role` claim (`admin`); the revision
 reads stay gated on the `cv:read` scope (both roles have it). A JWT is verified
@@ -53,6 +56,9 @@ _TAILOR_MUTATION_PATH = "/cv/tailor"
 _TAILORED_READ_METHOD = "GET"
 _TAILORED_READ_PATHS = {"/cv/html", "/cv/pdf", "/cv/preview"}
 
+_REVISIONS_LIST_METHOD = "GET"
+_REVISIONS_LIST_PATH = "/api/v1/revisions"
+
 _SCOPE_READ = "cv:read"
 
 _ROLE_ADMIN = "admin"
@@ -85,10 +91,15 @@ def _is_protected(scope: Scope) -> bool:
     """True when the request must carry a verified JWT.
 
     The public CV surface (`/`, `/cv*` without a `tailored` selector, `/health`,
-    `/mcp`) is never protected here.
+    `/mcp`) is never protected here. A CORS preflight (OPTIONS) never carries
+    credentials — browsers refuse to attach Authorization to it — so it must
+    fall through to CORSMiddleware, not be denied here (the SPA's cross-origin
+    Authorization-bearing calls would never get past preflight otherwise).
     """
     path = scope.get("path", "")
     method = scope.get("method", "")
+    if method == "OPTIONS":
+        return False
     if path.startswith(_API_PREFIX):
         return path not in {_TOKEN_PATH, _REFRESH_PATH, _LOGOUT_PATH}
     if method == _TAILOR_MUTATION_METHOD and path == _TAILOR_MUTATION_PATH:
@@ -208,10 +219,17 @@ class JWTAuthMiddleware:
         return JWTAuthMiddleware._is_tailor_mutation(scope)
 
     @staticmethod
+    def _is_revisions_list(scope: Scope) -> bool:
+        return (
+            scope.get("method") == _REVISIONS_LIST_METHOD
+            and scope.get("path") == _REVISIONS_LIST_PATH
+        )
+
+    @staticmethod
     def _required_scope(scope: Scope) -> str | None:
         if JWTAuthMiddleware._requires_admin(scope):
             return None  # role-gated, not scope-gated
-        if _is_tailored_read(scope):
+        if _is_tailored_read(scope) or JWTAuthMiddleware._is_revisions_list(scope):
             return _SCOPE_READ
         return None  # /api/v1/* — authenticated only
 
@@ -232,20 +250,22 @@ class JWTAuthMiddleware:
 
 
 class CredentialedCORSMiddleware:
-    """Pinned-origin CORS for the single credentialed endpoint.
+    """Pinned-origin CORS for the credential-issuing/consuming endpoints.
 
-    The public surface uses a wildcard, credential-less CORSMiddleware. The
-    refresh endpoint is the deliberate exception: it must accept a SameSite=None
-    credential cookie cross-origin, so it needs `Access-Control-Allow-Credentials:
-    true` with an exact, allow-listed origin — never `*` with credentials.
+    The public surface uses a wildcard, credential-less CORSMiddleware. Login,
+    refresh, and logout are the deliberate exceptions: each sets or reads the
+    SameSite=None `__Host-refresh_token` cookie cross-origin, so each needs
+    `Access-Control-Allow-Credentials: true` with an exact, allow-listed origin
+    — never `*` with credentials (login/logout would otherwise silently fail
+    to set/revoke the cookie from the SPA's origin).
 
     This middleware adds the credentialed CORS headers ONLY for OPTIONS
-    (preflight) and non-safe GET/POST on /api/v1/auth/refresh; everything else
+    (preflight) and the actual request on these three paths; everything else
     passes through untouched so the wildcard middleware still owns the public
     surface.
     """
 
-    _REFRESH_PATH = "/api/v1/auth/refresh"
+    _CREDENTIALED_PATHS = {_TOKEN_PATH, _REFRESH_PATH, _LOGOUT_PATH}
 
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
@@ -257,10 +277,10 @@ class CredentialedCORSMiddleware:
 
         path = scope.get("path", "")
         method = scope.get("method", "")
-        is_refresh = path == self._REFRESH_PATH
+        is_credentialed = path in self._CREDENTIALED_PATHS
         is_preflight = method == "OPTIONS"
 
-        if not is_refresh:
+        if not is_credentialed:
             await self.app(scope, receive, send)
             return
 
@@ -270,9 +290,10 @@ class CredentialedCORSMiddleware:
         if is_preflight:
             # Handle the preflight ourselves so we never fall through to the
             # wildcard CORS (which would respond with `*` — invalid with
-            # credentials). Respond 204 with the pinned origin.
-            response = JSONResponse(
-                None,
+            # credentials). Respond 204 with the pinned origin (no body).
+            from starlette.responses import Response
+
+            response = Response(
                 status_code=204,
                 headers={
                     "Access-Control-Allow-Origin": allowed,
@@ -286,7 +307,7 @@ class CredentialedCORSMiddleware:
             await response(scope, receive, send)
             return
 
-        # Actual refresh request: stamp the credentialed headers on the start
+        # Actual login/refresh/logout request: stamp the credentialed headers on the start
         # message, OVERRIDING any `Access-Control-Allow-Origin: *` the inner
         # wildcard CORSMiddleware added (credentials with `*` is invalid per
         # spec). If no origin is configured, or the request origin does not

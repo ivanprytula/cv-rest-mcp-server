@@ -50,12 +50,14 @@ def _refresh_ttl_seconds() -> int:
 
 
 def _set_refresh_cookie(response: Response, token: str) -> None:
+    # In local dev over HTTP, Secure=True rejects the __Host- cookie.
+    # Set Secure only in production; dev/test can run without it.
     response.set_cookie(
         key=_REFRESH_COOKIE,
         value=token,
         max_age=_refresh_ttl_seconds(),
         path=_COOKIE_PATH,
-        secure=True,
+        secure=(settings.environment == "production"),
         httponly=True,
         samesite="none",
     )
