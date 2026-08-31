@@ -1,6 +1,5 @@
 import json
 import logging
-import random
 import re
 import sys
 from datetime import UTC, datetime
@@ -9,7 +8,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 
-from app.constants import BINGO_CONTENT_PATH, CONFIG_DIR
+from app.constants import CONFIG_DIR
 from app.dependencies import get_pdf_service
 from app.jd_input import PayloadTooLargeError, parse_jd_input
 from app.matching.baseline import BaselineError, get_baseline
@@ -94,38 +93,6 @@ def load_mcp_clients(path) -> list[dict]:
 _MCP_CLIENTS = load_mcp_clients(MCP_CLIENTS_PATH)
 
 
-_BINGO_REQUIRED_KEYS = {"id", "content"}
-
-
-def load_bingo_content(path) -> dict:
-    """Parse and validate the bingo game content.
-
-    A broken file aborts startup instead of silently serving an empty game.
-    """
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError as exc:
-        raise RuntimeError(f"Bingo content missing: {path}") from exc
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(f"Bingo content is not valid JSON ({path}): {exc}") from exc
-
-    if not isinstance(data, dict) or "cells" not in data:
-        raise RuntimeError(f"{path}: expected object with 'cells' key")
-    if not isinstance(data["cells"], list) or not data["cells"]:
-        raise RuntimeError(f"{path}: 'cells' must be a non-empty list")
-
-    for cell in data["cells"]:
-        missing = _BINGO_REQUIRED_KEYS - cell.keys()
-        if missing:
-            raise RuntimeError(
-                f"{path}: cell {cell.get('id', '?')!r} missing keys {sorted(missing)}"
-            )
-    return data
-
-
-_BINGO_CONTENT = load_bingo_content(BINGO_CONTENT_PATH)
-
-
 def _pdf_filename(cv: dict) -> str:
     def _safe(value: str) -> str:
         return re.sub(r"[^\w\s-]", "", str(value)).strip().replace(" ", "_")
@@ -182,6 +149,15 @@ def _load_tailored_revision(name: str, *, default: dict) -> dict:
             status_code=404, detail="Tailored CV revision is not a CV object"
         )
     return revision
+
+
+def _revision_summary(path: Path) -> dict:
+    stat = path.stat()
+    return {
+        "name": path.name,
+        "created_at": datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat(),
+        "size_bytes": stat.st_size,
+    }
 
 
 def _client_mcp_configs(mcp_url: str) -> list[dict]:
@@ -391,24 +367,16 @@ async def tailor_cv_endpoint(
     return {**tailored, "saved_to": str(revision_path)}
 
 
-@router.get("/culture-bingo", tags=["Pages"], responses=_responses(429))
-@limits("30/minute", "120/hour")
-async def culture_bingo(request: Request):
-    """Company Culture Bingo: interactive browser game with click-to-reveal tiles."""
-    cells = list(_BINGO_CONTENT["cells"])
-    random.shuffle(cells)
-    html = render_template(
-        "games/culture_bingo.html",
-        title=_BINGO_CONTENT.get("title", "Company Culture Bingo"),
-        cells=cells,
+@router.get("/api/v1/revisions", tags=["CV"], responses=_responses(429, 503))
+@limits("30/minute", "300/hour")
+async def list_tailored_revisions(request: Request):
+    """List tailored CV revisions written by ``/cv/tailor``, newest first.
+
+    Requires the `cv:read` scope (same as the `?tailored=` revision reads).
+    """
+    revisions = sorted(
+        settings.cv_tailored_dir.glob("cv_tailored-*.json"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
     )
-    return HTMLResponse(content=html)
-
-
-@router.get(
-    "/api/games/culture-bingo/content", tags=["Games"], responses=_responses(429)
-)
-@limits("30/minute", "120/hour")
-async def bingo_content(request: Request):
-    """Return the bingo game content as JSON."""
-    return _BINGO_CONTENT
+    return {"revisions": [_revision_summary(p) for p in revisions]}

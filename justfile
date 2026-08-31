@@ -1,14 +1,15 @@
-set dotenv-load
-
 @help:
     just --list
 
 setup:
     uv venv
-    uv sync --extra dev
+    uv sync --group dev
 
-dev:
+dev-local:
     uv run uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload --reload-include '*.html'
+
+dev-spa:
+    cd frontend && npm run dev -- --port 5173
 
 code-quality:
     uv run ruff check .
@@ -77,6 +78,17 @@ tf-apply:
 # Generate architecture diagram from terraform graph + graphviz
 tf-graph:
     cd terraform && terraform graph -type=plan | dot -Tpng > ../docs/graph.png
+
+# ── Local multi-service dev (Docker Compose) ─────────────────────────────────
+
+up:
+    docker compose up -d --build --remove-orphans
+
+down:
+    docker compose down
+
+logs:
+    docker compose logs --follow
 
 tf-fmt:
     cd terraform && terraform fmt -recursive && terraform validate

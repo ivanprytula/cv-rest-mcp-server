@@ -29,7 +29,7 @@ set -euo pipefail
 GCP_PROJECT="${GCP_PROJECT:-}"   # required; validated per-stage by require_project
 GCP_ENV="${GCP_ENV:-production}"
 GCP_REGION="${GCP_REGION:-europe-west1}"
-SVC_NAME="${SVC_NAME:-cv-rest-mcp-server}"
+SVC_NAME="${SVC_NAME:-cv-ivanprytula}"
 RUN_SA_ID="${SVC_NAME}-runtime"
 DEPLOY_SA_ID="${SVC_NAME}-deployer"
 CV_BUCKET="${GCP_PROJECT}-cv-data"
@@ -161,16 +161,33 @@ EOF
 }
 
 # Phase 1c. Create Secrets for JWT, Pepper, and Tailor Token. Runs once, idempotent.
+# Also grants the runtime SA (cv-*-runtime) Secret Manager Secret Accessor on each secret.
 bootstrap_secrets() {
     require_project
+    local runtime_sa="${SVC_NAME}-runtime@${GCP_PROJECT}.iam.gserviceaccount.com"
+    local deploy_sa="${SVC_NAME}-deployer@${GCP_PROJECT}.iam.gserviceaccount.com"
     log "Ensuring Secret Manager secrets exist"
-    for secret in cv-jwt-signing-key cv-refresh-token-pepper cv-tailor-bearer-token; do
+    for secret in cv-jwt-signing-key cv-refresh-token-pepper; do
         if gcloud secrets describe "$secret" --project "$GCP_PROJECT" >/dev/null 2>&1; then
             echo "$secret exists, skipping create"
         else
             gcloud secrets create "$secret" --project "$GCP_PROJECT" --replication-policy="automatic"
             echo "Created $secret. Add initial version with: gcloud secrets versions add $secret --data-file=-"
         fi
+        # Grant runtime SA access so Cloud Run can read the secret at runtime.
+        gcloud secrets add-iam-policy-binding "$secret" \
+            --member="serviceAccount:$runtime_sa" \
+            --role="roles/secretmanager.secretAccessor" \
+            --project="$GCP_PROJECT" >/dev/null 2>&1 \
+            && echo "Granted secretmanager.secretAccessor on $secret to $runtime_sa" \
+            || echo "IAM binding on $secret already present (or binding failed)"
+        # Grant deployer SA access so CI/CD can inject secrets into new revisions.
+        gcloud secrets add-iam-policy-binding "$secret" \
+            --member="serviceAccount:$deploy_sa" \
+            --role="roles/secretmanager.secretAccessor" \
+            --project="$GCP_PROJECT" >/dev/null 2>&1 \
+            && echo "Granted secretmanager.secretAccessor on $secret to $deploy_sa" \
+            || echo "IAM binding on $secret already present for deployer SA (or binding failed)"
     done
 }
 
@@ -215,11 +232,10 @@ deploy() {
     log "Deploying $SVC_NAME to $GCP_REGION"
     # --set-env-vars REPLACES all vars every time: this line is the single
     # source of truth for runtime config. Contact_* come from .env via
-    # just's dotenv-load (empty = omitted from Swagger UI).
-    # TAILOR_BEARER_TOKEN comes from .env; empty = /cv/tailor returns 503
-    # (fail-closed by design). For higher-security deployments, replace the
-    # inline value with a Secret Manager reference (--set-secrets) — the
-    # env-var name stays the same so the app code does not change.
+    # just's dotenv-load (empty = omitted from Swagger UI). For higher-security
+    # deployments, replace the inline values with Secret Manager references
+    # (--set-secrets) — the env-var names stay the same so the app code does
+    # not change.
     gcloud run deploy "$SVC_NAME" \
         --project "$GCP_PROJECT" --region "$GCP_REGION" --quiet \
         --image "gcr.io/${GCP_PROJECT}/${SVC_NAME}" \
@@ -227,7 +243,7 @@ deploy() {
         --allow-unauthenticated \
         --cpu 1 --memory 512Mi \
         --max-instances 1 \
-        --set-secrets "JWT_SIGNING_KEY=cv-jwt-signing-key:latest,REFRESH_TOKEN_PEPPER=cv-refresh-token-pepper:latest,TAILOR_BEARER_TOKEN=cv-tailor-bearer-token:latest" \
+        --set-secrets "JWT_SIGNING_KEY=cv-jwt-signing-key:latest,REFRESH_TOKEN_PEPPER=cv-refresh-token-pepper:latest" \
         --set-env-vars "TRUST_PROXY=true,CLIENT_IP_XFF_ENTRY=2,BLOCKED_IPS_FILE=config/blocked_geo.txt,FAILBAN_THRESHOLD=6,CV_DATA_GCS_URI=gs://${CV_BUCKET}/cv.json,CV_REFRESH_SECONDS=30,CONTACT_NAME=${CONTACT_NAME:-},CONTACT_EMAIL=${CONTACT_EMAIL:-}"
 }
 
@@ -304,18 +320,28 @@ wif() {
         --member="serviceAccount:$deploy_sa" --role=roles/cloudbuild.builds.builder --condition=None >/dev/null
     # gcloud builds submit runs as the project's default Cloud Build SA; the
     # deployer must be allowed to act as that SA, scoped to this account only.
+    # The default Cloud Build SA is created on the first Cloud Build run in a project;
+    # if it doesn't exist yet, this binding is skipped and can be added later.
     local build_sa
-    build_sa="$(gcloud builds get-default-service-account --project "$GCP_PROJECT")"
-    gcloud iam service-accounts add-iam-policy-binding "$build_sa" \
-        --project "$GCP_PROJECT" --member="serviceAccount:$deploy_sa" \
-        --role=roles/iam.serviceAccountUser --condition=None >/dev/null
+    build_sa="$(gcloud builds get-default-service-account --project "$GCP_PROJECT" 2>/dev/null || true)"
+    if [ -n "$build_sa" ] && gcloud iam service-accounts describe "$build_sa" --project "$GCP_PROJECT" >/dev/null 2>&1; then
+        gcloud iam service-accounts add-iam-policy-binding "$build_sa" \
+            --project "$GCP_PROJECT" --member="serviceAccount:$deploy_sa" \
+            --role=roles/iam.serviceAccountUser --condition=None >/dev/null \
+            && echo "Granted iam.serviceAccountUser on $build_sa to $deploy_sa" \
+            || echo "Binding $build_sa failed (may already exist)"
+    else
+        echo "Cloud Build SA not yet created (no Cloud Build runs yet); skipping build_sa binding"
+    fi
     # impersonate the runtime SA during deploys (scoped to that SA only)
     gcloud iam service-accounts add-iam-policy-binding "${RUN_SA_ID}@${GCP_PROJECT}.iam.gserviceaccount.com" \
         --project "$GCP_PROJECT" --member="serviceAccount:$deploy_sa" \
-        --role=roles/iam.serviceAccountUser --condition=None >/dev/null
+        --role=roles/iam.serviceAccountUser --condition=None >/dev/null \
+        && echo "Granted iam.serviceAccountUser on runtime SA to $deploy_sa" \
+        || echo "Runtime SA binding already present"
 
     # Allow deployer to read secrets for deployment injection.
-    for secret in cv-jwt-signing-key cv-refresh-token-pepper cv-tailor-bearer-token; do
+    for secret in cv-jwt-signing-key cv-refresh-token-pepper; do
         gcloud secrets add-iam-policy-binding "$secret" \
             --project "$GCP_PROJECT" --member="serviceAccount:$deploy_sa" \
             --role=roles/secretmanager.secretAccessor --condition=None >/dev/null

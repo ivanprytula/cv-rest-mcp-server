@@ -18,6 +18,12 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from starlette.types import ASGIApp
 
+from app.auth import (
+    CredentialedCORSMiddleware,
+    JWTAuthMiddleware,
+    auth_router,
+)
+from app.auth.user_store import Base, seed_first_admin_from_settings, user_service
 from app.constants import (
     PDF_CACHE_MAX_ENTRIES,
     PDF_EXECUTOR_MAX_WORKERS,
@@ -32,7 +38,6 @@ from app.pdf_generator import PdfService, ThemeNotFoundError
 from app.rate_limiter import limiter
 from app.routes import router
 from app.settings import settings
-from app.tailor_auth import TailorAuthMiddleware
 
 
 # Cloud Run maps stderr -> ERROR for every line; default logging writes to
@@ -67,8 +72,7 @@ app = FastAPI(
         "- `GET /cv/preview?theme=` — interactive preview toolbar\n"
         "- `GET /cv/pdf?theme=` — PDF download (rate-limited)\n"
         "- `POST /cv/tailor` — tailored CV from a JD (Bearer-token protected, "
-        "text/Markdown/JSON/PDF/DOCX)\n"
-        "- `GET /api/games/culture-bingo/content` — bingo tiles JSON\n\n"
+        "text/Markdown/JSON/PDF/DOCX)\n\n"
         'Errors use `{"detail": ...}`; documented codes: 404, 413, 422, 429, '
         "500, 503.\n\n"
         "**MCP** — mount `/mcp` in any MCP client "
@@ -168,15 +172,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(CredentialedCORSMiddleware)
 app.add_middleware(GuardMiddleware)
 # Middleware order (Starlette wraps inside-out as we add, but runs
 # outside-in on the request): SecurityHeaders is outermost (added last)
-# so it stamps CSP etc. on every response, including the 401/503 from
-# TailorAuth. Guard runs before TailorAuth so geo/failban/service-hours
-# still apply to /cv/tailor, and failban can ban a client before we even
-# bother checking the bearer token. TailorAuth short-circuits on the
-# protected path/method; everything else passes through untouched.
-app.add_middleware(TailorAuthMiddleware)
+# so it stamps CSP etc. on every response, including the 401/403/503 from
+# JWTAuth. CredentialedCORS runs before the wildcard CORS so it can
+# override the wildcard `*` header on the auth endpoints. Guard runs before
+# JWTAuth so geo/failban/service-hours still apply to /cv/tailor and the
+# /api/v1/* surface, and failban can ban a client before we even bother
+# verifying a JWT. JWTAuth short-circuits on the /api/v1/* namespace and the
+# tailoring surface (/cv/tailor + ?tailored= reads); everything else passes
+# through untouched.
+app.add_middleware(JWTAuthMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 
 mcp = FastMCP("cv-rest-mcp-server")
@@ -269,9 +277,16 @@ async def lifespan(app):
     )
     app.state.pdf_service = pdf_service
 
+    # Auth user store: initialize engine schema + idempotently seed the first admin.
+    # Routes reach the same singleton via app/auth/user_store.py.
+    async with user_service._repo.engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    await seed_first_admin_from_settings(user_service)
+
     async with mcp_app.lifespan(app):
         yield
 
+    await user_service._repo.engine.dispose()
     pdf_service._executor.shutdown(wait=False)
 
 
@@ -279,6 +294,7 @@ app.router.lifespan_context = lifespan
 app.mount("/mcp", mcp_app)
 app.mount("/static", StaticFiles(directory=STATIC_DIR))
 app.include_router(router)
+app.include_router(auth_router)
 
 
 # The /cv/tailor endpoint reads the raw body itself (multi-format: JSON,
@@ -322,12 +338,12 @@ _TAILOR_REQUEST_BODY = {
 
 _openapi_getter = app.openapi
 
-# The /cv/tailor route and the `?tailored=` revision reads are Bearer-token
-# gated by TailorAuthMiddleware (ADR-018); Swagger UI needs the security
-# scheme declared on those operations so the Authorize button sends
-# `Authorization: Bearer <token>`. The reads are only protected WHEN a
-# `tailored` selector is present — extra auth headers on the public surface
-# are harmless, so the declaration is unconditional here.
+# The /cv/tailor route and the `?tailored=` revision reads are JWT-gated by
+# JWTAuthMiddleware (migrated from TailorAuthMiddleware, ADR-018); Swagger UI
+# needs the security scheme declared on those operations so the Authorize button
+# sends `Authorization: Bearer <access_token>`. The reads are only protected
+# WHEN a `tailored` selector is present — extra auth headers on the public
+# surface are harmless, so the declaration is unconditional here.
 _TAILOR_SECURITY_SCHEME = {"type": "http", "scheme": "bearer"}
 _TAILOR_SECURE_OPERATIONS = {
     ("/cv/tailor", "post"),

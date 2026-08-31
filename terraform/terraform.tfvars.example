@@ -42,8 +42,8 @@ services = {
       # domain changes — keep aligned with app.<apex> from host_routing.
       CORS_ORIGINS         = "https://app.example.com"
     }
-    # Phase-1c: ES256 issuer. Private key in Secret Manager; version is
-    # "latest" for now (rotate by re-uploading + bumping below).
+    # Phase-1c: HS256 issuer (single shared secret). Secret in Secret Manager;
+    # version is "latest" for now (rotate by re-uploading + bumping below).
     # secrets = {
     #   JWT_SIGNING_KEY = { secret_id = "cv-rest-mcp-server-jwt-signing-key", version = "latest" }
     # }

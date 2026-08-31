@@ -1,0 +1,265 @@
+{
+  "title": "Company Culture Bingo",
+  "settings": {
+    "gridSize": 8,
+    "clicksToReveal": 2
+  },
+  "cells": [
+    {
+      "id": "green-01",
+      "content": "Performance Driven*Employees are encouraged to see failure as an opportunity to learn."
+    },
+    {
+      "id": "green-02",
+      "content": "Clear Vision*Everyone is aligned on the same mission."
+    },
+    {
+      "id": "green-03",
+      "content": "Embraces Failure*The best culture is driven by performance."
+    },
+    {
+      "id": "green-04",
+      "content": "Values Your Time*No pointless meetings or unnecessary overhead."
+    },
+    {
+      "id": "green-05",
+      "content": "Shows Empathy*Treats everyone with respect and empathy."
+    },
+    {
+      "id": "green-06",
+      "content": "CI/CD pipeline*Deploy to production daily, not quarterly"
+    },
+    {
+      "id": "green-07",
+      "content": "Open Communication*Communication is two-way and clear across hierarchy levels."
+    },
+    {
+      "id": "green-08",
+      "content": "Corrects Bad Behaviour*Bad behaviour is not tolerated and is corrected quickly."
+    },
+    {
+      "id": "green-09",
+      "content": "Remote-first*Built around async/distributed work, not just \"allowed\""
+    },
+    {
+      "id": "green-10",
+      "content": "Accepts Disagreement*Healthy debate is understood as critical for success."
+    },
+    {
+      "id": "green-11",
+      "content": "Value Driven*Values are acted upon, not replaced by perks like bean bags or pizza Fridays."
+    },
+    {
+      "id": "green-12",
+      "content": "Encourages Diversity*Looks for diversity of thoughts and perspectives."
+    },
+    {
+      "id": "green-13",
+      "content": "Blameless postmortems*Incidents drive improvement, not punishment"
+    },
+    {
+      "id": "green-14",
+      "content": "Empowers Employees*People are trusted to make decisions and own their work."
+    },
+    {
+      "id": "green-15",
+      "content": "Code review culture*PRs reviewed before merging to main"
+    },
+    {
+      "id": "green-16",
+      "content": "Competitive Salary*Compensation is fair and transparent."
+    },
+    {
+      "id": "green-17",
+      "content": "Open source contributions welcome*Engineers publish under their own names"
+    },
+    {
+      "id": "green-18",
+      "content": "Structured onboarding*30/60/90 day plan for new hires"
+    },
+    {
+      "id": "green-19",
+      "content": "Conference budget*Learning & development allowance for growth"
+    },
+    {
+      "id": "green-20",
+      "content": "Transparent Promotion Path*People know how growth and promotion decisions work."
+    },
+    {
+      "id": "green-21",
+      "content": "Real Work-Life Balance*Time away from work is genuinely respected."
+    },
+    {
+      "id": "green-22",
+      "content": "Clear Budgets and Tools*People have what they need to do good work."
+    },
+    {
+      "id": "green-23",
+      "content": "Remote-Friendly*Flexible location is a real policy, not a bait-and-switch."
+    },
+    {
+      "id": "green-24",
+      "content": "Internal Mobility*People grow into new roles inside the company, not just out."
+    },
+    {
+      "id": "green-25",
+      "content": "Internal tooling investment*Company invests in developer productivity"
+    },
+    {
+      "id": "green-26",
+      "content": "Clear Hiring Process*Timelines, steps, and expectations are communicated upfront."
+    },
+    {
+      "id": "red-01",
+      "content": "Dodging salary questions"
+    },
+    {
+      "id": "red-02",
+      "content": "\"We are a family\""
+    },
+    {
+      "id": "red-03",
+      "content": "Unpaid overtime"
+    },
+    {
+      "id": "red-04",
+      "content": "Entry-level, 3-5 years experience required*Senior work at junior pay"
+    },
+    {
+      "id": "red-05",
+      "content": "Unlimited PTO*Nobody actually takes vacation; untracked = unused"
+    },
+    {
+      "id": "red-06",
+      "content": "Mandatory pizza parties instead of raises"
+    },
+    {
+      "id": "red-07",
+      "content": "Salary is not listed in the job post"
+    },
+    {
+      "id": "red-09",
+      "content": "Time off is discouraged"
+    },
+    {
+      "id": "red-12",
+      "content": "\"Rockstar\" wanted*Expects one person to do the work of three."
+    },
+    {
+      "id": "red-13",
+      "content": "\"Thick skin\" required*Criticism is frequent; feedback is not constructive."
+    },
+    {
+      "id": "red-14",
+      "content": "Unpaid on-call work*You're available 24/7 but only paid 9-to-5."
+    },
+    {
+      "id": "red-15",
+      "content": "Must be passionate about the mission*Emotional investment to compensate for low pay"
+    },
+    {
+      "id": "red-16",
+      "content": "No bureaucracy / minimal process*No documented workflows, tribal knowledge only"
+    },
+    {
+      "id": "red-17",
+      "content": "Equity instead of salary*\"The startup equity will be worth millions\" — it won't."
+    },
+    {
+      "id": "red-19",
+      "content": "\"Ninja\" / \"Guru\" / \"Wizard\"*Overused titles masking unrealistic expectations."
+    },
+    {
+      "id": "red-20",
+      "content": "We are scaling rapidly*Growth without infrastructure; you will be firefighting"
+    },
+    {
+      "id": "red-21",
+      "content": "No psychological safety*Mistakes are punished, not learned from."
+    },
+    {
+      "id": "red-22",
+      "content": "\"Young and dynamic\" code*Age discrimination disguised as culture fit."
+    },
+    {
+      "id": "red-23",
+      "content": "Micromanagement disguised as transparency*Every keystroke is tracked and reported."
+    },
+    {
+      "id": "red-24",
+      "content": "Flexible hours + meetings everywhere*The flexibility is theoretical"
+    },
+    {
+      "id": "red-25",
+      "content": "Multiple rounds of unpaid interviews*5+ rounds before a decision — respect is absent."
+    },
+    {
+      "id": "red-26",
+      "content": "Non-compete clause*You can't leave without losing your career for 2 years."
+    },
+    {
+      "id": "yellow-01",
+      "content": "\"Fast-paced environment\"*Exciting for some, chaotic for others — depends on the team."
+    },
+    {
+      "id": "yellow-02",
+      "content": "\"Wear many hats\"*Growth opportunity or scope creep? It depends on boundaries."
+    },
+    {
+      "id": "yellow-03",
+      "content": "\"Work hard, play hard\"*Fun culture or an excuse for long hours?"
+    },
+    {
+      "id": "yellow-04",
+      "content": "\"Hit the ground running\"*Exciting challenge or zero onboarding?"
+    },
+    {
+      "id": "yellow-05",
+      "content": "\"Self-starter\" needed*Autonomy or abandonment? Depends on support."
+    },
+    {
+      "id": "yellow-06",
+      "content": "\"Startup culture\"*Scrappy innovation or chaotic disorganisation?"
+    },
+    {
+      "id": "yellow-07",
+      "content": "Flexible working hours*Freedom to manage your time — or always-on expectations?"
+    },
+    {
+      "id": "yellow-08",
+      "content": "Flat hierarchy*Close to leadership or missing mentorship structure?"
+    },
+    {
+      "id": "yellow-09",
+      "content": "\"Competitive environment\"*Drives excellence or breeds internal rivalry?"
+    },
+    {
+      "id": "yellow-10",
+      "content": "Agile environment*Genuine iterative dev or just standups with no planning?"
+    },
+    {
+      "id": "yellow-11",
+      "content": "Startup mentality*Honest at 30 people, red flag at 500"
+    },
+    {
+      "id": "yellow-12",
+      "content": "Equity / stock options*Life-changing or worthless lottery tickets?"
+    },
+    {
+      "id": "yellow-13",
+      "content": "Move fast*Fine for MVP, dangerous for fintech/healthcare"
+    },
+    {
+      "id": "yellow-14",
+      "content": "On-call is shared by the team*Fair rotation or always-on?"
+    },
+    {
+      "id": "yellow-15",
+      "content": "Overcommitted deadlines*Ambition or poor planning?"
+    },
+    {
+      "id": "yellow-16",
+      "content": "Flexible work arrangement*Trust-based or policy changes every 6 months?"
+    }
+  ]
+}
