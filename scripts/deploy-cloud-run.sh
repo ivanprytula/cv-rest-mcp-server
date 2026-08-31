@@ -167,7 +167,7 @@ bootstrap_secrets() {
     local runtime_sa="${SVC_NAME}-runtime@${GCP_PROJECT}.iam.gserviceaccount.com"
     local deploy_sa="${SVC_NAME}-deployer@${GCP_PROJECT}.iam.gserviceaccount.com"
     log "Ensuring Secret Manager secrets exist"
-    for secret in cv-jwt-signing-key cv-refresh-token-pepper cv-tailor-bearer-token; do
+    for secret in cv-jwt-signing-key cv-refresh-token-pepper; do
         if gcloud secrets describe "$secret" --project "$GCP_PROJECT" >/dev/null 2>&1; then
             echo "$secret exists, skipping create"
         else
@@ -232,11 +232,10 @@ deploy() {
     log "Deploying $SVC_NAME to $GCP_REGION"
     # --set-env-vars REPLACES all vars every time: this line is the single
     # source of truth for runtime config. Contact_* come from .env via
-    # just's dotenv-load (empty = omitted from Swagger UI).
-    # TAILOR_BEARER_TOKEN comes from .env; empty = /cv/tailor returns 503
-    # (fail-closed by design). For higher-security deployments, replace the
-    # inline value with a Secret Manager reference (--set-secrets) — the
-    # env-var name stays the same so the app code does not change.
+    # just's dotenv-load (empty = omitted from Swagger UI). For higher-security
+    # deployments, replace the inline values with Secret Manager references
+    # (--set-secrets) — the env-var names stay the same so the app code does
+    # not change.
     gcloud run deploy "$SVC_NAME" \
         --project "$GCP_PROJECT" --region "$GCP_REGION" --quiet \
         --image "gcr.io/${GCP_PROJECT}/${SVC_NAME}" \
@@ -244,7 +243,7 @@ deploy() {
         --allow-unauthenticated \
         --cpu 1 --memory 512Mi \
         --max-instances 1 \
-        --set-secrets "JWT_SIGNING_KEY=cv-jwt-signing-key:latest,REFRESH_TOKEN_PEPPER=cv-refresh-token-pepper:latest,TAILOR_BEARER_TOKEN=cv-tailor-bearer-token:latest" \
+        --set-secrets "JWT_SIGNING_KEY=cv-jwt-signing-key:latest,REFRESH_TOKEN_PEPPER=cv-refresh-token-pepper:latest" \
         --set-env-vars "TRUST_PROXY=true,CLIENT_IP_XFF_ENTRY=2,BLOCKED_IPS_FILE=config/blocked_geo.txt,FAILBAN_THRESHOLD=6,CV_DATA_GCS_URI=gs://${CV_BUCKET}/cv.json,CV_REFRESH_SECONDS=30,CONTACT_NAME=${CONTACT_NAME:-},CONTACT_EMAIL=${CONTACT_EMAIL:-}"
 }
 
@@ -342,7 +341,7 @@ wif() {
         || echo "Runtime SA binding already present"
 
     # Allow deployer to read secrets for deployment injection.
-    for secret in cv-jwt-signing-key cv-refresh-token-pepper cv-tailor-bearer-token; do
+    for secret in cv-jwt-signing-key cv-refresh-token-pepper; do
         gcloud secrets add-iam-policy-binding "$secret" \
             --project "$GCP_PROJECT" --member="serviceAccount:$deploy_sa" \
             --role=roles/secretmanager.secretAccessor --condition=None >/dev/null

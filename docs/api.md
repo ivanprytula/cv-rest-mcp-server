@@ -170,9 +170,10 @@ payload wins for the JSON format).
 - `401 Unauthorized` — missing `Authorization` header, malformed header (anything
   other than `Bearer <token>`), or invalid token. Every 401 response carries
   `WWW-Authenticate: Bearer` so clients know the required scheme. The token is
-  configured via `TAILOR_BEARER_TOKEN` (inline, dev) or `TAILOR_BEARER_TOKEN_FILE`
-  (one-line file, production). Comparison is constant-time via `secrets.compare_digest`;
-  the token is never logged.
+  a JWT issued by `POST /api/v1/auth/token` (operator login); the access token
+  must carry `role=admin`. The signing key is `JWT_SIGNING_KEY` (HS256,
+  Secret Manager in production). The presented token is never logged.
+- `403 Forbidden` — token is valid but does not carry the required `admin` role.
 - `413 Payload Too Large` — body exceeds the 10 MB cap.
 - `422 Unprocessable Entity` — malformed JSON, corrupt/undecodable PDF/DOCX, or
   empty `jd_text`.
@@ -181,24 +182,27 @@ payload wins for the JSON format).
   internals leaked), or the skill bank is missing/malformed (a broken bank aborts
   the call loudly instead of emitting an empty skills section).
 - `503 Service Unavailable` — either the CV source / PDF service is not
-  initialized, **or** `TAILOR_BEARER_TOKEN` is not configured (the endpoint is
+  initialized, **or** `JWT_SIGNING_KEY` is not configured (the endpoint is
   fail-closed; this is intentional, not an outage).
 
 ```bash
-# raw text (bearer token required)
+# raw text (admin JWT required)
+TOKEN="$(curl -s -X POST https://<origin>/api/v1/auth/token \
+  -H 'content-type: application/json' \
+  -d '{"username":"operator","password":"..."}' | jq -r .access_token)"
 curl -s -X POST "https://<origin>/cv/tailor" \
-  -H "authorization: Bearer $TAILOR_BEARER_TOKEN" \
+  -H "authorization: Bearer $TOKEN" \
   -H "content-type: text/plain" --data-binary @jd.txt
 
 # JSON
 curl -s -X POST "https://<origin>/cv/tailor" \
-  -H "authorization: Bearer $TAILOR_BEARER_TOKEN" \
+  -H "authorization: Bearer $TOKEN" \
   -H "content-type: application/json" \
   -d '{"jd_text": "Required: Python, FastAPI", "title": ""}'
 
 # PDF / DOCX
 curl -s -X POST "https://<origin>/cv/tailor" \
-  -H "authorization: Bearer $TAILOR_BEARER_TOKEN" \
+  -H "authorization: Bearer $TOKEN" \
   -H "content-type: application/pdf" --data-binary @jd.pdf
 ```
 
@@ -211,20 +215,21 @@ three read endpoints by passing `tailored`:
   `saved_to` (e.g. `cv_tailored-2026-08-29_10-00-00.json`), or
 - `tailored=latest` — the most recently written revision.
 
-Because revisions can contain JD-derived content, these calls are Bearer-gated
-like the mutation route (fail-closed `503` when `TAILOR_BEARER_TOKEN` is unset).
-Use the Authorization header for scripts, or `?token=` when the request comes
-from a browser iframe (the `/cv/preview` toolbar does this for you). `tailored`
-only names a `.json` file directly inside the revisions dir — path separators
-are rejected with `404`, so no traversal beyond that dir is possible.
+Because revisions can contain JD-derived content, these calls are gated by the
+same JWT flow as the mutation route (the `?tailored=` selector requires the
+`cv:read` scope — both admin and any future user roles have it). Use the
+Authorization header for scripts, or `?token=` when the request comes from a
+browser iframe (the `/cv/preview` toolbar does this for you). `tailored` only
+names a `.json` file directly inside the revisions dir — path separators are
+rejected with `404`, so no traversal beyond that dir is possible.
 
 ```bash
 # render the latest revision as HTML/PDF/preview (header auth)
 curl -s "https://<origin>/cv/pdf?theme=minimal&tailored=latest" \
-  -H "authorization: Bearer $TAILOR_BEARER_TOKEN" -o tailored.pdf
+  -H "authorization: Bearer $TOKEN" -o tailored.pdf
 
 # preview page for a specific revision (query auth for the embedded iframe)
-open "https://<origin>/cv/preview?theme=classic&tailored=cv_tailored-2026-08-29_10-00-00.json&token=$TAILOR_BEARER_TOKEN"
+open "https://<origin>/cv/preview?theme=classic&tailored=cv_tailored-2026-08-29_10-00-00.json&token=$TOKEN"
 ```
 
 ---
@@ -268,12 +273,12 @@ logout are the three endpoints exempted (they carry their own credential). Every
 
 Classic username + password login for the single operator.
 
-| Item        | Value                                                                                                  |
-| ----------- | ------------------------------------------------------------------------------------------------------ |
-| Content-Type| `application/json`                                                                                     |
-| Body        | `{"username": "operator", "password": "<operator password>"}`                                          |
-| Success     | `200` — `TokenPair`: `{access_token, token_type, expires_in}`; sets the `__Host-refresh_token` cookie  |
-| Errors      | `401` (invalid username or password — same generic message for both, so the accepted username is never revealed), `422` |
+| Item         | Value                                                                                          |
+| ------------ | ---------------------------------------------------------------------------------------------- |
+| Content-Type | `application/json`                                                                             |
+| Body         | `{"username": "operator", "password": "<operator password>"}`                                 |
+| Success      | `200` — `TokenPair`: `{access_token, token_type, expires_in}`; sets the `__Host-refresh_token` cookie |
+| Errors       | `401` (invalid username or password — same generic message for both, so the accepted username is never revealed), `422` |
 
 Fail-closed: with no user in the store (no `FIRST_ADMIN_*` seed at startup,
 ADR-022 Phase 2), login returns `401` with a generic `Invalid credentials` — it
@@ -291,10 +296,10 @@ curl -s -X POST "https://api.<apex>/api/v1/auth/token" \
 Rotate the refresh token and issue a new access token. Reads the `__Host-`
 httpOnly cookie (same-origin or the pinned SPA origin via credentialed CORS).
 
-| Item        | Value                                                                                                |
-| ----------- | ---------------------------------------------------------------------------------------------------- |
-| Credentials | `__Host-refresh_token` cookie (required)                                                             |
-| Success     | `200` — new `TokenPair`; a **rotated** refresh cookie is set                                         |
+| Item        | Value                                                                                          |
+| ----------- | ---------------------------------------------------------------------------------------------- |
+| Credentials | `__Host-refresh_token` cookie (required)                                                       |
+| Success     | `200` — new `TokenPair`; a **rotated** refresh cookie is set                                      |
 | Errors      | `401` (missing cookie, unknown token, or **replay** — reusing a rotated token revokes the whole family) |
 
 Replay detection: presenting a previously-rotated refresh token revokes the
@@ -310,18 +315,18 @@ curl -s -X POST "https://api.<apex>/api/v1/auth/refresh" \
 
 Revoke the refresh-token family and clear the cookie.
 
-| Item        | Value                |
-| ----------- | -------------------- |
-| Credentials | `__Host-refresh_token` cookie (optional) |
-| Success     | `204` (cookie cleared; family revoked) |
-| Errors      | none                 |
+| Item        | Value                                       |
+| ----------- | ------------------------------------------- |
+| Credentials | `__Host-refresh_token` cookie (optional)    |
+| Success     | `204` (cookie cleared; family revoked)      |
+| Errors      | none                                        |
 
 ### `GET /api/v1/auth/me`
 
 Return the operator identity + scopes from a valid access token.
 
-| Item        | Value                                                    |
-| ----------- | -------------------------------------------------------- |
-| Credentials | `Authorization: Bearer <access_token>` (required)        |
-| Success     | `200` — `{"subject": "operator", "scopes": ["cv:read", "cv:manage"]}` |
-| Errors      | `401` (missing/invalid/expired token), `503` (auth unconfigured) |
+| Item        | Value                                                                    |
+| ----------- | ------------------------------------------------------------------------ |
+| Credentials | `Authorization: Bearer <access_token>` (required)                        |
+| Success     | `{"subject": "operator", "scopes": ["cv:read", "cv:manage"]}`            |
+| Errors      | `401` (missing/invalid/expired token), `503` (auth unconfigured)         |

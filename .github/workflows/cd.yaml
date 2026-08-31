@@ -109,7 +109,6 @@ jobs:
           CONTACT_NAME: ${{ vars.CONTACT_NAME }}
           CONTACT_EMAIL: ${{ vars.CONTACT_EMAIL }}
           # Deploys are CD-only now (no manual .sh).
-          # TAILOR_BEARER_TOKEN is now injected via Secret Manager.
         run: scripts/deploy-cloud-run.sh deploy
 
       - name: Verify and print URL
