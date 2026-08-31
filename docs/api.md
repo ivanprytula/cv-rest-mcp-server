@@ -26,6 +26,8 @@ from code; this document is the readable form of that contract.
   (a browser iframe cannot send an Authorization header); the mutation route is
   header-only. Every 401 carries `WWW-Authenticate: Bearer`. All other endpoints
   are unauthenticated; `CORS` is public-read (wildcard origin, no credentials).
+  The private console auth lives under `/api/v1/auth/*` (see the Auth section
+  below).
 - **Infra**: `GET /health` is exempt from access gate and rate limits.
 
 ## Status codes
@@ -247,3 +249,79 @@ Liveness / source probe (bypasses access control and limits).
 | ------- | -------------------------------------------------------------------------------------- |
 | Success | `200` — `{"status": "ok", "cv_source": "file" \| "gcs" \| "placeholder" \| "unknown"}` |
 | Errors  | none                                                                                   |
+
+---
+
+## Auth (`/api/v1/auth/*`)
+
+Private operator console auth (Phase 1c, ADR-022). Transport: the **access
+token** is returned in the JSON body and must be sent as
+`Authorization: Bearer <token>`; the **refresh token** is an `__Host-` httpOnly,
+Secure, SameSite=None cookie (`Path=/`) consumed only by
+`POST /api/v1/auth/refresh`.
+
+The `/api/v1/*` namespace is gated by `JWTAuthMiddleware`; login, refresh, and
+logout are the three endpoints exempted (they carry their own credential). Every
+401 carries `WWW-Authenticate: Bearer`.
+
+### `POST /api/v1/auth/token` (login)
+
+Classic username + password login for the single operator.
+
+| Item        | Value                                                                                                  |
+| ----------- | ------------------------------------------------------------------------------------------------------ |
+| Content-Type| `application/json`                                                                                     |
+| Body        | `{"username": "operator", "password": "<operator password>"}`                                          |
+| Success     | `200` — `TokenPair`: `{access_token, token_type, expires_in}`; sets the `__Host-refresh_token` cookie  |
+| Errors      | `401` (invalid username or password — same generic message for both, so the accepted username is never revealed), `422` |
+
+Fail-closed: with no user in the store (no `FIRST_ADMIN_*` seed at startup,
+ADR-022 Phase 2), login returns `401` with a generic `Invalid credentials` — it
+never reveals whether auth is configured.
+
+```bash
+curl -s -X POST "https://api.<apex>/api/v1/auth/token" \
+  -H "content-type: application/json" \
+  -d '{"username":"operator","password":"$OPERATOR_PASSWORD"}' \
+  -c cookies.txt
+```
+
+### `POST /api/v1/auth/refresh`
+
+Rotate the refresh token and issue a new access token. Reads the `__Host-`
+httpOnly cookie (same-origin or the pinned SPA origin via credentialed CORS).
+
+| Item        | Value                                                                                                |
+| ----------- | ---------------------------------------------------------------------------------------------------- |
+| Credentials | `__Host-refresh_token` cookie (required)                                                             |
+| Success     | `200` — new `TokenPair`; a **rotated** refresh cookie is set                                         |
+| Errors      | `401` (missing cookie, unknown token, or **replay** — reusing a rotated token revokes the whole family) |
+
+Replay detection: presenting a previously-rotated refresh token revokes the
+entire token family; subsequent refreshes with any token in that family return
+`401`.
+
+```bash
+curl -s -X POST "https://api.<apex>/api/v1/auth/refresh" \
+  -b cookies.txt -c cookies.txt
+```
+
+### `POST /api/v1/auth/logout`
+
+Revoke the refresh-token family and clear the cookie.
+
+| Item        | Value                |
+| ----------- | -------------------- |
+| Credentials | `__Host-refresh_token` cookie (optional) |
+| Success     | `204` (cookie cleared; family revoked) |
+| Errors      | none                 |
+
+### `GET /api/v1/auth/me`
+
+Return the operator identity + scopes from a valid access token.
+
+| Item        | Value                                                    |
+| ----------- | -------------------------------------------------------- |
+| Credentials | `Authorization: Bearer <access_token>` (required)        |
+| Success     | `200` — `{"subject": "operator", "scopes": ["cv:read", "cv:manage"]}` |
+| Errors      | `401` (missing/invalid/expired token), `503` (auth unconfigured) |

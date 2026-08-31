@@ -23,6 +23,5 @@ def test_gen_secrets_script_execution():
         text=True,
         check=True,
     )
-    assert "TAILOR_BEARER_TOKEN:" in result.stdout
     assert "JWT_SIGNING_KEY:" in result.stdout
     assert "REFRESH_TOKEN_PEPPER:" in result.stdout

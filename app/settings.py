@@ -63,18 +63,42 @@ class Settings(BaseSettings):
     failban_ban_seconds: int = 1800
     failban_max_tracked: int = 10000
 
-    # Bearer-token auth for POST /cv/tailor. Single-operator use: ONE token,
-    # fail-closed. TAILOR_BEARER_TOKEN_FILE is preferred for production so
-    # the secret never lands in shell history or process listings; the inline
-    # value is a convenience for dev. When both are set, the file wins. Read
-    # once at startup; rotate by restarting the service. Enforced only by
-    # TailorAuthMiddleware — does not affect any other route.
-    tailor_bearer_token: str = ""
-    tailor_bearer_token_file: Path | None = None
-
     # Phase-1c Auth secrets.
     jwt_signing_key: str = ""
     refresh_token_pepper: str = ""
+
+    # Phase-1c JWT auth configuration (ADR-022).
+    # jwt_audience/jwt_issuer: claim values stamped on issued tokens and checked
+    #   on verify. api-core is the issuer and (for the interim slice) its only
+    #   verifier; any service that must validate later is handed the shared
+    #   JWT_SIGNING_KEY.
+    # cors_origin: pinned SPA origin for the single credentialed-CORS endpoint
+    #   (/api/v1/auth/refresh). Public-route CORS stays wildcard/credential-less.
+    # jwt_signing_key: the single shared HS256 secret. api-core signs and
+    #   validates with it, and every microservice that must validate a token is
+    #   given the same value (deliberate HS256 choice for easy horizontal scaling
+    #   of stateless services — a plain inline .env value, no PEM key management).
+    #   Fail-closed: when unset, auth 503s.
+    # user_db_path: SQLite file backing the User store (see app/auth/user_store.py;
+    #   Phase 2+ swaps to Postgres). Fail-closed: a configured FIRST_ADMIN_* but
+    #   missing user_db is a config error surfaced at startup.
+    # first_admin_username/email/password: env-driven, idempotent first-admin
+    #   seed on startup (seed.skip if password unset — fail-open on seeding).
+    #   The *_FILE variants prefer Secret Manager mounted files in production so
+    #   the plaintext password never lands in shell history/process listings.
+    # access_token_ttl_minutes / refresh_token_ttl_days: lifetimes; refresh
+    #   rotates per use with family reuse-detection in the in-memory store.
+    jwt_audience: str = "cv-rest-mcp-server"
+    jwt_issuer: str = "https://api.example.com"
+    cors_origin: str = "https://app.example.com"
+    jwt_signing_key: str = ""
+    user_db_path: Path = Path("data/cv_auth.db")
+    first_admin_username: str = "operator"
+    first_admin_email: str = "operator@example.com"
+    first_admin_password: str = ""
+    first_admin_password_file: Path | None = None
+    access_token_ttl_minutes: int = 10
+    refresh_token_ttl_days: int = 30
 
     # Skill bank used by POST /cv/tailor and the MCP match_jd tool. Lazy-loaded
     # on first use and memoized per (path, mtime). Defaults are dev-friendly;

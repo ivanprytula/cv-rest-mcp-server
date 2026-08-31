@@ -524,7 +524,7 @@ async def test_tailored_pdf_uses_revision(client, override_pdf_service, syntheti
 
 
 async def test_tailored_preview_forwards_revision(
-    client, override_pdf_service, synthetic_cv
+    client, override_pdf_service, synthetic_cv, admin_access_token
 ):
     from app.settings import settings
 
@@ -534,13 +534,13 @@ async def test_tailored_preview_forwards_revision(
     rev_path.write_text(json.dumps(revision), encoding="utf-8")
 
     resp = await client.get(
-        "/cv/preview?tailored=cv_tailored-2026-08-29_10-00-00.json&token=test-token"
+        f"/cv/preview?tailored=cv_tailored-2026-08-29_10-00-00.json&token={admin_access_token}"
     )
     assert resp.status_code == status.HTTP_200_OK
     assert "Tailored Jane" in resp.text
     # the iframe + links carry the token so the browser can fetch them
     assert "tailored=cv_tailored-2026-08-29_10-00-00.json" in resp.text
-    assert "token=test-token" in resp.text
+    assert f"token={admin_access_token}" in resp.text
 
 
 async def test_tailored_revision_rejects_non_basename_paths(

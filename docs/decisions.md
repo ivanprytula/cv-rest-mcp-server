@@ -307,53 +307,37 @@ templates are structurally unable to reach network or filesystem resources;
 the builder binary is immutable per rebuild. Cost: two private helpers and a
 digest that must be bumped deliberately when uv updates.
 
-## ADR-018: Bearer-token auth for `POST /cv/tailor`
+## ADR-018: Bearer-token auth for `POST /cv/tailor` — superseded by ADR-022
 
-**Context.** The `/cv/tailor` endpoint exists to match a job description
-against the skill bank. The endpoint is otherwise public, which is fine for
-the existing scope (the live CV is the public surface; the tailor flow is
-read-only against the live CV). However, the endpoint consumes a
-`cv_baseline.json` skill bank and writes `cv_tailored-<ts>.json`
-revisions — both of which raise the operator's risk profile: anyone on
-the internet could trigger tailoring and write revision files, and the
-baseline is a source of atoms that affect what recruiters see in tailored
-outputs.
+**Status.** Superseded.
 
-**Options considered.**
+The static-bearer-token approach described below was implemented in an
+earlier phase but has since been migrated into the JWT auth system
+(ADR-022). The `app/tailor_auth.py` file no longer exists; `TailorAuthMiddleware`
+has been removed. The tailoring surface is now protected by `JWTAuthMiddleware`
+alongside the `/api/v1/*` namespace.
 
-1. *IP allowlist via `TailorGuardMiddleware`* — mirrors the existing
-   `GuardMiddleware` shape. Rejected: adds new CIDR parsing/inline+file
-   plumbing, requires the operator to know their egress IP (which
-   changes on Cloud Run), and creates a maintenance burden without
-   buying meaningful security beyond what global `GuardMiddleware`
-   already provides.
-2. *OAuth / session auth* — proper identity. Rejected as overkill for a
-   single-operator endpoint; deferred to a separate project.
-3. *Bearer token via dedicated `TailorAuthMiddleware`* (chosen).
-   Single static token, `Authorization: Bearer <token>`, constant-time
-   compare via `secrets.compare_digest`, fail-closed on missing config.
-   ~50 lines, no new dependencies, works from any IP.
+**What was decided (historical).**
 
-**Decision.** `app/tailor_auth.py::TailorAuthMiddleware`. Path-scoped
-to `POST /cv/tailor` only; mounted between `GuardMiddleware` and
-`SecurityHeadersMiddleware` in `app/main.py` so the global guard still
-applies (geo/failban/service-hours) and the 401/503 responses still
-carry CSP/SAMEORIGIN headers. Token resolved at request time from
-`settings.tailor_bearer_token` (inline) or
-`settings.tailor_bearer_token_file` (file form, preferred for prod,
-file wins on conflict). The presented token is never logged. The
-middleware is a no-op on every other route — the scope test in
-`tests/test_tailor_auth.py` is the regression guard for that.
+`app/tailor_auth.py::TailorAuthMiddleware`. Single static token,
+`Authorization: Bearer <token>`, constant-time compare via
+`secrets.compare_digest`, fail-closed on missing config. Path-scoped to
+`POST /cv/tailor`; mounted between `GuardMiddleware` and
+`SecurityHeadersMiddleware` so global guard policies and security headers
+still applied. Token resolved from `settings.tailor_bearer_token` (inline)
+or `settings.tailor_bearer_token_file` (file form, preferred for prod).
 
-**Consequences.** `/cv/tailor` is no longer callable anonymously; the
-public surface (`/cv`, `/cv/html`, `/cv/pdf`, `/cv/preview`, `/health`,
-MCP tools) is unchanged. Operationally: a misconfigured deploy returns
-503 (fail-closed), not 401; the startup log line warns when the token
-is unset. Rotation: restart the service with a new `TAILOR_BEARER_TOKEN`
-value. For higher-security deployments, the deploy script can replace
-the inline value with a Secret Manager reference via `--set-secrets`
-without changing app code. Single static token, no replay protection,
-no per-user audit — acceptable for single-operator, not for multi-user.
+**Migration (ADR-022).** `JWTAuthMiddleware` now gates the tailoring surface:
+
+- `POST /cv/tailor` — requires a JWT with `role=admin` (presented via
+  `Authorization: Bearer` header only; never in a URL or log).
+- `GET /cv/html|pdf|preview` with `?tailored=` selector — requires a JWT
+  with `cv:read` scope, via `Authorization: Bearer` header or via `?token=`
+  query param (the preview iframe cannot send headers).
+
+Both require a valid JWT signed by the api-core HS256 secret; unauthenticated
+requests return 401, wrong role/scope return 403, missing signing key returns
+503 (fail-closed).
 
 ## ADR-019: Bank-driven tailoring — `/cv/tailor` converges on the skill bank
 
@@ -565,3 +549,232 @@ bucket" invariant, which is the permission surface the later upload UI depends
 on. The CDN origin is an explicit, allowlisted exception — a future reviewer
 adding another public bucket will get a hard failure until they justify and
 allowlist it.
+
+## ADR-022: Operator JWT auth for the private console (Phase 1c)
+
+**Context.** Phase 1d builds a private React SPA (`app.<apex>`) where the operator
+manages JDs and tailored CV revisions. It needs authentication, but the current
+surface has only `TailorAuthMiddleware` (one static bearer token for
+`POST /cv/tailor` + `?tailored=` reads). The plan (see the Phase-1 handoff) froze
+a "Bearer + CORS transport, stateless-JWT microservices pattern, with a hybrid
+refresh token". This ADR records how that is implemented — including the
+**scope simplification from the original plan: HS256 (symmetric, single shared
+secret) replaces ES256 (asymmetric, public-key-pinned verifiers)** for Phase 1c,
+and the **in-memory refresh store** swap. Both are deferred to Phase 3+.
+
+**Options considered.**
+
+1. *Cookie-only server sessions.* Rejected: needs a shared session store (Redis
+   / DB reads on every request) and couples cross-service validators.
+2. *Memory-only refresh (re-login per reload).* Kept as a documented fallback;
+   rejected as the primary because the SPA would log the operator out on every
+   page reload and cannot reuse a single long-lived session across tabs.
+3. *Password hashing vs pre-generated token.* The `tailor` surface used a
+   static token (ADR-018, since superseded); for the console the operator logs
+   in with a **password** (bcrypt-hashed), which is the natural UX for an
+   interactive SPA and lets the access/refresh model apply.
+4. *Asymmetric signing (ES256, original plan).* The frozen plan picked ES256
+   with the private key held by api-core (Secret Manager) and public-key-pinned
+   verifiers in other services. **Deferred to Phase 3+** (when there is more
+   than one validating service). For Phase 1c, HS256 (symmetric, single shared
+   `JWT_SIGNING_KEY`) is used; the secret distribution problem is moot because
+   api-core is the only verifier. When the second validating service appears,
+   the ES256 swap is local: `app/auth/crypto.py` exposes `sign_access_token` /
+   `verify_access_token` as the only seam, and `_REQUIRED_SCHEME` is the single
+   constant to flip. HS256 is not a security regression at single-service scale
+   (no extra validators to compromise), only a key-management simplification.
+
+**Decision.**
+
+- **Stateless HS256 access tokens (single shared secret) — supersedes the
+  ES256 plan.** api-core is the issuer and — for Phase 1c — its **only**
+  verifier, signing and verifying with the same `JWT_SIGNING_KEY` HS256 secret.
+  HS256 (symmetric) is the deliberate simplification of the original ES256
+  plan (frozen Phase 1 handoff, top of this ADR): every replica holds the same
+  plain inline `.env` secret (no PEM key management), and there is no second
+  validating service yet, so secret distribution is a non-issue. The trade-off
+  — a validator holding the secret could also forge tokens — is moot at this
+  scale; it becomes real at the Phase 3+ milestone when `api-games` /
+  `workers` need to verify, at which point the ES256 swap is a one-file change
+  (`_REQUIRED_SCHEME` in `app/auth/crypto.py`). Tokens carry
+  `sub=<username>`, `role=<role>`, `iss`/`aud` from `JWT_ISSUER`/`JWT_AUDIENCE`,
+  `iat`/`exp`, and a `scope` claim (`cv:read cv:manage`). TTL 10 min
+  (`ACCESS_TOKEN_TTL_MINUTES`).
+- **Access token transport.** Returned in the login/refresh JSON body; kept
+  memory-only by the SPA (never localStorage/sessionStorage, which are XSS
+  antipatterns); sent as `Authorization: Bearer` on subsequent requests.
+- **Hybrid refresh token.** A random opaque 64-byte string
+  (`secrets.token_urlsafe`), delivered as a `__Host-refresh_token` cookie
+  (`HttpOnly; Secure; Path=/; SameSite=None`), 30 d TTL. The `__Host-` prefix
+  *requires* `Path=/` (a narrower path would be rejected by the browser), so the
+  cookie is sent on every request — but it is httpOnly, so JS never sees it, and
+  only the server-side refresh/logout endpoints consume it. It is consumed
+  **only** by `POST /api/v1/auth/refresh`; it never touches JS storage.
+  SameSite=None + Secure is required so the `app.<apex>` SPA can call the
+  `api.<apex>` refresh endpoint cross-origin with credentials.
+- **Rotation + family reuse-detection.** Every successful refresh rotates the
+  refresh token (a new random value is issued). Presenting a previously-issued
+  but now-rotated token is treated as a **replay** and revokes the entire family
+  (the defense against stolen refresh tokens). Refresh tokens are stored **hashed**
+  (SHA-256 + `REFRESH_TOKEN_PEPPER`) via hmac, never in plaintext.
+- **Refresh store = in-memory, single-process (`RefreshTokenStore`).** Postgres
+  (Phase 2) replaces it; the store is deliberately behind a small class so the
+  swap is local. It resets on restart, acceptable for the single-operator scale.
+- **Login = classic username + password backed by a user store (Phase 2).** The
+  login body is `{"username", "password"}`. Users live in a SQLite DB
+  (`USER_DB_PATH`) via a SQLAlchemy **async** ORM + aiosqlite; at startup the
+  lifespan idempotently seeds a first admin from `FIRST_ADMIN_USERNAME/EMAIL/
+  PASSWORD(_FILE)` (the template's `init_db()` pattern, async-native). The
+  password is stored as a bcrypt hash and verified via `bcrypt.checkpw`
+  (constant-time per-hash); an unknown username runs a dummy compare so a wrong
+  username and a wrong password take ~the same time and return the same generic
+  401 — neither a user's existence nor whether auth is configured can be probed.
+  **Fail-closed**: with no user in the store, login returns 401. The domain
+  `User.scopes` derives JWT scopes from roles (`admin` → `cv:read cv:manage`).
+  Borrowed from the full-stack template's model/schema split + `crud.authenticate`.
+- **Token subject = username.** The access token's `sub` is the logged-in
+  username; the refresh-token family records its owning subject, so refresh
+  re-issues an access token for the same user without a re-login. `/me` returns
+  that subject.
+- **Middleware: `JWTAuthMiddleware` (pure ASGI).** Gates the `/api/v1/*`
+  namespace only — the public CV surface and `TailorAuth`'s routes are untouched.
+  Login (`/api/v1/auth/token`), refresh, and logout are exempt (they carry their
+  own auth material: password / httpOnly refresh cookie). Verified claims are
+  injected into `scope["auth"]` for route handlers. Fail-closed 503 when the
+  signing key is unset; 401 + `WWW-Authenticate: Bearer` on missing/invalid
+  tokens. Mounted between `GuardMiddleware` and `TailorAuthMiddleware` so global
+  geo/failban/service-hours still apply and 401/503 responses still carry
+  security headers.
+- **Credentialed CORS is an explicit exception.** `CredentialedCORSMiddleware`
+  pins `Access-Control-Allow-Origin` to `CORS_ORIGIN` (the SPA) with
+  `Access-Control-Allow-Credentials: true` **only** for `/api/v1/auth/refresh`
+  (preflight and actual), overriding the wildcard `*` from the inner
+  credential-less CORSMiddleware (credentials + `*` is invalid per spec). Every
+  other route keeps the public wildcard, credential-less CORS.
+- **Scopes + roles.** Access tokens carry `scope` (`cv:read cv:manage`) and a
+  `role` claim. The `role` claim is the second authorization axis: `admin`
+  gates the `POST /cv/tailor` mutation (replaces the prior static-token gate,
+  ADR-018), `cv:read` gates the `?tailored=` revision reads. Both roles have
+  `cv:read`; only `admin` can mutate. `GET /api/v1/auth/me` returns identity,
+  role, and scopes for the SPA to branch UI on.
+
+**Forward path (Phase 3+).** Two simplifications from the original Phase 1c
+plan are deferred:
+
+- **HS256 → ES256 swap.** When a second service (`api-games`, `workers`)
+  needs to verify tokens, the `_REQUIRED_SCHEME` constant in
+  `app/auth/crypto.py` flips to ES256; api-core gets a private key from
+  Secret Manager; verifiers pin the public key. The token shape, refresh
+  rotation, and `JWTAuthMiddleware` are unaffected. Today HS256 is not a
+  security regression (no extra validators to compromise), only a
+  key-management simplification.
+- **In-memory refresh store → Postgres.** `RefreshTokenStore` (single
+  process, resets on restart) is replaced by a `RefreshTokenRepository`
+  backed by Cloud SQL; the class is small and already behind the seam.
+
+The DB-backed user model is live (Phase 2, see ADR-023); the remaining
+evolution adds roles/scopes/groups and resource-access areas (e.g. RBAC/ABAC
+across JD library, tailored revisions, upload storage). To keep that
+evolution local and reversible: identity→claims derivation is concentrated
+at the store seam — `app/auth/user_store.py` `UserService`/`UserRepository`
+(swap roles→scope mapping there; JWT shape, refresh rotation, and the
+middleware are unaffected). Scope + role claims already round-trip through
+the token and `/me`, so role→scope mapping can grow without token-format
+churn. The concrete sketch is in `docs/phase2-auth-pattern.md`, adapted
+from the FastAPI full-stack template.
+
+Two behaviors from that pattern are live: login runs the user's bcrypt compare,
+and an unknown username runs a **dummy bcrypt compare** (not a short-circuit)
+so a wrong username and a wrong password take ~the same time without revealing
+which failed — `authenticate()` in `app/auth/user_store.py`.
+
+**Consequences.** Operator gets a working login/refresh/logout/me surface on
+`/api/v1/auth/*` that the Phase 1d SPA consumes. The refresh cookie protects the
+SPA from XSS-driven token theft; rotation+reuse-detection protects against token
+replay; stateless HS256 means no auth round-trip for other services later. The
+in-memory refresh store loses families on restart (re-login required, acceptable
+now), and the single shared secret means any later validating service verifies
+with that same secret (no separate key-management path to build).
+
+**Tailoring surface migration (post-Phase-1d).** `TailorAuthMiddleware`
+(`app/tailor_auth.py`, ADR-018) has been **removed**. The tailoring surface is
+now protected by `JWTAuthMiddleware` (ADR-022), with role/scope split:
+
+- `POST /cv/tailor` — requires a JWT with `role=admin` (Authorization header
+  only; never URL/log).
+- `GET /cv/html|pdf|preview` with `?tailored=` selector — requires a JWT with
+  `cv:read` scope, via Authorization header or via `?token=` query param (the
+  preview iframe cannot send headers).
+
+All `TAILOR_BEARER_TOKEN*` settings, the static-token file plumbing, and the
+TailorAuth tests have been deleted. The role-gated admin mutation is the
+direct replacement for the previous static-token gate; the `cv:read`-gated
+revision reads (which used the same static token) now require an actual login
+session. This is the only path by which a tailored revision becomes readable,
+which is the privacy guarantee the static token was originally approximating.
+
+## ADR-023: Phase-2 DB preparation — user model on SQLite, repo/secrets seams
+
+**Context.** Phase 2 introduces Cloud SQL Postgres + Alembic + a
+`Repository` facade (per the frozen plan, with expand-contract file
+fallback so the operator's hand-edit of `data/cv.json` and offline
+file-backed tests keep working). The user model and bcrypt-hashed
+passwords are the first consumers of a real DB; everything else still
+reads files. This ADR records the seams laid down during Phase 1c so the
+Phase-2 swap is local.
+
+**Options considered.**
+
+1. *Skip the DB until Phase 2.* Rejected: the operator needs to log in
+   to the Phase 1d SPA, and that needs a real user store. Deferring
+   the user model would force a fake-user hack in JWT issuance.
+2. *Go straight to Postgres in Phase 1c.* Rejected: Phase 1c runs
+   on the single shared Cloud Run service, and provisioning Cloud SQL
+   before Phase 1a is committed (DNS, LB, project) is a budget + ordering
+   problem. A SQLite-backed user model is the smallest change that
+   makes the SPA login work today, while the storage interface
+   (`UserRepository`) is the seam that the Postgres swap replaces.
+3. *External identity (OAuth).* Rejected as overkill for a single
+   operator account that is already a "machine user" at GCP; keeps the
+   dependency surface local.
+
+**Decision.**
+
+- **User store = SQLite via SQLAlchemy 2.0 async + aiosqlite.** Lives at
+  `USER_DB_PATH` (default: a path inside the container's writable
+  storage). Schema is owned by `app/auth/user_store.py` (model + DDL
+  helpers + `UserRepository`). `UserService.authenticate()` runs
+  bcrypt.comparepw with a dummy compare on unknown usernames so wrong
+  username and wrong password take ~the same time; role→scopes mapping
+  (`admin` → `cv:read cv:manage`) is concentrated at this seam so the
+  token shape, refresh rotation, and `JWTAuthMiddleware` are unaffected
+  when the map grows.
+- **First-admin seeding.** Lifespan idempotently seeds the first admin
+  from `FIRST_ADMIN_USERNAME` / `FIRST_ADMIN_EMAIL` / `FIRST_ADMIN_PASSWORD`
+  (or `*_FILE` variants for prod). Fail-closed: no user in the store
+  → `/api/v1/auth/token` returns 401 (the same generic 401 as a wrong
+  password, so the existence of any configured admin cannot be probed).
+- **Refresh store still in-memory, single-process.** Phase 2 swaps it
+  for Postgres; the class is small and behind `RefreshTokenStore` so
+  the swap is local. The user store going to Postgres does NOT
+  automatically drag the refresh store with it — they are independent
+  seams.
+- **Repository facade is a Phase-2 goal, not a Phase-1c deliverable.**
+  The CV source (GCS via `CvSource` / local file fallback) stays
+  file-backed. The user store is the FIRST Phase-2-shaped data path,
+  scoped to the auth surface only, and proves the SQLAlchemy async +
+  migration pattern before the broader CV / tailored-revision data
+  layer follows. Expand-contract for the CV: file readers remain the
+  source of truth for the live CV during Phase 1; Phase 2 layers a
+  `Repository` facade on top so reads can move to the DB without
+  breaking the operator's hand-edit of `data/cv.json` (writes still go
+  to file when the DB row is missing — the file is the fallback path).
+
+**Consequences.** Phase 1c ships with a working operator login backed
+by a real DB (the user model), even though the rest of the surface is
+still file-backed. The first user / secrets seeding story is identical
+in shape to Phase 2's seeding story, so the Phase-2 migration does not
+need to invent a bootstrap pattern. The seam between `UserService` and
+the token issuance (`sign_access_token(subject, scopes, *, role=...)`)
+is the only place where role/identity is attached to claims, so the
+Phase-2 role/groups/ABAC growth is a local change.
