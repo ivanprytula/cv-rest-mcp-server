@@ -1,5 +1,3 @@
-set dotenv-load
-
 @help:
     just --list
 
@@ -7,8 +5,11 @@ setup:
     uv venv
     uv sync --group dev
 
-dev:
+dev-local:
     uv run uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload --reload-include '*.html'
+
+dev-spa:
+    cd frontend && npm run dev -- --port 5173
 
 code-quality:
     uv run ruff check .
@@ -81,7 +82,7 @@ tf-graph:
 # ── Local multi-service dev (Docker Compose) ─────────────────────────────────
 
 up:
-    docker compose up --build --remove-orphans
+    docker compose up -d --build --remove-orphans
 
 down:
     docker compose down

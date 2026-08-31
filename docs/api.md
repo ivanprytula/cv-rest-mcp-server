@@ -330,3 +330,20 @@ Return the operator identity + scopes from a valid access token.
 | Credentials | `Authorization: Bearer <access_token>` (required)                        |
 | Success     | `{"subject": "operator", "scopes": ["cv:read", "cv:manage"]}`            |
 | Errors      | `401` (missing/invalid/expired token), `503` (auth unconfigured)         |
+
+---
+
+### `GET /api/v1/revisions`
+
+List tailored CV revisions written by `POST /cv/tailor`, newest first. Backs
+the SPA's revisions screen.
+
+| Item        | Value                                                                      |
+| ----------- | -------------------------------------------------------------------------- |
+| Credentials | `Authorization: Bearer <access_token>` with the `cv:read` scope (required) |
+| Success     | `{"revisions": [{"name": ..., "created_at": ..., "size_bytes": ...}]}`     |
+| Errors      | `401` (missing/invalid token), `403` (token lacks `cv:read`), `429`, `503` |
+
+Each revision object is `{"name": "cv_tailored-<ts>.json", "created_at":
+"<ISO-8601 UTC>", "size_bytes": <int>}`. `name` is the bare filename accepted
+by `?tailored=` on `/cv/html`, `/cv/preview`, and `/cv/pdf`.

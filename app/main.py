@@ -172,17 +172,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(CredentialedCORSMiddleware)
 app.add_middleware(GuardMiddleware)
 # Middleware order (Starlette wraps inside-out as we add, but runs
 # outside-in on the request): SecurityHeaders is outermost (added last)
 # so it stamps CSP etc. on every response, including the 401/403/503 from
-# JWTAuth. Guard runs before JWTAuth so geo/failban/service-hours still
-# apply to /cv/tailor and the /api/v1/* surface, and failban can ban a
-# client before we even bother verifying a JWT. JWTAuth short-circuits on
-# the /api/v1/* namespace and the tailoring surface (/cv/tailor +
-# ?tailored= reads); everything else passes through untouched.
+# JWTAuth. CredentialedCORS runs before the wildcard CORS so it can
+# override the wildcard `*` header on the auth endpoints. Guard runs before
+# JWTAuth so geo/failban/service-hours still apply to /cv/tailor and the
+# /api/v1/* surface, and failban can ban a client before we even bother
+# verifying a JWT. JWTAuth short-circuits on the /api/v1/* namespace and the
+# tailoring surface (/cv/tailor + ?tailored= reads); everything else passes
+# through untouched.
 app.add_middleware(JWTAuthMiddleware)
-app.add_middleware(CredentialedCORSMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 
 mcp = FastMCP("cv-rest-mcp-server")
