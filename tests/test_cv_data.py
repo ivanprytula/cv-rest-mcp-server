@@ -1,5 +1,4 @@
 import json
-import os
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -73,7 +72,7 @@ def test_load_cv_data_minimal_json():
         assert result["name"] == ""
         assert result["skills"] == []
     finally:
-        os.unlink(path)
+        path.unlink()
 
 
 def test_load_cv_data_missing_file():
@@ -89,7 +88,7 @@ def test_load_cv_data_invalid_json_type():
         with pytest.raises(ValueError, match="must be a JSON object"):
             load_cv_data(path)
     finally:
-        os.unlink(path)
+        path.unlink()
 
 
 def test_load_cv_data_invalid_schema_raises_readable_error(tmp_path):

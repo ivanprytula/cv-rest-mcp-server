@@ -54,7 +54,7 @@ target-version = "py314"
 line-length = 88
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B"]
+select = ["E", "F", "I", "UP", "B", "PTH"]
 ignore = ["E501"]
 
 [tool.ruff.lint.isort]
