@@ -109,15 +109,6 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    strategy:
-      matrix:
-        service:
-          - name: api-core
-            dockerfile: Dockerfile
-          - name: spa-origin
-            dockerfile: frontend/Dockerfile
-          - name: api-games
-            dockerfile: services/games/Dockerfile
     steps:
       - uses: actions/checkout@v4
 
@@ -128,38 +119,47 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
 
-      - name: Build ${{ matrix.service.name }}
+      - name: Build all service images (sequential)
         env:
           GCP_PROJECT: ${{ vars.GCP_PROJECT }}
           GIT_SHA: ${{ github.sha }}
         run: |
           SHORT_SHA=${GIT_SHA:0:7}
-          IMAGE_SHA="gcr.io/${{ vars.GCP_PROJECT }}/${{ matrix.service.name }}:${SHORT_SHA}"
-          IMAGE_LATEST="gcr.io/${{ vars.GCP_PROJECT }}/${{ matrix.service.name }}:latest"
 
-          cat > /tmp/cloudbuild.yaml <<EOF
+          build_service() {
+            local name="$1" dockerfile="$2"
+            local image_sha="gcr.io/${GCP_PROJECT}/${name}:${SHORT_SHA}"
+            local image_latest="gcr.io/${GCP_PROJECT}/${name}:latest"
+
+            cat > /tmp/cloudbuild-"${name}".yaml <<EOF
           steps:
             - name: 'gcr.io/cloud-builders/docker'
-              args: ['build', '-f', '${{ matrix.service.dockerfile }}', '-t', '${IMAGE_SHA}', '-t', '${IMAGE_LATEST}', '.']
+              args: ['build', '-f', '${dockerfile}', '-t', '${image_sha}', '-t', '${image_latest}', '.']
           images:
-            - '${IMAGE_SHA}'
-            - '${IMAGE_LATEST}'
+            - '${image_sha}'
+            - '${image_latest}'
           EOF
 
-          gcloud builds submit --project "${{ vars.GCP_PROJECT }}" \
-            --config /tmp/cloudbuild.yaml \
-            --quiet --async --format='value(id)' > /tmp/build_id.txt
-          BUILD_ID=$(cat /tmp/build_id.txt)
-          echo "${{ matrix.service.name }} Build ID: $BUILD_ID"
-          # Poll for completion
-          while :; do
-            STATUS=$(gcloud builds describe "$BUILD_ID" --project "${{ vars.GCP_PROJECT }}" --format='value(status)')
-            case "$STATUS" in
-              SUCCESS) echo "${{ matrix.service.name }} build succeeded: $BUILD_ID"; break ;;
-              FAILURE|INTERNAL_ERROR|TIMEOUT|CANCELLED|EXPIRED) echo "${{ matrix.service.name }} build failed: $STATUS"; exit 1 ;;
-              *) echo "${{ matrix.service.name }} build: $STATUS"; sleep 5 ;;
-            esac
-          done
+            gcloud builds submit --project "${GCP_PROJECT}" \
+              --config /tmp/cloudbuild-"${name}".yaml \
+              --quiet --async --format='value(id)' > /tmp/build_id_"${name}".txt
+            local build_id
+            build_id=$(cat /tmp/build_id_"${name}".txt)
+            echo "${name} Build ID: $build_id"
+
+            while :; do
+              status=$(gcloud builds describe "$build_id" --project "${GCP_PROJECT}" --format='value(status)')
+              case "$status" in
+                SUCCESS) echo "${name} build succeeded: $build_id"; break ;;
+                FAILURE|INTERNAL_ERROR|TIMEOUT|CANCELLED|EXPIRED) echo "${name} build failed: $status"; exit 1 ;;
+                *) echo "${name} build: $status"; sleep 5 ;;
+              esac
+            done
+          }
+
+          build_service "api-core" "Dockerfile"
+          build_service "api-games" "services/games/Dockerfile"
+          build_service "spa-origin" "frontend/Dockerfile"
 
   deploy:
     needs: build
@@ -174,24 +174,6 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    strategy:
-      matrix:
-        service:
-          - name: api-core
-            svc_name: cv-rest-mcp-server
-            memory: 512Mi
-            cpu: 1
-            env_vars: "TRUST_PROXY=true,CLIENT_IP_XFF_ENTRY=2,FAILBAN_THRESHOLD=6,CV_REFRESH_SECONDS=30,CORS_ORIGINS=https://app.example.com,CONTACT_NAME=${{ vars.CONTACT_NAME }},CONTACT_EMAIL=${{ vars.CONTACT_EMAIL }}"
-          - name: spa-origin
-            svc_name: spa-origin
-            memory: 128Mi
-            cpu: 1
-            env_vars: ""
-          - name: api-games
-            svc_name: api-games
-            memory: 256Mi
-            cpu: 1
-            env_vars: ""
     steps:
       - uses: actions/checkout@v4
 
@@ -202,8 +184,7 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
 
-      - name: Verify deployment identity (first run only)
-        if: matrix.service.name == 'api-core'
+      - name: Verify deployment identity
         env:
           GCP_PROJECT: ${{ vars.GCP_PROJECT }}
         run: |
@@ -214,28 +195,37 @@ jobs:
             --format='value(projectId,projectNumber)' \
             --verbosity=error
 
-      - name: Deploy ${{ matrix.service.name }} to Cloud Run
+      - name: Deploy all services to Cloud Run (sequential)
         env:
           GCP_PROJECT: ${{ vars.GCP_PROJECT }}
           GCP_REGION: ${{ vars.GCP_REGION }}
           GIT_SHA: ${{ github.sha }}
+          API_CORE_ENV_VARS: "TRUST_PROXY=true,CLIENT_IP_XFF_ENTRY=2,FAILBAN_THRESHOLD=6,CV_REFRESH_SECONDS=30,CORS_ORIGINS=https://app.example.com,CONTACT_NAME=${{ vars.CONTACT_NAME }},CONTACT_EMAIL=${{ vars.CONTACT_EMAIL }}"
         run: |
           SHORT_SHA=${GIT_SHA:0:7}
-          ENV_VARS_ARG=""
-          if [ -n "${{ matrix.service.env_vars }}" ]; then
-            ENV_VARS_ARG="--set-env-vars '${{ matrix.service.env_vars }}'"
-          fi
-          gcloud run deploy ${{ matrix.service.svc_name }} \
-            --project "${{ vars.GCP_PROJECT }}" \
-            --region "${{ vars.GCP_REGION }}" \
-            --image "gcr.io/${{ vars.GCP_PROJECT }}/${{ matrix.service.name }}:${SHORT_SHA}" \
-            --allow-unauthenticated \
-            ${ENV_VARS_ARG} \
-            --memory ${{ matrix.service.memory }} \
-            --cpu ${{ matrix.service.cpu }} \
-            --max-instances 1 \
-            --min-instances 0 \
-            --service-account "${{ matrix.service.name }}-runtime@${{ vars.GCP_PROJECT }}.iam.gserviceaccount.com"
+
+          deploy_service() {
+            local name="$1" svc_name="$2" memory="$3" cpu="$4" env_vars="$5"
+            local env_vars_arg=()
+            if [ -n "$env_vars" ]; then
+              env_vars_arg=(--set-env-vars "$env_vars")
+            fi
+            gcloud run deploy "$svc_name" \
+              --project "${GCP_PROJECT}" \
+              --region "${GCP_REGION}" \
+              --image "gcr.io/${GCP_PROJECT}/${name}:${SHORT_SHA}" \
+              --allow-unauthenticated \
+              "${env_vars_arg[@]}" \
+              --memory "$memory" \
+              --cpu "$cpu" \
+              --max-instances 1 \
+              --min-instances 0 \
+              --service-account "${name}-runtime@${GCP_PROJECT}.iam.gserviceaccount.com"
+          }
+
+          deploy_service "api-core" "cv-rest-mcp-server" "512Mi" "1" "${API_CORE_ENV_VARS}"
+          deploy_service "api-games" "api-games" "256Mi" "1" ""
+          deploy_service "spa-origin" "spa-origin" "128Mi" "1" ""
 
   verify:
     needs: deploy
