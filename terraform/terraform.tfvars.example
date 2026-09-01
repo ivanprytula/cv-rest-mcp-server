@@ -24,6 +24,12 @@ create_dns_zone = true
 # Distinct Cloud Run workloads. Service account emails follow the existing
 # <svc>-runtime@<project>.iam.gserviceaccount.com convention (created by
 # scripts/deploy-cloud-run.sh wif/bootstrap before Phase 1a).
+#
+# Image tagging strategy:
+#   - CI/CD tags every image with commit SHA (SHORT_SHA) for traceability
+#   - Also tags with :latest for convenience
+#   - Default below uses :latest; CI/CD deploys via gcloud run deploy with SHA
+#   - For manual terraform apply: override with -var flag if deploying an older SHA
 services = {
   api-core = {
     image                 = "gcr.io/cv-rest-mcp-server/api-core:latest"
@@ -89,14 +95,39 @@ host_routing = {
 # <host>/ stays on the spa-origin container. `host` must already be in
 # host_routing. Assets are usually loaded by index.html with asset URLs pointing
 # at this origin. See docs/cloud-cdn.md for how it works.
-# static_assets = {
-#   enabled      = true
-#   bucket_name  = "myproj-static"
-#   location     = "EU"
-#   host         = "app.example.com"
-#   prefix       = "/assets/"
-#   cors_origins = ["https://app.example.com"]
-# }
+# Vite hashes frontend/dist/assets/* filenames, so use long cache TTL (immutable).
+static_assets = {
+  enabled      = true
+  bucket_name  = "myproj-static"
+  location     = "EU"
+  host         = "app.example.com"
+  prefix       = "/assets/"
+  cors_origins = ["https://app.example.com"]
+}
+
+# --- GitHub Workload Identity Federation (CI/CD) ---
+# One-time setup: creates the WIF pool, OIDC provider, and IAM bindings.
+# After applying, run: terraform output | grep github_wif_provider
+# Then add these as GitHub repository secrets:
+#   GCP_WIF_PROVIDER = <github_wif_provider output>
+#   GCP_DEPLOY_SA    = <deployer_sa_email output>
+setup_github_wif = true
+github_repo      = "ivanprytula/cv-rest-mcp-server"  # your GitHub repo in owner/repo format
+
+# --- Organization Policies (Security Guardrails) ---
+# Optional: enforce bucket security policies at the project level (runtime defense-in-depth).
+# Also run the pre-commit guard (scripts/ensure_deny_public.py) in CI/CD for static validation.
+# NOTE: Terraform will auto-enable cloudresourcemanager.googleapis.com (no manual step needed).
+setup_org_policies = true
+
+# --- Bootstrap (one-time setup before terraform apply) ---
+# Use deploy-cloud-run.sh for first-time setup:
+#   just deploy bootstrap          # enable APIs (now also via Terraform gcp_apis module)
+#   just deploy bootstrap-state    # create TF remote state bucket
+#   just deploy bootstrap-secrets  # create Secret Manager secrets
+# Then: terraform apply (applies iam_secrets, org_policies, cloud run services, etc.)
+# The CV bucket (gs://cv-rest-mcp-server-cv-data) is created manually by bootstrap and
+# managed separately from Terraform (it is application data, not infrastructure).
 
 # --- Private user-content upload bucket (optional, currently DISABLED) ---
 # Avatars/photos for auth-protected APIs. Deny-public enforced, no CDN; the UI

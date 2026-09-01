@@ -1,28 +1,26 @@
 #!/usr/bin/env bash
-# Cloud Run deploy automation for cv-rest-mcp-server.
+# Cloud Run operational setup — one-time bootstrap and data management.
 #
-# Mirrors .local/deploy-checklist.md step by step; every stage is idempotent.
+# EXECUTION ORDER (required):
+#   1. bootstrap          Enable APIs, create CV bucket, grant runtime SA permissions
+#   2. bootstrap-state    Create versioned TF remote-state bucket + init
+#   3. bootstrap-secrets  Create Secret Manager secrets (cv-jwt-signing-key, refresh-token-pepper)
+#   4. (Run: terraform apply)  Terraform deploys IAM, Org Policies, Cloud Run services
+#   5. upload-cv          Publish data/cv.json to GCS (application data)
+#   6. verify             Health check + smoke test URLs (optional, manual verification)
 #
 # Usage:
 #   scripts/deploy-cloud-run.sh <stage>
-#
-# Stages:
-#   bootstrap   enable APIs, runtime SA, CV bucket + IAM binding   (checklist 0-2)
-#   bootstrap-state  create versioned TF remote-state bucket + init (Phase 1a)
-#   bootstrap-secrets create secret manager secrets (Phase 1c)
-#   upload-cv   publish data/cv.json to the bucket                 (checklist 2)
-#   build       Cloud Build image                                  (checklist 3)
-#   deploy      create/update Cloud Run service                    (checklist 4)
-#   verify      health check + smoke URLs                          (checklist 5)
-#   wif         one-time: GitHub OIDC federation for CD            (see checklist 7)
 #
 # Environment:
 #   GCP_PROJECT  required — your EXISTING project id. This script never
 #                creates projects (that is a billing/console decision).
 #   GCP_ENV      default production (e.g. dev, stage, production)
 #   GCP_REGION   default europe-west1
-#   SVC_NAME     default cv-rest-mcp-server
-#   REPO         owner/name for `wif`; derived from git remote when unset.
+#   SVC_NAME     default cv-ivanprytula
+#
+# Note: GitHub WIF (Workload Identity Federation) setup is now in Terraform
+# (terraform/modules/github_wif/). Set setup_github_wif=true in terraform.tfvars.
 
 set -euo pipefail
 
@@ -31,7 +29,6 @@ GCP_ENV="${GCP_ENV:-production}"
 GCP_REGION="${GCP_REGION:-europe-west1}"
 SVC_NAME="${SVC_NAME:-cv-ivanprytula}"
 RUN_SA_ID="${SVC_NAME}-runtime"
-DEPLOY_SA_ID="${SVC_NAME}-deployer"
 CV_BUCKET="${GCP_PROJECT}-cv-data"
 # Terraform remote state (Phase 1a). The SAME versioned bucket provides both
 # state storage and lock coordination — the GCS backend locks via an object
@@ -91,19 +88,24 @@ ensure_build_permissions() {
     fi
 }
 
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 1: One-time bootstrap — APIs, CV bucket, runtime SA permissions
+# ─────────────────────────────────────────────────────────────────────────────
 bootstrap() {
     require_project
-    log "Enabling APIs on $GCP_PROJECT"
+    log "STEP 1: Bootstrap APIs and CV bucket"
+
+    log "  1a. Enabling APIs on $GCP_PROJECT"
     gcloud services enable --project "$GCP_PROJECT" \
         cloudresourcemanager.googleapis.com run.googleapis.com \
         cloudbuild.googleapis.com storage.googleapis.com \
         compute.googleapis.com dns.googleapis.com \
         secretmanager.googleapis.com
 
-    log "Runtime service account $RUN_SA_ID"
+    log "  1b. Runtime service account $RUN_SA_ID"
     if gcloud iam service-accounts describe "${RUN_SA_ID}@${GCP_PROJECT}.iam.gserviceaccount.com" \
         --project "$GCP_PROJECT" >/dev/null 2>&1; then
-        echo "exists, skipping"
+        echo "    exists, skipping"
     else
         gcloud iam service-accounts create "$RUN_SA_ID" \
             --project "$GCP_PROJECT" \
@@ -111,9 +113,9 @@ bootstrap() {
             --description="Reads CV content from GCS; no other permissions by design"
     fi
 
-    log "CV bucket gs://$CV_BUCKET"
+    log "  1c. CV bucket gs://$CV_BUCKET (application data storage)"
     if gcloud storage buckets describe "gs://$CV_BUCKET" >/dev/null 2>&1; then
-        echo "exists, skipping create"
+        echo "    exists, skipping create"
     else
         gcloud storage buckets create "gs://$CV_BUCKET" \
             --location="$GCP_REGION" --uniform-bucket-level-access
@@ -121,23 +123,30 @@ bootstrap() {
     # object versioning = free history/rollback for cv.json (idempotent)
     gcloud storage buckets update "gs://$CV_BUCKET" --versioning
 
-    log "Grant runtime SA read on its bucket only"
+    log "  1d. Grant runtime SA read-only on CV bucket"
     gcloud storage buckets add-iam-policy-binding "gs://$CV_BUCKET" \
         --member="serviceAccount:${RUN_SA_ID}@${GCP_PROJECT}.iam.gserviceaccount.com" \
         --role=roles/storage.objectViewer --condition=None >/dev/null
 
     ensure_build_permissions
-    warn "No keys created anywhere: Cloud Run injects short-lived credentials automatically."
+
+    cat <<EOF
+
+✓ STEP 1 complete. Next: STEP 2
+
+EOF
 }
 
-# Phase 1a Terraform remote state. Versioning on the state bucket is what makes
-# the GCS backend's write-lock (state locking) and crash-safe history work, so
-# creating it is the whole "remote state + lock" story. Runs once, idempotent.
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 2: Terraform remote state — versioned bucket + backend init
+# ─────────────────────────────────────────────────────────────────────────────
 bootstrap_state() {
     require_project
-    log "Terraform remote-state bucket gs://$TF_STATE_BUCKET (versioned = locking + history)"
+    log "STEP 2: Terraform remote state bucket + backend init"
+
+    log "  2a. Remote-state bucket gs://$TF_STATE_BUCKET (versioned = locking + history)"
     if gcloud storage buckets describe "gs://$TF_STATE_BUCKET" >/dev/null 2>&1; then
-        echo "exists, skipping create"
+        echo "    exists, skipping create"
     else
         gcloud storage buckets create "gs://$TF_STATE_BUCKET" \
             --location="$GCP_REGION" --default-storage-class=STANDARD \
@@ -146,122 +155,94 @@ bootstrap_state() {
     # Object versioning is the GCS locking + rollback mechanism (idempotent).
     gcloud storage buckets update "gs://$TF_STATE_BUCKET" --versioning
 
-    log "Configuring Terraform backend (gcs, prefix=$TF_STATE_PREFIX)"
+    log "  2b. Configuring Terraform backend (gcs, prefix=$TF_STATE_PREFIX)"
     (
         cd terraform
         terraform init -force-copy \
             -backend-config="bucket=$TF_STATE_BUCKET" \
             -backend-config="prefix=$TF_STATE_PREFIX"
     )
+
     cat <<EOF
 
-Remote state + locking ready.
-Next: just tf-plan  /  just tf-apply  (see terraform/terraform.tfvars.example for required vars)
+✓ STEP 2 complete. Next: STEP 3
+
 EOF
 }
 
-# Phase 1c. Create Secrets for JWT, Pepper, and Tailor Token. Runs once, idempotent.
-# Also grants the runtime SA (cv-*-runtime) Secret Manager Secret Accessor on each secret.
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 3: Secret Manager secrets — JWT key + refresh token pepper
+# ─────────────────────────────────────────────────────────────────────────────
 bootstrap_secrets() {
     require_project
-    local runtime_sa="${SVC_NAME}-runtime@${GCP_PROJECT}.iam.gserviceaccount.com"
-    local deploy_sa="${SVC_NAME}-deployer@${GCP_PROJECT}.iam.gserviceaccount.com"
-    log "Ensuring Secret Manager secrets exist"
+    log "STEP 3: Create Secret Manager secrets"
+
+    log "  3a. Creating Secret Manager secrets"
     for secret in cv-jwt-signing-key cv-refresh-token-pepper; do
         if gcloud secrets describe "$secret" --project "$GCP_PROJECT" >/dev/null 2>&1; then
-            echo "$secret exists, skipping create"
+            echo "    $secret exists, skipping create"
         else
             gcloud secrets create "$secret" --project "$GCP_PROJECT" --replication-policy="automatic"
-            echo "Created $secret. Add initial version with: gcloud secrets versions add $secret --data-file=-"
+            echo "    Created $secret. Add initial version with: gcloud secrets versions add $secret --data-file=-"
         fi
-        # Grant runtime SA access so Cloud Run can read the secret at runtime.
-        gcloud secrets add-iam-policy-binding "$secret" \
-            --member="serviceAccount:$runtime_sa" \
-            --role="roles/secretmanager.secretAccessor" \
-            --project="$GCP_PROJECT" >/dev/null 2>&1 \
-            && echo "Granted secretmanager.secretAccessor on $secret to $runtime_sa" \
-            || echo "IAM binding on $secret already present (or binding failed)"
-        # Grant deployer SA access so CI/CD can inject secrets into new revisions.
-        gcloud secrets add-iam-policy-binding "$secret" \
-            --member="serviceAccount:$deploy_sa" \
-            --role="roles/secretmanager.secretAccessor" \
-            --project="$GCP_PROJECT" >/dev/null 2>&1 \
-            && echo "Granted secretmanager.secretAccessor on $secret to $deploy_sa" \
-            || echo "IAM binding on $secret already present for deployer SA (or binding failed)"
     done
+
+    log "  3b. IAM: runtime SA gets secret read access (terraform handles this via iam_secrets module)"
+    warn "Secrets are also managed by terraform/modules/iam_secrets/. For manual updates, use: gcloud secrets versions add <secret-id> --data-file=-"
+
+    cat <<EOF
+
+✓ STEP 3 complete. Next: STEP 4 (manual, not in this script)
+
+EOF
 }
 
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 4: Terraform apply (MANUAL — not in this script)
+# ─────────────────────────────────────────────────────────────────────────────
+# Run this manually in the terraform/ directory:
+#   cd terraform
+#   # Edit terraform/terraform.tfvars with your values
+#   terraform plan
+#   terraform apply
+# This deploys: IAM, Org Policies, GitHub WIF, Cloud Run services, DNS, LB, etc.
+#
+# After terraform apply succeeds, continue to STEP 5.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 5: Upload CV data — publish cv.json to GCS
+# ─────────────────────────────────────────────────────────────────────────────
 upload_cv() {
     require_project
+    log "STEP 5: Upload CV data (after terraform apply)"
+
     [ -f data/cv.json ] || die "data/cv.json not found"
-    log "Publishing data/cv.json to gs://$CV_BUCKET/cv.json"
+    log "  Publishing data/cv.json to gs://$CV_BUCKET/cv.json"
     gcloud storage cp data/cv.json "gs://$CV_BUCKET/cv.json"
-    echo "Live within ~30s (CV_REFRESH_SECONDS). Rollback: gcloud storage ls -a \"gs://$CV_BUCKET/cv.json\""
+    echo "  Live within ~30s (CV_REFRESH_SECONDS). Rollback: gcloud storage ls -a \"gs://$CV_BUCKET/cv.json\""
 }
 
-build() {
-    local build_id build_status
-    require_project
-    log "Cloud Build: gcr.io/$GCP_PROJECT/$SVC_NAME"
-    build_id="$(gcloud builds submit --project "$GCP_PROJECT" \
-        --tag "gcr.io/${GCP_PROJECT}/${SVC_NAME}" \
-        --quiet --async --format='value(id)')"
-    log "Cloud Build started: $build_id"
-
-    while :; do
-        build_status="$(gcloud builds describe "$build_id" \
-            --project "$GCP_PROJECT" --format='value(status)')"
-        case "$build_status" in
-            SUCCESS)
-                log "Cloud Build succeeded: $build_id"
-                return 0
-                ;;
-            FAILURE|INTERNAL_ERROR|TIMEOUT|CANCELLED|EXPIRED)
-                die "Cloud Build failed with status $build_status: $build_id"
-                ;;
-            *)
-                printf 'waiting for build (%s)...\n' "${build_status:-UNKNOWN}"
-                sleep 5
-                ;;
-        esac
-    done
-}
-
-deploy() {
-    require_project
-    log "Deploying $SVC_NAME to $GCP_REGION"
-    # --set-env-vars REPLACES all vars every time: this line is the single
-    # source of truth for runtime config. Contact_* come from .env via
-    # just's dotenv-load (empty = omitted from Swagger UI). For higher-security
-    # deployments, replace the inline values with Secret Manager references
-    # (--set-secrets) — the env-var names stay the same so the app code does
-    # not change.
-    gcloud run deploy "$SVC_NAME" \
-        --project "$GCP_PROJECT" --region "$GCP_REGION" --quiet \
-        --image "gcr.io/${GCP_PROJECT}/${SVC_NAME}" \
-        --service-account "${RUN_SA_ID}@${GCP_PROJECT}.iam.gserviceaccount.com" \
-        --allow-unauthenticated \
-        --cpu 1 --memory 512Mi \
-        --max-instances 1 \
-        --set-secrets "JWT_SIGNING_KEY=cv-jwt-signing-key:latest,REFRESH_TOKEN_PEPPER=cv-refresh-token-pepper:latest" \
-        --set-env-vars "TRUST_PROXY=true,CLIENT_IP_XFF_ENTRY=2,BLOCKED_IPS_FILE=config/blocked_geo.txt,FAILBAN_THRESHOLD=6,CV_DATA_GCS_URI=gs://${CV_BUCKET}/cv.json,CV_REFRESH_SECONDS=30,CONTACT_NAME=${CONTACT_NAME:-},CONTACT_EMAIL=${CONTACT_EMAIL:-}"
-}
-
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 6: Verification — health check + smoke tests (optional, manual)
+# ─────────────────────────────────────────────────────────────────────────────
 verify() {
     require_project
+    log "STEP 6: Verify Cloud Run deployment (optional, manual)"
+
     local url health attempt
     url="$(gcloud run services describe "$SVC_NAME" \
         --project "$GCP_PROJECT" --region "$GCP_REGION" --format 'value(status.url)')"
-    log "Service URL: $url"
+    log "  Service URL: $url"
 
     health=""
     for attempt in $(seq 1 12); do
         if health="$(curl -fsS --max-time 10 "$url/health" 2>/dev/null)"; then break; fi
-        echo "waiting for revision ($attempt/12)..."
+        echo "  waiting for revision ($attempt/12)..."
         sleep 5
     done
     [ -n "$health" ] || die "/health never returned OK — check logs: gcloud run services logs read $SVC_NAME --region $GCP_REGION"
-    echo "$health"
+    echo "  Health check: OK"
+    echo "  Response: $health"
 
     case "$health" in
         *'"cv_source":"gcs"'*) ;;
@@ -269,108 +250,22 @@ verify() {
             warn "cv_source is placeholder — upload content: scripts/deploy-cloud-run.sh upload-cv" ;;
     esac
 
-    log "Smoke: $url/ · $url/cv/html?theme=original · $url/cv/pdf?theme=modern (rate-limited)"
-}
-
-wif() {
-    require_project
-    local pool="github" provider="gh-actions"
-    REPO="${REPO:-$(git remote get-url origin | sed -E 's#.*[:/]([^/]+/[^/.]+)(\.git)?$#\1#')}"
-    [ -n "$REPO" ] || die "Cannot derive repo from git remote; set REPO=owner/name"
-
-    log "WIR pool/provider for $REPO"
-    gcloud iam workload-identity-pools describe "$pool" --location global --project "$GCP_PROJECT" >/dev/null 2>&1 ||
-        gcloud iam workload-identity-pools create "$pool" --location global --project "$GCP_PROJECT" \
-            --display-name="GitHub Actions"
-
-    gcloud iam workload-identity-pools providers describe "$provider" \
-        --workload-identity-pool "$pool" --location global --project "$GCP_PROJECT" >/dev/null 2>&1 ||
-        gcloud iam workload-identity-pools providers create-oidc "$provider" \
-            --workload-identity-pool "$pool" --location global --project "$GCP_PROJECT" \
-            --issuer-uri="https://token.actions.githubusercontent.com" \
-            --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository" \
-            --attribute-condition="assertion.repository==\"$REPO\""
-
-    log "Deployer SA $DEPLOY_SA_ID + least-privilege roles"
-    if gcloud iam service-accounts describe "${DEPLOY_SA_ID}@${GCP_PROJECT}.iam.gserviceaccount.com" \
-        --project "$GCP_PROJECT" >/dev/null 2>&1; then
-        echo "exists, skipping create"
-    else
-        gcloud iam service-accounts create "$DEPLOY_SA_ID" \
-            --project "$GCP_PROJECT" \
-            --display-name="$SVC_NAME GitHub Actions deployer"
-    fi
-    local deploy_sa="${DEPLOY_SA_ID}@${GCP_PROJECT}.iam.gserviceaccount.com"
-    local pool_full github_principal
-    pool_full="$(gcloud iam workload-identity-pools describe "$pool" --location global \
-        --project "$GCP_PROJECT" --format 'value(name)')"
-    github_principal="principalSet://iam.googleapis.com/${pool_full}/attribute.repository/${REPO}"
-    # Allow this repository's GitHub OIDC principal to impersonate only the deployer SA.
-    gcloud iam service-accounts add-iam-policy-binding "$deploy_sa" \
-        --project "$GCP_PROJECT" --member="$github_principal" \
-        --role=roles/iam.workloadIdentityUser --condition=None >/dev/null
-    gcloud projects add-iam-policy-binding "$GCP_PROJECT" \
-        --member="serviceAccount:$deploy_sa" --role=roles/run.admin --condition=None >/dev/null
-    # require_project validates access via `gcloud projects describe`, which
-    # needs projects.get — browser is the least-privilege role for that
-    # (projectViewer is often not grantable under org policy).
-    gcloud projects add-iam-policy-binding "$GCP_PROJECT" \
-        --member="serviceAccount:$deploy_sa" --role=roles/browser --condition=None >/dev/null
-    gcloud projects add-iam-policy-binding "$GCP_PROJECT" \
-        --member="serviceAccount:$deploy_sa" --role=roles/cloudbuild.builds.builder --condition=None >/dev/null
-    # gcloud builds submit runs as the project's default Cloud Build SA; the
-    # deployer must be allowed to act as that SA, scoped to this account only.
-    # The default Cloud Build SA is created on the first Cloud Build run in a project;
-    # if it doesn't exist yet, this binding is skipped and can be added later.
-    local build_sa
-    build_sa="$(gcloud builds get-default-service-account --project "$GCP_PROJECT" 2>/dev/null || true)"
-    if [ -n "$build_sa" ] && gcloud iam service-accounts describe "$build_sa" --project "$GCP_PROJECT" >/dev/null 2>&1; then
-        gcloud iam service-accounts add-iam-policy-binding "$build_sa" \
-            --project "$GCP_PROJECT" --member="serviceAccount:$deploy_sa" \
-            --role=roles/iam.serviceAccountUser --condition=None >/dev/null \
-            && echo "Granted iam.serviceAccountUser on $build_sa to $deploy_sa" \
-            || echo "Binding $build_sa failed (may already exist)"
-    else
-        echo "Cloud Build SA not yet created (no Cloud Build runs yet); skipping build_sa binding"
-    fi
-    # impersonate the runtime SA during deploys (scoped to that SA only)
-    gcloud iam service-accounts add-iam-policy-binding "${RUN_SA_ID}@${GCP_PROJECT}.iam.gserviceaccount.com" \
-        --project "$GCP_PROJECT" --member="serviceAccount:$deploy_sa" \
-        --role=roles/iam.serviceAccountUser --condition=None >/dev/null \
-        && echo "Granted iam.serviceAccountUser on runtime SA to $deploy_sa" \
-        || echo "Runtime SA binding already present"
-
-    # Allow deployer to read secrets for deployment injection.
-    for secret in cv-jwt-signing-key cv-refresh-token-pepper; do
-        gcloud secrets add-iam-policy-binding "$secret" \
-            --project "$GCP_PROJECT" --member="serviceAccount:$deploy_sa" \
-            --role=roles/secretmanager.secretAccessor --condition=None >/dev/null
-    done
-
-    cat <<EOF
-
-Wire these repository secrets/vars (needs repo admin):
-  gh secret set GCP_WIF_PROVIDER --body "$pool_full/providers/$provider"
-  gh secret set GCP_DEPLOY_SA    --body "$deploy_sa"
-  gh variable set GCP_PROJECT    --body "$GCP_PROJECT"
-  gh variable set GCP_REGION     --body "$GCP_REGION"
-  gh variable set SVC_NAME       --body "$SVC_NAME"
-EOF
+    log "  Smoke tests:"
+    echo "    $url/"
+    echo "    $url/cv/html?theme=original"
+    echo "    $url/cv/pdf?theme=modern (rate-limited)"
 }
 
 if [[ "$#" -ne 1 ]]; then
-    sed -n '2,25p' "$0"
+    sed -n '2,30p' "$0"
     exit 1
 fi
 
 case "$1" in
-    bootstrap) bootstrap ;;
-    bootstrap-state) bootstrap_state ;;
+    bootstrap)        bootstrap ;;
+    bootstrap-state)  bootstrap_state ;;
     bootstrap-secrets) bootstrap_secrets ;;
-    upload-cv) upload_cv ;;
-    build)     build ;;
-    deploy)    deploy ;;
-    verify)    verify ;;
-    wif)       wif ;;
-    *) sed -n '2,25p' "$0"; exit 1 ;;
+    upload-cv)        upload_cv ;;
+    verify)           verify ;;
+    *)                sed -n '2,30p' "$0"; exit 1 ;;
 esac

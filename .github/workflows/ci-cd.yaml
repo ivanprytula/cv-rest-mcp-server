@@ -1,0 +1,227 @@
+name: CI/CD
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  code-quality:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ci-${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Install dependencies
+        run: uv sync --group dev
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Verify generated CSS
+        run: |
+          npm run css
+          git diff --exit-code -- static/css/site.css
+      - name: Validate bucket policies (deny-public guard)
+        run: |
+          python scripts/ensure_deny_public.py terraform \
+            --cdn-origin-resource "terraform/modules/static_bucket/main.tf:google_storage_bucket.bucket"
+      - name: Ruff lint
+        run: uv run ruff check .
+      - name: Ruff format check
+        run: uv run ruff format --check .
+      - name: Type check
+        run: uv run ty check
+
+  tests:
+    needs: code-quality
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ci-${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Install dependencies
+        run: uv sync --group dev
+      - name: Install pytest-timeout and pytest-xdist for diagnostics
+        run: uv pip install pytest-timeout pytest-xdist
+      - name: Run test suite with diagnostics
+        run: |
+          echo "Starting test run at $(date)"
+          START_TIME=$(date +%s)
+          uv run pytest --timeout=60 --durations=10 -n auto || TEST_EXIT_CODE=$?
+          END_TIME=$(date +%s)
+          echo "Test run completed at $(date)"
+          echo "Total test time: $((END_TIME - START_TIME)) seconds"
+          exit "${TEST_EXIT_CODE:-0}"
+
+  build:
+    needs: [code-quality, tests]
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      !contains(github.event.head_commit.message, '[skip deploy]')
+    runs-on: ubuntu-latest
+    concurrency:
+      group: production-build
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      matrix:
+        service:
+          - name: api-core
+            dockerfile: Dockerfile
+          - name: spa-origin
+            dockerfile: frontend/Dockerfile
+          - name: api-games
+            dockerfile: services/games/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build ${{ matrix.service.name }}
+        env:
+          GCP_PROJECT: ${{ vars.GCP_PROJECT }}
+          GIT_SHA: ${{ github.sha }}
+        run: |
+          SHORT_SHA=${GIT_SHA:0:7}
+          gcloud builds submit --project "${{ vars.GCP_PROJECT }}" \
+            --tag "gcr.io/${{ vars.GCP_PROJECT }}/${{ matrix.service.name }}:${SHORT_SHA}" \
+            --tag "gcr.io/${{ vars.GCP_PROJECT }}/${{ matrix.service.name }}:latest" \
+            --file "${{ matrix.service.dockerfile }}" \
+            --quiet --async --format='value(id)' > /tmp/build_id.txt
+          BUILD_ID=$(cat /tmp/build_id.txt)
+          echo "${{ matrix.service.name }} Build ID: $BUILD_ID"
+          # Poll for completion
+          while :; do
+            STATUS=$(gcloud builds describe "$BUILD_ID" --project "${{ vars.GCP_PROJECT }}" --format='value(status)')
+            case "$STATUS" in
+              SUCCESS) echo "${{ matrix.service.name }} build succeeded: $BUILD_ID"; break ;;
+              FAILURE|INTERNAL_ERROR|TIMEOUT|CANCELLED|EXPIRED) echo "${{ matrix.service.name }} build failed: $STATUS"; exit 1 ;;
+              *) echo "${{ matrix.service.name }} build: $STATUS"; sleep 5 ;;
+            esac
+          done
+
+  deploy:
+    needs: build
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      !contains(github.event.head_commit.message, '[skip deploy]')
+    runs-on: ubuntu-latest
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      matrix:
+        service:
+          - name: api-core
+            svc_name: cv-rest-mcp-server
+            memory: 512Mi
+            cpu: 1
+            env_vars: "TRUST_PROXY=true,CLIENT_IP_XFF_ENTRY=2,FAILBAN_THRESHOLD=6,CV_REFRESH_SECONDS=30,CORS_ORIGINS=https://app.example.com,CONTACT_NAME=${{ vars.CONTACT_NAME }},CONTACT_EMAIL=${{ vars.CONTACT_EMAIL }}"
+          - name: spa-origin
+            svc_name: spa-origin
+            memory: 128Mi
+            cpu: 1
+            env_vars: ""
+          - name: api-games
+            svc_name: api-games
+            memory: 256Mi
+            cpu: 1
+            env_vars: ""
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Verify deployment identity (first run only)
+        if: matrix.service.name == 'api-core'
+        env:
+          GCP_PROJECT: ${{ vars.GCP_PROJECT }}
+        run: |
+          echo "Target project: ${GCP_PROJECT}"
+          echo "Authenticated account:"
+          gcloud auth list --filter=status:ACTIVE --format='value(account)'
+          gcloud projects describe "${GCP_PROJECT}" \
+            --format='value(projectId,projectNumber)' \
+            --verbosity=error
+
+      - name: Deploy ${{ matrix.service.name }} to Cloud Run
+        env:
+          GCP_PROJECT: ${{ vars.GCP_PROJECT }}
+          GCP_REGION: ${{ vars.GCP_REGION }}
+          GIT_SHA: ${{ github.sha }}
+        run: |
+          SHORT_SHA=${GIT_SHA:0:7}
+          ENV_VARS_ARG=""
+          if [ -n "${{ matrix.service.env_vars }}" ]; then
+            ENV_VARS_ARG="--set-env-vars '${{ matrix.service.env_vars }}'"
+          fi
+          gcloud run deploy ${{ matrix.service.svc_name }} \
+            --project "${{ vars.GCP_PROJECT }}" \
+            --region "${{ vars.GCP_REGION }}" \
+            --image "gcr.io/${{ vars.GCP_PROJECT }}/${{ matrix.service.name }}:${SHORT_SHA}" \
+            --allow-unauthenticated \
+            ${ENV_VARS_ARG} \
+            --memory ${{ matrix.service.memory }} \
+            --cpu ${{ matrix.service.cpu }} \
+            --max-instances 1 \
+            --min-instances 0 \
+            --service-account "${{ matrix.service.name }}-runtime@${{ vars.GCP_PROJECT }}.iam.gserviceaccount.com"
+
+  verify:
+    needs: deploy
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      !contains(github.event.head_commit.message, '[skip deploy]')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Verify deployments
+        env:
+          GCP_PROJECT: ${{ vars.GCP_PROJECT }}
+          GCP_REGION: ${{ vars.GCP_REGION }}
+        run: |
+          for svc in "cv-rest-mcp-server" "spa-origin" "api-games"; do
+            echo "=== $svc service ==="
+            gcloud run services describe "$svc" \
+              --project "${{ vars.GCP_PROJECT }}" \
+              --region "${{ vars.GCP_REGION }}" \
+              --format='value(status.url)'
+          done

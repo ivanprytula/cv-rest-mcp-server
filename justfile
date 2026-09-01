@@ -36,6 +36,12 @@ test-pdf:
 css:
     npm run css
 
+# Build all three service images (api-core, spa-origin, api-games) and push to GCR.
+# Use this for initial bootstrap or when CI/CD is unavailable.
+# Usage: just build-images <gcp-project> [<gcp-region>]
+build-images PROJECT REGION="europe-west1":
+    scripts/build-images.sh {{ PROJECT }} {{ REGION }}
+
 # Refresh config/blocked_geo.txt from ipdeny aggregated country zones
 update-geo-blocklist:
     #!/usr/bin/env bash

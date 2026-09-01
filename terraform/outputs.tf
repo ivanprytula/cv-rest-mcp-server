@@ -33,3 +33,18 @@ output "uploads_bucket" {
   value       = "unprovisioned" # requires the uploads module (currently commented out)
 }
 
+output "deployer_sa_email" {
+  description = "CI/CD deployer service account email (use in GitHub WIF_DEPLOY_SA secret)."
+  value       = module.iam_secrets.deployer_sa_email
+}
+
+output "github_wif_provider" {
+  description = "GitHub WIF provider URI (use in GitHub WIF_PROVIDER secret, only when setup_github_wif=true)."
+  value       = var.setup_github_wif ? module.github_wif[0].workload_identity_provider : ""
+}
+
+output "org_policies_enforced" {
+  description = "Organization Policies enforced (uniform bucket access, deny-public)."
+  value       = var.setup_org_policies ? "true" : "false"
+}
+

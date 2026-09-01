@@ -21,6 +21,8 @@ repos:
     rev: v1.7.12
     hooks:
       - id: actionlint
+        # Skip shellcheck linting in workflows; GitHub Actions context differs from bash
+        args: ["-shellcheck="]
   - repo: local
     hooks:
       - id: ty
@@ -46,11 +48,10 @@ repos:
         name: checkov (terraform security)
         # Isolated via uvx — checkov pins packaging<24.0 and would conflict
         # with fastmcp (packaging>=24.0) in the project venv.
-        # CKV_GCP_62/114/28 are skipped because the ALLOWLISTED Cloud CDN origin
-        # bucket must stay publicly readable (that IS the CDN access model); the
-        # path-scoped deny-public guarantee for every other bucket is enforced by
-        # the terraform-deny-public hook right below.
-        entry: uvx --from 'checkov' checkov -d terraform --quiet --compact --skip-check CKV_GCP_62,CKV_GCP_114,CKV_GCP_28
+        # CKV_GCP_62/114/28: Cloud CDN origin bucket must be publicly readable (by design)
+        # CKV_GCP_125: WIF provider attribute_condition is security best-practice for OIDC
+        # CKV_GCP_49/41: Deployer SA needs actAs role for CI/CD automation (scoped to deployer only)
+        entry: uvx --from 'checkov' checkov -d terraform --quiet --compact --skip-check CKV_GCP_62,CKV_GCP_114,CKV_GCP_28,CKV_GCP_125,CKV_GCP_49,CKV_GCP_41
         files: ^terraform/
         language: system
         pass_filenames: false

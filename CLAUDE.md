@@ -36,6 +36,46 @@ npm run css             # Rebuild Tailwind CSS (required after template changes)
 
 **Middleware order**: Runs outside-in. SecurityHeaders first (outermost), then Guard, CredentialedCORS, JWTAuth (innermost). See [app/main.py:166-188](app/main.py#L166-L188).
 
+**SPA deployment (spa-origin)**: React SPA builds to `frontend/dist/`, then packaged in a separate container (`Dockerfile.spa`) served by nginx on Cloud Run at `app.<apex>`. CI/CD workflow (`.github/workflows/ci-cd.yaml`) builds both `api-core` and `spa-origin` images, then deploys both services to Cloud Run. Static assets are hashed by Vite (long cache lifetime). See `terraform.tfvars.example` for static_assets config (optional Cloud CDN prefix-routing).
+
+**CI/CD strategy**: `.github/workflows/ci-cd.yaml` is self-contained — all build and deploy logic lives there. No shell script dependency. Builds: api-core (Dockerfile), spa-origin (Dockerfile.spa), api-games (services/games/Dockerfile). Deploys: all three services to Cloud Run. IAM, secrets, and policies are managed by Terraform.
+
+**Manual image builds** (first-time bootstrap or CI/CD unavailable): Use `just build-images <gcp-project>` to build and push all three images to GCR in parallel. Then `terraform apply` to deploy.
+
+## Bootstrap & Deployment
+
+**First-time setup (one operator, one time, in order):**
+
+```bash
+# STEP 1: Enable APIs, create CV bucket, grant runtime SA read access
+export GCP_PROJECT=<your-project>
+just deploy bootstrap
+
+# STEP 2: Create versioned Terraform state bucket + init backend
+just deploy bootstrap-state
+
+# STEP 3: Create Secret Manager secrets (JWT signing key, refresh token pepper)
+just deploy bootstrap-secrets
+
+# STEP 4: Deploy infrastructure via Terraform
+# Edit terraform/terraform.tfvars with your values (apex domain, WIF config, etc.)
+cd terraform && terraform plan
+terraform apply
+
+# STEP 5: Upload CV data to GCS
+just deploy upload-cv
+
+# STEP 6: Verify deployment (optional, manual health check)
+just deploy verify
+```
+
+**After bootstrap:** CI/CD (`terraform apply` for changes + `.github/workflows/ci-cd.yaml` for pushes to main) handles all further deployments. Manual steps are idempotent — re-running them is safe.
+
+**Removed from script:** `build`, `deploy`, `wif` stages. These are now:
+
+- `build` / `deploy` — handled by CI/CD workflow
+- `wif` — handled by Terraform module `github_wif`
+
 ## Testing
 
 ```bash
