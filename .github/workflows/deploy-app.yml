@@ -173,24 +173,8 @@ jobs:
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
           service_account: ${{ secrets.GCP_DEPLOY_SA }}
-          # gcloud run deploy performs an actAs check on the runtime service
-          # account; the plain WIF external_account credential fails that
-          # check (see commit 05346cb history). access_token exchanges for
-          # an impersonated_service_account credential, which actAs accepts.
-          token_format: access_token
 
       - uses: google-github-actions/setup-gcloud@v2
-
-      - name: Debug active identity
-        run: |
-          gcloud auth list
-          gcloud config list account
-          echo "--- testIamPermissions on api-core-runtime ---"
-          curl -s -X POST \
-            -H "Authorization: Bearer $(gcloud auth print-access-token)" \
-            -H "Content-Type: application/json" \
-            -d '{"permissions": ["iam.serviceAccounts.actAs"]}' \
-            "https://iam.googleapis.com/v1/projects/${{ vars.GCP_PROJECT }}/serviceAccounts/api-core-runtime@${{ vars.GCP_PROJECT }}.iam.gserviceaccount.com:testIamPermissions"
 
       - name: Deploy new image tags to Cloud Run
         env:
