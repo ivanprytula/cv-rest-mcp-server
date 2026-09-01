@@ -3,6 +3,8 @@ __pycache__
 .venv/
 venv/
 .env
+.env.local
+.env.*.local
 *.md
 tests/
 *.egg-info

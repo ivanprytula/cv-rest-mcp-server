@@ -107,3 +107,82 @@ variable "static_assets" {
   })
   default = null
 }
+
+# IAM and Secrets (managed by iam_secrets module)
+variable "jwt_signing_secret_id" {
+  description = "Existing Secret Manager secret ID for JWT signing key (create separately if needed)"
+  type        = string
+  default     = ""
+}
+
+variable "jwt_signing_key_value" {
+  description = "JWT signing key value to create/update in Secret Manager (sensitive, leave empty to skip)"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "refresh_token_pepper_value" {
+  description = "Refresh token pepper value to create/update in Secret Manager (sensitive, leave empty to skip)"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+# GitHub Workload Identity Federation
+variable "github_repo" {
+  description = "GitHub repository in owner/repo format (e.g., ivanprytula/cv-rest-mcp-server)"
+  type        = string
+  default     = ""
+}
+
+variable "setup_github_wif" {
+  description = "Set to true to create GitHub WIF (Workload Identity Federation) for CI/CD"
+  type        = bool
+  default     = false
+}
+
+variable "setup_org_policies" {
+  description = "Set to true to enforce Organization Policies (uniform bucket access, deny-public)"
+  type        = bool
+  default     = false
+}
+
+# Cloud Armor: DDoS/abuse protection for static CDN assets
+variable "enable_cloud_armor" {
+  description = "Enable Cloud Armor security policy for CDN protection"
+  type        = bool
+  default     = false
+}
+
+variable "cloud_armor_rate_limit_count" {
+  description = "Max requests per IP before rate limiting (Cloud Armor)"
+  type        = number
+  default     = 100
+}
+
+variable "cloud_armor_rate_limit_interval_sec" {
+  description = "Time window (seconds) for Cloud Armor rate limiting"
+  type        = number
+  default     = 60
+}
+
+# Private upload bucket for user-generated content (optional)
+variable "uploads" {
+  description = <<-EOT
+    Private user-content upload bucket (avatars, photos). When set, creates a deny-public bucket.
+      {
+        bucket_name    = "myproj-uploads"
+        location       = "EU"
+        app_sa         = "api-core-runtime@myproj.iam.gserviceaccount.com"
+        write_prefixes = ["avatars/", "photos/"]
+      }
+  EOT
+  type = object({
+    bucket_name    = string
+    location       = string
+    app_sa         = string
+    write_prefixes = list(string)
+  })
+  default = null
+}
