@@ -46,6 +46,15 @@ resource "google_project_iam_member" "deployer_artifact_registry_reader" {
   member  = "serviceAccount:${google_service_account.deployer.email}"
 }
 
+# Deployer runs `terraform apply` in CI, which reads the serverless NEGs
+# (created alongside each Cloud Run service) as part of refreshing state.
+# compute.networkViewer lacks networkEndpointGroups.get; compute.viewer covers it.
+resource "google_project_iam_member" "deployer_compute_viewer" {
+  project = var.project
+  role    = "roles/compute.viewer"
+  member  = "serviceAccount:${google_service_account.deployer.email}"
+}
+
 # CI/CD deployer needs to assign runtime SAs to Cloud Run services.
 # Scoped to deployer SA only; acceptable trade-off for CI/CD automation.
 resource "google_project_iam_member" "deployer_actAs" {
