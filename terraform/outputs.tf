@@ -38,6 +38,11 @@ output "deployer_sa_email" {
   value       = module.iam_secrets.deployer_sa_email
 }
 
+output "cv_images_repo_url" {
+  description = "Artifact Registry docker repo path for app images (used by deploy-app.yml)."
+  value       = module.iam_secrets.cv_images_repo_url
+}
+
 output "github_wif_provider" {
   description = "GitHub WIF provider URI (use in GitHub WIF_PROVIDER secret, only when setup_github_wif=true)."
   value       = var.setup_github_wif ? module.github_wif[0].workload_identity_provider : ""

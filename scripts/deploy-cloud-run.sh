@@ -2,7 +2,7 @@
 # Cloud Run operational setup — one-time bootstrap and data management.
 #
 # EXECUTION ORDER (required):
-#   1. bootstrap          Enable APIs, create CV bucket, grant runtime SA permissions
+#   1. bootstrap          Enable cloudresourcemanager API, create CV bucket, grant Cloud Build permissions
 #   2. bootstrap-state    Create versioned TF remote-state bucket + init
 #   3. bootstrap-secrets  Create Secret Manager secrets (cv-jwt-signing-key, refresh-token-pepper)
 #   4. (Run: terraform apply)  Terraform deploys IAM, Org Policies, Cloud Run services
@@ -17,7 +17,6 @@
 #                creates projects (that is a billing/console decision).
 #   GCP_ENV      default production (e.g. dev, stage, production)
 #   GCP_REGION   default europe-west1
-#   SVC_NAME     default cv-ivanprytula
 #
 # Note: GitHub WIF (Workload Identity Federation) setup is now in Terraform
 # (terraform/modules/github_wif/). Set setup_github_wif=true in terraform.tfvars.
@@ -25,10 +24,8 @@
 set -euo pipefail
 
 GCP_PROJECT="${GCP_PROJECT:-}"   # required; validated per-stage by require_project
-GCP_ENV="${GCP_ENV:-production}"
+GCP_ENV="${GCP_ENV:-dev}"
 GCP_REGION="${GCP_REGION:-europe-west1}"
-SVC_NAME="${SVC_NAME:-cv-ivanprytula}"
-RUN_SA_ID="${SVC_NAME}-runtime"
 CV_BUCKET="${GCP_PROJECT}-cv-data"
 # Terraform remote state (Phase 1a). The SAME versioned bucket provides both
 # state storage and lock coordination — the GCS backend locks via an object
@@ -73,47 +70,31 @@ ensure_build_permissions() {
             --member="serviceAccount:$build_sa" --role="$role" --condition=None >/dev/null
     done
 
-    # gcr.io tags are served by Artifact Registry: pushes land in a repo
-    # literally named 'gcr.io' (multi-region us). Pre-create it so the build
-    # SA only ever needs plain writer — no createOnPush permission.
-    log "Ensuring Artifact Registry repo 'gcr.io' (legacy host backing)"
-    if gcloud artifacts repositories describe gcr.io --location=us \
-        --project "$GCP_PROJECT" >/dev/null 2>&1; then
-        echo "exists, skipping"
-    else
-        gcloud artifacts repositories create gcr.io \
-            --project "$GCP_PROJECT" --location=us \
-            --repository-format=docker \
-            --description="gcr.io legacy-host backing for $SVC_NAME images"
-    fi
+    # The app image repo itself (cv-images, regional Artifact Registry) is
+    # provisioned by Terraform (modules/iam_secrets) — not here. This grants
+    # only the project-level roles Cloud Build needs to write to it.
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STEP 1: One-time bootstrap — APIs, CV bucket, runtime SA permissions
+# STEP 1: One-time bootstrap — cloudresourcemanager API, CV bucket, Cloud Build IAM
 # ─────────────────────────────────────────────────────────────────────────────
 bootstrap() {
     require_project
     log "STEP 1: Bootstrap APIs and CV bucket"
 
-    log "  1a. Enabling APIs on $GCP_PROJECT"
+    log "  1a. Enabling cloudresourcemanager API on $GCP_PROJECT"
+    # Only this one is needed here: Terraform's own google_project_service
+    # resources (which enable run/cloudbuild/storage/compute/dns/secretmanager/
+    # artifactregistry — see terraform/modules/gcp_apis) require
+    # cloudresourcemanager already active to apply at all on a fresh project.
     gcloud services enable --project "$GCP_PROJECT" \
-        cloudresourcemanager.googleapis.com run.googleapis.com \
-        cloudbuild.googleapis.com storage.googleapis.com \
-        compute.googleapis.com dns.googleapis.com \
-        secretmanager.googleapis.com
+        cloudresourcemanager.googleapis.com
 
-    log "  1b. Runtime service account $RUN_SA_ID"
-    if gcloud iam service-accounts describe "${RUN_SA_ID}@${GCP_PROJECT}.iam.gserviceaccount.com" \
-        --project "$GCP_PROJECT" >/dev/null 2>&1; then
-        echo "    exists, skipping"
-    else
-        gcloud iam service-accounts create "$RUN_SA_ID" \
-            --project "$GCP_PROJECT" \
-            --display-name="$SVC_NAME Cloud Run runtime" \
-            --description="Reads CV content from GCS; no other permissions by design"
-    fi
+    # Runtime service accounts (api-core-runtime, spa-origin-runtime,
+    # api-games-runtime) are created by Terraform (modules/iam_secrets),
+    # which also grants api-core-runtime read access to the CV bucket below.
 
-    log "  1c. CV bucket gs://$CV_BUCKET (application data storage)"
+    log "  1b. CV bucket gs://$CV_BUCKET (application data storage)"
     if gcloud storage buckets describe "gs://$CV_BUCKET" >/dev/null 2>&1; then
         echo "    exists, skipping create"
     else
@@ -122,11 +103,6 @@ bootstrap() {
     fi
     # object versioning = free history/rollback for cv.json (idempotent)
     gcloud storage buckets update "gs://$CV_BUCKET" --versioning
-
-    log "  1d. Grant runtime SA read-only on CV bucket"
-    gcloud storage buckets add-iam-policy-binding "gs://$CV_BUCKET" \
-        --member="serviceAccount:${RUN_SA_ID}@${GCP_PROJECT}.iam.gserviceaccount.com" \
-        --role=roles/storage.objectViewer --condition=None >/dev/null
 
     ensure_build_permissions
 
@@ -188,7 +164,7 @@ bootstrap_secrets() {
     done
 
     log "  3b. IAM: runtime SA gets secret read access (terraform handles this via iam_secrets module)"
-    warn "Secrets are also managed by terraform/modules/iam_secrets/. For manual updates, use: gcloud secrets versions add <secret-id> --data-file=-"
+    warn "Secret creation/versions are managed here only. terraform/modules/iam_secrets/ only binds IAM access. For manual updates, use: gcloud secrets versions add <secret-id> --data-file=-"
 
     cat <<EOF
 
@@ -227,22 +203,26 @@ upload_cv() {
 # ─────────────────────────────────────────────────────────────────────────────
 verify() {
     require_project
-    log "STEP 6: Verify Cloud Run deployment (optional, manual)"
+    log "STEP 6: Verify Cloud Run deployments (optional, manual)"
 
-    local url health attempt
-    url="$(gcloud run services describe "$SVC_NAME" \
-        --project "$GCP_PROJECT" --region "$GCP_REGION" --format 'value(status.url)')"
-    log "  Service URL: $url"
+    local svc url health attempt api_core_url
+    for svc in api-core api-games spa-origin; do
+        log "  === $svc ==="
+        url="$(gcloud run services describe "$svc" \
+            --project "$GCP_PROJECT" --region "$GCP_REGION" --format 'value(status.url)')"
+        echo "    Service URL: $url"
+        [ "$svc" = "api-core" ] && api_core_url="$url"
 
-    health=""
-    for attempt in $(seq 1 12); do
-        if health="$(curl -fsS --max-time 10 "$url/health" 2>/dev/null)"; then break; fi
-        echo "  waiting for revision ($attempt/12)..."
-        sleep 5
+        health=""
+        for attempt in $(seq 1 12); do
+            if health="$(curl -fsS --max-time 10 "$url/health" 2>/dev/null)"; then break; fi
+            echo "    waiting for revision ($attempt/12)..."
+            sleep 5
+        done
+        [ -n "$health" ] || die "$svc /health never returned OK — check logs: gcloud run services logs read $svc --region $GCP_REGION"
+        echo "    Health check: OK"
+        echo "    Response: $health"
     done
-    [ -n "$health" ] || die "/health never returned OK — check logs: gcloud run services logs read $SVC_NAME --region $GCP_REGION"
-    echo "  Health check: OK"
-    echo "  Response: $health"
 
     case "$health" in
         *'"cv_source":"gcs"'*) ;;
@@ -250,10 +230,10 @@ verify() {
             warn "cv_source is placeholder — upload content: scripts/deploy-cloud-run.sh upload-cv" ;;
     esac
 
-    log "  Smoke tests:"
-    echo "    $url/"
-    echo "    $url/cv/html?theme=original"
-    echo "    $url/cv/pdf?theme=modern (rate-limited)"
+    log "  Smoke tests (api-core):"
+    echo "    $api_core_url/"
+    echo "    $api_core_url/cv/html?theme=original"
+    echo "    $api_core_url/cv/pdf?theme=modern (rate-limited)"
 }
 
 if [[ "$#" -ne 1 ]]; then

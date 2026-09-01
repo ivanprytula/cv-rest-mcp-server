@@ -60,12 +60,14 @@ variable "services" {
   }))
 }
 
-# CI/CD image-tag override, keyed by workload name (matches `services` keys).
-# Lets the deploy pipeline pin an immutable SHA-tagged image per service
-# without needing to pass the entire `services` map on the command line.
-# Empty/missing entries fall back to the image already set in `services`.
+# Manual/break-glass image-tag override, keyed by workload name (matches
+# `services` keys). Routine releases go through deploy-app.yml's
+# `gcloud run deploy` and never touch Terraform — this var is only for a
+# manual `terraform apply -var 'image_overrides={...}'` (e.g. restoring an
+# older SHA outside the normal pipeline). Empty/missing entries fall back
+# to the image already set in `services`.
 variable "image_overrides" {
-  description = "Workload name -> image (e.g. gcr.io/PROJECT/api-core:abc1234). Overrides services[key].image."
+  description = "Workload name -> image (e.g. europe-west1-docker.pkg.dev/PROJECT/cv-images/api-core:abc1234). Overrides services[key].image."
   type        = map(string)
   default     = {}
 }
@@ -118,24 +120,11 @@ variable "static_assets" {
   default = null
 }
 
-# IAM and Secrets (managed by iam_secrets module)
+# IAM binding target only — secrets themselves are created by
+# scripts/deploy-cloud-run.sh bootstrap-secrets, not Terraform.
 variable "jwt_signing_secret_id" {
-  description = "Existing Secret Manager secret ID for JWT signing key (create separately if needed)"
+  description = "Existing Secret Manager secret ID for JWT signing key (create via scripts/deploy-cloud-run.sh bootstrap-secrets)"
   type        = string
-  default     = ""
-}
-
-variable "jwt_signing_key_value" {
-  description = "JWT signing key value to create/update in Secret Manager (sensitive, leave empty to skip)"
-  type        = string
-  sensitive   = true
-  default     = ""
-}
-
-variable "refresh_token_pepper_value" {
-  description = "Refresh token pepper value to create/update in Secret Manager (sensitive, leave empty to skip)"
-  type        = string
-  sensitive   = true
   default     = ""
 }
 

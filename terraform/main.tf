@@ -15,11 +15,9 @@ module "iam_secrets" {
   depends_on = [module.gcp_apis]
   source     = "./modules/iam_secrets"
 
-  project                    = var.project_id
-  region                     = var.region
-  jwt_signing_secret_id      = var.jwt_signing_secret_id
-  jwt_signing_key_value      = var.jwt_signing_key_value
-  refresh_token_pepper_value = var.refresh_token_pepper_value
+  project               = var.project_id
+  region                = var.region
+  jwt_signing_secret_id = var.jwt_signing_secret_id
 }
 
 # GitHub Workload Identity Federation for CI/CD (optional)

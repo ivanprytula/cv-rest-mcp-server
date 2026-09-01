@@ -10,21 +10,7 @@ variable "region" {
 }
 
 variable "jwt_signing_secret_id" {
-  description = "Secret Manager secret ID for JWT signing key (empty = skip IAM binding)"
+  description = "Secret Manager secret ID for JWT signing key (empty = skip IAM binding). Secret itself is created by scripts/deploy-cloud-run.sh bootstrap-secrets."
   type        = string
-  default     = ""
-}
-
-variable "jwt_signing_key_value" {
-  description = "JWT signing key value (empty = skip secret creation)"
-  type        = string
-  sensitive   = true
-  default     = ""
-}
-
-variable "refresh_token_pepper_value" {
-  description = "Refresh token pepper value (empty = skip secret creation)"
-  type        = string
-  sensitive   = true
   default     = ""
 }

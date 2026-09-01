@@ -50,6 +50,13 @@ resource "google_cloud_run_v2_service" "service" {
 
     service_account = var.service_account_email
   }
+
+  # Terraform owns the service's shape (scaling, secrets, env vars); the
+  # deploy-app.yml pipeline owns which image tag is live via `gcloud run
+  # deploy`. Without this, each tool reverts the other's most recent change.
+  lifecycle {
+    ignore_changes = [template[0].containers[0].image]
+  }
 }
 
 # Serverless NEG so the Load Balancer can route to this service. The NEG

@@ -26,13 +26,17 @@ create_dns_zone = true
 # scripts/deploy-cloud-run.sh wif/bootstrap before Phase 1a).
 #
 # Image tagging strategy:
-#   - CI/CD tags every image with commit SHA (SHORT_SHA) for traceability
-#   - Also tags with :latest for convenience
-#   - Default below uses :latest; CI/CD deploys via gcloud run deploy with SHA
+#   - deploy-app.yml (app code changes) tags every image with commit SHA
+#     (SHORT_SHA) for traceability, also tags :latest for convenience, and
+#     releases via `gcloud run deploy --image <SHA tag>` — no Terraform apply.
+#   - ci-cd.yaml (terraform/** changes only) applies this `services` map as-is;
+#     the `image` field below is only the fallback for a from-scratch apply
+#     (each Cloud Run service ignores drift on its image field afterwards —
+#     see modules/cloud_run_service lifecycle.ignore_changes).
 #   - For manual terraform apply: override with -var flag if deploying an older SHA
 services = {
   api-core = {
-    image                 = "gcr.io/cv-rest-mcp-server/api-core:latest"
+    image                 = "europe-west1-docker.pkg.dev/cv-rest-mcp-server/cv-images/api-core:latest"
     service_account       = "api-core-runtime@cv-rest-mcp-server.iam.gserviceaccount.com"
     allow_unauthenticated = true
     env_vars = {
@@ -57,19 +61,19 @@ services = {
     memory        = "512Mi"
   }
   api-games = {
-    image                 = "gcr.io/cv-rest-mcp-server/api-games:latest"
+    image                 = "europe-west1-docker.pkg.dev/cv-rest-mcp-server/cv-images/api-games:latest"
     service_account       = "api-games-runtime@cv-rest-mcp-server.iam.gserviceaccount.com"
     allow_unauthenticated = true
     max_instances         = 1
   }
   spa-origin = {
-    image                 = "gcr.io/cv-rest-mcp-server/spa-origin:latest"
+    image                 = "europe-west1-docker.pkg.dev/cv-rest-mcp-server/cv-images/spa-origin:latest"
     service_account       = "spa-origin-runtime@cv-rest-mcp-server.iam.gserviceaccount.com"
     allow_unauthenticated = true
     max_instances         = 1
   }
   # workers = {
-  #   image                 = "gcr.io/cv-rest-mcp-server/workers:latest"
+  #   image                 = "europe-west1-docker.pkg.dev/cv-rest-mcp-server/cv-images/workers:latest"
   #   service_account       = "workers-runtime@cv-rest-mcp-server.iam.gserviceaccount.com"
   #   allow_unauthenticated = false   # private: invoked via Pub/Sub/Cloud Tasks, never public
   #   max_instances         = 1

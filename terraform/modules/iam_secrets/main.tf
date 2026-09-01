@@ -46,6 +46,25 @@ resource "google_project_iam_member" "deployer_artifact_registry_reader" {
   member  = "serviceAccount:${google_service_account.deployer.email}"
 }
 
+# Regional Artifact Registry repo for app images, replacing the legacy
+# gcr.io host. Deploy pipeline pushes here directly (deploy-app.yml) and
+# `gcloud run deploy` pulls from here.
+resource "google_artifact_registry_repository" "cv_images" {
+  project       = var.project
+  location      = var.region
+  repository_id = "cv-images"
+  format        = "DOCKER"
+  description   = "Application images (api-core, api-games, spa-origin)"
+}
+
+resource "google_artifact_registry_repository_iam_member" "deployer_cv_images_writer" {
+  project    = var.project
+  location   = google_artifact_registry_repository.cv_images.location
+  repository = google_artifact_registry_repository.cv_images.name
+  role       = "roles/artifactregistry.writer"
+  member     = "serviceAccount:${google_service_account.deployer.email}"
+}
+
 # Deployer runs `terraform apply` in CI, which reads the serverless NEGs
 # (created alongside each Cloud Run service) as part of refreshing state.
 # compute.networkViewer lacks networkEndpointGroups.get; compute.viewer covers it.
@@ -115,6 +134,31 @@ resource "google_project_iam_member" "api_games_gcr_pull" {
   member  = "serviceAccount:${google_service_account.api_games_runtime.email}"
 }
 
+# Runtime SAs pull images from the new cv-images Artifact Registry repo.
+resource "google_artifact_registry_repository_iam_member" "api_core_cv_images_reader" {
+  project    = var.project
+  location   = google_artifact_registry_repository.cv_images.location
+  repository = google_artifact_registry_repository.cv_images.name
+  role       = "roles/artifactregistry.reader"
+  member     = "serviceAccount:${google_service_account.api_core_runtime.email}"
+}
+
+resource "google_artifact_registry_repository_iam_member" "spa_origin_cv_images_reader" {
+  project    = var.project
+  location   = google_artifact_registry_repository.cv_images.location
+  repository = google_artifact_registry_repository.cv_images.name
+  role       = "roles/artifactregistry.reader"
+  member     = "serviceAccount:${google_service_account.spa_origin_runtime.email}"
+}
+
+resource "google_artifact_registry_repository_iam_member" "api_games_cv_images_reader" {
+  project    = var.project
+  location   = google_artifact_registry_repository.cv_images.location
+  repository = google_artifact_registry_repository.cv_images.name
+  role       = "roles/artifactregistry.reader"
+  member     = "serviceAccount:${google_service_account.api_games_runtime.email}"
+}
+
 # Secret Manager access for JWT signing key (Phase 1c+)
 resource "google_secret_manager_secret_iam_member" "api_core_jwt_key" {
   count     = var.jwt_signing_secret_id != "" ? 1 : 0
@@ -142,47 +186,9 @@ resource "google_project_iam_member" "cloud_build_logging" {
   member  = "serviceAccount:${data.google_project.current.number}@cloudbuild.gserviceaccount.com"
 }
 
-# Secrets (only created if their content is provided)
-# Naming aligns with deploy-cloud-run.sh convention: cv-<secret-name>
-resource "google_secret_manager_secret" "jwt_signing_key" {
-  count     = var.jwt_signing_key_value != "" ? 1 : 0
-  secret_id = "cv-jwt-signing-key"
-  project   = var.project
-
-  replication {
-    user_managed {
-      replicas {
-        location = var.region
-      }
-    }
-  }
-}
-
-resource "google_secret_manager_secret_version" "jwt_signing_key" {
-  count       = var.jwt_signing_key_value != "" ? 1 : 0
-  secret      = google_secret_manager_secret.jwt_signing_key[0].id
-  secret_data = var.jwt_signing_key_value
-}
-
-resource "google_secret_manager_secret" "refresh_token_pepper" {
-  count     = var.refresh_token_pepper_value != "" ? 1 : 0
-  secret_id = "cv-refresh-token-pepper"
-  project   = var.project
-
-  replication {
-    user_managed {
-      replicas {
-        location = var.region
-      }
-    }
-  }
-}
-
-resource "google_secret_manager_secret_version" "refresh_token_pepper" {
-  count       = var.refresh_token_pepper_value != "" ? 1 : 0
-  secret      = google_secret_manager_secret.refresh_token_pepper[0].id
-  secret_data = var.refresh_token_pepper_value
-}
+# Secrets (cv-jwt-signing-key, cv-refresh-token-pepper) and their versions are
+# created by scripts/deploy-cloud-run.sh bootstrap-secrets — not here. This
+# module only binds IAM access to secret IDs it assumes already exist.
 
 # Data source to fetch current project info
 data "google_project" "current" {

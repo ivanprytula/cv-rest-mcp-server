@@ -13,17 +13,12 @@ output "api_games_runtime_sa_email" {
   value       = google_service_account.api_games_runtime.email
 }
 
-output "jwt_signing_secret_id" {
-  description = "Secret Manager secret ID for JWT signing key (or empty if not created)"
-  value       = try(google_secret_manager_secret.jwt_signing_key[0].id, "")
-}
-
-output "refresh_token_pepper_secret_id" {
-  description = "Secret Manager secret ID for refresh token pepper (or empty if not created)"
-  value       = try(google_secret_manager_secret.refresh_token_pepper[0].id, "")
-}
-
 output "deployer_sa_email" {
   description = "Email of the CI/CD deployer service account"
   value       = google_service_account.deployer.email
+}
+
+output "cv_images_repo_url" {
+  description = "Artifact Registry docker repo path, e.g. europe-west1-docker.pkg.dev/PROJECT/cv-images"
+  value       = "${google_artifact_registry_repository.cv_images.location}-docker.pkg.dev/${var.project}/${google_artifact_registry_repository.cv_images.repository_id}"
 }
