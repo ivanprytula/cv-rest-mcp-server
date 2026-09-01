@@ -82,13 +82,15 @@ jobs:
           python-version: "3.14"
       - name: Install dependencies
         run: uv sync --group dev
+      - name: Install Playwright browsers
+        run: uv run playwright install chromium
       - name: Install pytest-timeout and pytest-xdist for diagnostics
         run: uv pip install pytest-timeout pytest-xdist
       - name: Run test suite with diagnostics
         run: |
           echo "Starting test run at $(date)"
           START_TIME=$(date +%s)
-          uv run pytest --timeout=60 --durations=10 -n auto -m "not needs_script and not e2e" || TEST_EXIT_CODE=$?
+          uv run pytest --timeout=60 --durations=10 -n auto -m "not needs_script" || TEST_EXIT_CODE=$?
           END_TIME=$(date +%s)
           echo "Test run completed at $(date)"
           echo "Total test time: $((END_TIME - START_TIME)) seconds"
