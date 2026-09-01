@@ -47,39 +47,28 @@ jobs:
     if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.ref }}
 
-      - uses: infracost/actions/setup@v2
+      - name: Install Infracost CLI
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/infracost/infracost/master/scripts/install.sh | sh
 
-      - name: Generate Infracost cost estimate
+      - name: Generate cost estimate
         env:
           INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}
         run: |
-          infracost breakdown \
-            --path terraform \
-            --format json \
-            --out-file /tmp/infracost.json
+          infracost breakdown --path terraform --format json --out-file /tmp/infracost.json
 
-      - name: Check monthly cost threshold ($100)
+      - name: Check cost threshold ($100/month)
         run: |
           MONTHLY_COST=$(jq '.totalMonthlyCost' /tmp/infracost.json)
           BUDGET=100
           echo "Estimated monthly cost: \$$MONTHLY_COST"
           if (( $(echo "$MONTHLY_COST > $BUDGET" | bc -l) )); then
-            echo "❌ Cost estimate (\$$MONTHLY_COST) exceeds budget (\$$BUDGET)"
+            echo "❌ Exceeds budget (\$$BUDGET)"
             exit 1
           else
-            echo "✓ Cost estimate (\$$MONTHLY_COST) within budget (\$$BUDGET)"
+            echo "✓ Within budget (\$$BUDGET)"
           fi
-
-      - name: Comment cost estimate on PR
-        if: always()
-        uses: infracost/actions@v2
-        with:
-          path: /tmp/infracost.json
-          behavior: update
-          operation: comment
 
   tests:
     needs: code-quality
