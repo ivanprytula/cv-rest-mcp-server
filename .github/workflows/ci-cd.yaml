@@ -226,8 +226,7 @@ jobs:
               --cpu "$cpu" \
               --max-instances 1 \
               --min-instances 0 \
-              --service-account "${name}-runtime@${GCP_PROJECT}.iam.gserviceaccount.com" \
-              --verbosity=debug --log-http
+              --service-account "${name}-runtime@${GCP_PROJECT}.iam.gserviceaccount.com"
           }
 
           deploy_service "api-core" "${SVC_NAME_API_CORE}" "512Mi" "1" "${API_CORE_ENV_VARS}"
