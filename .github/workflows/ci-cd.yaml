@@ -207,8 +207,6 @@ jobs:
           TF_VAR_jwt_signing_secret_id: ${{ vars.TF_VAR_JWT_SIGNING_SECRET_ID }}
           TF_VAR_setup_github_wif: ${{ vars.TF_VAR_SETUP_GITHUB_WIF }}
           TF_VAR_github_repo: ${{ vars.TF_VAR_GITHUB_REPO }}
-          TF_VAR_setup_org_policies: ${{ vars.TF_VAR_SETUP_ORG_POLICIES }}
-          TF_VAR_enable_cloud_armor: ${{ vars.TF_VAR_ENABLE_CLOUD_ARMOR }}
         run: |
           SHORT_SHA=${GIT_SHA:0:7}
           TF_VAR_image_overrides=$(cat <<EOF
