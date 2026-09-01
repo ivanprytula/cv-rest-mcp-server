@@ -61,6 +61,31 @@ resource "google_project_iam_member" "deployer_storage_admin" {
   member  = "serviceAccount:${google_service_account.deployer.email}"
 }
 
+# terraform plan refreshes the google_project_iam_member and
+# google_service_account_iam_member resources this module manages, which
+# requires reading project and service-account IAM policies.
+# securityReviewer is read-only across IAM (no grant/revoke powers).
+resource "google_project_iam_member" "deployer_security_reviewer" {
+  project = var.project
+  role    = "roles/iam.securityReviewer"
+  member  = "serviceAccount:${google_service_account.deployer.email}"
+}
+
+# The dns module manages the zone and its record sets, so the deployer
+# needs write access, not just read.
+resource "google_project_iam_member" "deployer_dns_admin" {
+  project = var.project
+  role    = "roles/dns.admin"
+  member  = "serviceAccount:${google_service_account.deployer.email}"
+}
+
+# deploy-app.yml submits image builds via `gcloud builds submit`.
+resource "google_project_iam_member" "deployer_cloudbuild_builder" {
+  project = var.project
+  role    = "roles/cloudbuild.builds.builder"
+  member  = "serviceAccount:${google_service_account.deployer.email}"
+}
+
 # Deployer must pull images from GCR (Artifact Registry-backed) for
 # `gcloud run deploy` to fetch the container being deployed.
 resource "google_project_iam_member" "deployer_artifact_registry_reader" {
