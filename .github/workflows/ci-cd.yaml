@@ -197,10 +197,6 @@ jobs:
           gcloud projects describe "${GCP_PROJECT}" \
             --format='value(projectId,projectNumber)' \
             --verbosity=error
-          echo "IAM policy on api-core-runtime as seen from CI:"
-          gcloud iam service-accounts get-iam-policy \
-            "api-core-runtime@${GCP_PROJECT}.iam.gserviceaccount.com" \
-            --format=json
 
       - name: Deploy all services to Cloud Run (sequential)
         env:
@@ -230,7 +226,8 @@ jobs:
               --cpu "$cpu" \
               --max-instances 1 \
               --min-instances 0 \
-              --service-account "${name}-runtime@${GCP_PROJECT}.iam.gserviceaccount.com"
+              --service-account "${name}-runtime@${GCP_PROJECT}.iam.gserviceaccount.com" \
+              --verbosity=debug --log-http
           }
 
           deploy_service "api-core" "${SVC_NAME_API_CORE}" "512Mi" "1" "${API_CORE_ENV_VARS}"
