@@ -29,6 +29,7 @@ repos:
       - id: infracost_breakdown
         args:
           - --args=--path=terraform
+          - --args=--terraform-var-file=terraform.tfvars.example
         stages: [manual]  # Run manually only: `pre-commit run --hook-stage manual`
   - repo: local
     hooks:

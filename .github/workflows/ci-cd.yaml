@@ -53,7 +53,9 @@ jobs:
         env:
           INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}
         run: |
-          infracost breakdown --path terraform --format json --out-file /tmp/infracost.json
+          infracost breakdown --path terraform \
+            --terraform-var-file terraform.tfvars.example \
+            --format json --out-file /tmp/infracost.json
 
       - name: Check cost threshold ($100/month)
         run: |
