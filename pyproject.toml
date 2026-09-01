@@ -3,7 +3,7 @@ name = "cv-rest-mcp-server"
 version = "0.1.0"
 description = "FastAPI + FastMCP service that renders a CV as JSON or themed PDFs."
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.11"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 dependencies = [
