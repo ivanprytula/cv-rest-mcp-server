@@ -60,6 +60,16 @@ variable "services" {
   }))
 }
 
+# CI/CD image-tag override, keyed by workload name (matches `services` keys).
+# Lets the deploy pipeline pin an immutable SHA-tagged image per service
+# without needing to pass the entire `services` map on the command line.
+# Empty/missing entries fall back to the image already set in `services`.
+variable "image_overrides" {
+  description = "Workload name -> image (e.g. gcr.io/PROJECT/api-core:abc1234). Overrides services[key].image."
+  type        = map(string)
+  default     = {}
+}
+
 # hostname -> workload name. Multiple hosts may map to one workload (e.g. both
 # www.<apex> and api.<apex> -> "api-core").
 variable "host_routing" {

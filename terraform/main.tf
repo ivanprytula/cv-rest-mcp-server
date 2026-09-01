@@ -71,7 +71,7 @@ module "run" {
   name                  = each.key
   project               = var.project_id
   region                = var.region
-  image                 = each.value.image
+  image                 = lookup(var.image_overrides, each.key, each.value.image)
   service_account_email = each.value.service_account
   allow_unauthenticated = each.value.allow_unauthenticated
   env_vars              = each.value.env_vars

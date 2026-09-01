@@ -117,7 +117,6 @@ jobs:
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
           service_account: ${{ secrets.GCP_DEPLOY_SA }}
-          token_format: access_token
 
       - uses: google-github-actions/setup-gcloud@v2
 
@@ -183,55 +182,45 @@ jobs:
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
           service_account: ${{ secrets.GCP_DEPLOY_SA }}
-          token_format: access_token
 
-      - uses: google-github-actions/setup-gcloud@v2
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
 
-      - name: Verify deployment identity
+      - name: Terraform init
+        working-directory: terraform
+        run: terraform init
+
+      - name: Terraform apply (deploy new image tags)
+        working-directory: terraform
         env:
-          GCP_PROJECT: ${{ vars.GCP_PROJECT }}
-        run: |
-          echo "Target project: ${GCP_PROJECT}"
-          echo "Authenticated account:"
-          gcloud auth list --filter=status:ACTIVE --format='value(account)'
-          gcloud projects describe "${GCP_PROJECT}" \
-            --format='value(projectId,projectNumber)' \
-            --verbosity=error
-
-      - name: Deploy all services to Cloud Run (sequential)
-        env:
-          GCP_PROJECT: ${{ vars.GCP_PROJECT }}
-          GCP_REGION: ${{ vars.GCP_REGION }}
           GIT_SHA: ${{ github.sha }}
-          SVC_NAME_API_CORE: ${{ vars.SVC_NAME_API_CORE }}
-          SVC_NAME_API_GAMES: ${{ vars.SVC_NAME_API_GAMES }}
-          SVC_NAME_SPA_ORIGIN: ${{ vars.SVC_NAME_SPA_ORIGIN }}
-          API_CORE_ENV_VARS: "TRUST_PROXY=true,CLIENT_IP_XFF_ENTRY=2,FAILBAN_THRESHOLD=6,CV_REFRESH_SECONDS=30,CORS_ORIGINS=https://app.example.com,CONTACT_NAME=${{ vars.CONTACT_NAME }},CONTACT_EMAIL=${{ vars.CONTACT_EMAIL }}"
+          GCP_PROJECT: ${{ vars.GCP_PROJECT }}
+          TF_VAR_project_id: ${{ vars.GCP_PROJECT }}
+          TF_VAR_region: ${{ vars.GCP_REGION }}
+          TF_VAR_apex_domain: ${{ secrets.TF_VAR_APEX_DOMAIN }}
+          TF_VAR_create_dns_zone: ${{ vars.TF_VAR_CREATE_DNS_ZONE }}
+          TF_VAR_services: ${{ secrets.TF_VAR_SERVICES_JSON }}
+          TF_VAR_host_routing: ${{ secrets.TF_VAR_HOST_ROUTING_JSON }}
+          TF_VAR_static_assets: ${{ secrets.TF_VAR_STATIC_ASSETS_JSON }}
+          TF_VAR_uploads: ${{ secrets.TF_VAR_UPLOADS_JSON }}
+          TF_VAR_jwt_signing_secret_id: ${{ vars.TF_VAR_JWT_SIGNING_SECRET_ID }}
+          TF_VAR_setup_github_wif: ${{ vars.TF_VAR_SETUP_GITHUB_WIF }}
+          TF_VAR_github_repo: ${{ vars.TF_VAR_GITHUB_REPO }}
+          TF_VAR_setup_org_policies: ${{ vars.TF_VAR_SETUP_ORG_POLICIES }}
+          TF_VAR_enable_cloud_armor: ${{ vars.TF_VAR_ENABLE_CLOUD_ARMOR }}
         run: |
           SHORT_SHA=${GIT_SHA:0:7}
-
-          deploy_service() {
-            local name="$1" svc_name="$2" memory="$3" cpu="$4" env_vars="$5"
-            local env_vars_arg=()
-            if [ -n "$env_vars" ]; then
-              env_vars_arg=(--set-env-vars "$env_vars")
-            fi
-            gcloud run deploy "$svc_name" \
-              --project "${GCP_PROJECT}" \
-              --region "${GCP_REGION}" \
-              --image "gcr.io/${GCP_PROJECT}/${name}:${SHORT_SHA}" \
-              --allow-unauthenticated \
-              "${env_vars_arg[@]}" \
-              --memory "$memory" \
-              --cpu "$cpu" \
-              --max-instances 1 \
-              --min-instances 0 \
-              --service-account "${name}-runtime@${GCP_PROJECT}.iam.gserviceaccount.com"
+          TF_VAR_image_overrides=$(cat <<EOF
+          {
+            "api-core": "gcr.io/${GCP_PROJECT}/api-core:${SHORT_SHA}",
+            "api-games": "gcr.io/${GCP_PROJECT}/api-games:${SHORT_SHA}",
+            "spa-origin": "gcr.io/${GCP_PROJECT}/spa-origin:${SHORT_SHA}"
           }
-
-          deploy_service "api-core" "${SVC_NAME_API_CORE}" "512Mi" "1" "${API_CORE_ENV_VARS}"
-          deploy_service "api-games" "${SVC_NAME_API_GAMES}" "256Mi" "1" ""
-          deploy_service "spa-origin" "${SVC_NAME_SPA_ORIGIN}" "128Mi" "1" ""
+          EOF
+          )
+          export TF_VAR_image_overrides
+          terraform apply -auto-approve -target=module.run
 
   verify:
     needs: deploy
@@ -248,7 +237,6 @@ jobs:
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
           service_account: ${{ secrets.GCP_DEPLOY_SA }}
-          token_format: access_token
 
       - uses: google-github-actions/setup-gcloud@v2
 
@@ -256,11 +244,8 @@ jobs:
         env:
           GCP_PROJECT: ${{ vars.GCP_PROJECT }}
           GCP_REGION: ${{ vars.GCP_REGION }}
-          SVC_NAME_API_CORE: ${{ vars.SVC_NAME_API_CORE }}
-          SVC_NAME_API_GAMES: ${{ vars.SVC_NAME_API_GAMES }}
-          SVC_NAME_SPA_ORIGIN: ${{ vars.SVC_NAME_SPA_ORIGIN }}
         run: |
-          for svc in "${SVC_NAME_API_CORE}" "${SVC_NAME_SPA_ORIGIN}" "${SVC_NAME_API_GAMES}"; do
+          for svc in "api-core" "spa-origin" "api-games"; do
             echo "=== $svc service ==="
             gcloud run services describe "$svc" \
               --project "${{ vars.GCP_PROJECT }}" \
