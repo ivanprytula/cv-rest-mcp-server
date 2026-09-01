@@ -38,6 +38,29 @@ resource "google_project_iam_member" "deployer_secret_accessor" {
   member  = "serviceAccount:${google_service_account.deployer.email}"
 }
 
+# Deployer runs `terraform plan`, which reads existing state for
+# google_project_service (gcp_apis), google_iam_workload_identity_pool
+# (github_wif), and bucket IAM policies (static_bucket, uploads) — each of
+# these three roles covers the read (and, where relevant, write) permission
+# those resource types require during plan/apply.
+resource "google_project_iam_member" "deployer_service_usage_admin" {
+  project = var.project
+  role    = "roles/serviceusage.serviceUsageAdmin"
+  member  = "serviceAccount:${google_service_account.deployer.email}"
+}
+
+resource "google_project_iam_member" "deployer_workload_identity_pool_admin" {
+  project = var.project
+  role    = "roles/iam.workloadIdentityPoolAdmin"
+  member  = "serviceAccount:${google_service_account.deployer.email}"
+}
+
+resource "google_project_iam_member" "deployer_storage_admin" {
+  project = var.project
+  role    = "roles/storage.admin"
+  member  = "serviceAccount:${google_service_account.deployer.email}"
+}
+
 # Deployer must pull images from GCR (Artifact Registry-backed) for
 # `gcloud run deploy` to fetch the container being deployed.
 resource "google_project_iam_member" "deployer_artifact_registry_reader" {
