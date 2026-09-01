@@ -2,13 +2,17 @@
 
 ## Python Environment
 
-Requires Python 3.14+.
+Targets Python 3.14 — do not use syntax newer than 3.14.
 
-All dependencies are project-specific and managed by `uv`. Install with:
+All dependencies are project-specific and managed by `uv` via `pyproject.toml`.
+Never use `pip` or a `requirements.txt`. Install with:
 
 ```bash
 uv sync --group dev
 ```
+
+Add a dependency with `uv add <package>` (`uv add --group dev <package>` for dev-only).
+Never use `uv pip` to manage dependencies — it bypasses `pyproject.toml` and the lockfile.
 
 When running Python commands, use `uv run` to execute within the project virtual environment.
 
@@ -16,11 +20,25 @@ When running Python commands, use `uv run` to execute within the project virtual
 uv run <command>
 ```
 
+## Git Workflow
+
+- Branch from `main` as `feature/<name>`. Never commit directly to `main`.
+- Use [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, `refactor:`, `chore:`).
+- Stage changes for review. Do not commit or push unless asked.
+- No `Co-Authored-By:` trailers or tool-attribution lines in commits or PR bodies.
+
 ## Code Style
 
 - Follow existing FastAPI + FastMCP patterns in `app/main.py`
 - Use `ruff` for linting and formatting
 - Use `ty` for type checking
+- Type-hint every public function and method, including return types
+- Write Google-style docstrings for every public function and method
+- Use `pathlib` for filesystem paths — never `os.path`
+- Prefer f-strings over `str.format()` or `%` formatting
+- Follow EAFP: handle the exception rather than pre-checking the condition
+- Validate request bodies with Pydantic models
+- Prefer idiomatic Python: comprehensions, generators, decorators, context managers, memory efficient data structures.
 
 ## Commands
 

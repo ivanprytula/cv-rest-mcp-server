@@ -114,13 +114,29 @@ Auth tests use fixture `user_service` (conftest.py:240) with seeded operator/cor
 
 ## Code Style
 
+Full conventions live in [AGENTS.md](AGENTS.md#code-style). The rules most often
+tripped over:
+
+- Python 3.14 — no newer syntax. Dependencies via `uv add`, never `pip` or `uv pip`.
+- Type-hint public functions/methods (incl. return types); Google-style docstrings.
+- `pathlib`, not `os.path`. F-strings, not `.format()`/`%`. EAFP over pre-checks.
+- Validate request bodies with Pydantic models.
+
 Follow [ACROSS design principles](https://github.com/your-org/cv-rest-mcp-server/blob/main/ACROSS.md):
+
 - Composition over inheritance (no single-impl ABCs)
 - Lifecycle separation (DI/factory separate from business logic)
 - Domain-centric naming (`authenticate()`, not `process_login()`)
 - Minimize abstractions (YAGNI)
 
 Ruff + type checking enforced pre-commit. Run locally: `just code-quality`.
+
+## Git Workflow
+
+Branch from `main` as `feature/<name>` — never commit directly to `main`.
+Conventional Commits. Stage changes for review; do not commit or push unless
+asked. No `Co-Authored-By:` or tool-attribution lines. See
+[AGENTS.md](AGENTS.md#git-workflow).
 
 ## Permissions
 
