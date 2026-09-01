@@ -19,6 +19,8 @@ from playwright.sync_api import expect, sync_playwright
 
 from app.main import app
 
+pytestmark = pytest.mark.e2e
+
 
 pytestmark = pytest.mark.e2e
 

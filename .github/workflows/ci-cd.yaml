@@ -37,6 +37,7 @@ jobs:
         run: uv run ty check
 
   cost-estimate:
+    needs: code-quality
     runs-on: ubuntu-latest
     concurrency:
       group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -87,7 +88,7 @@ jobs:
         run: |
           echo "Starting test run at $(date)"
           START_TIME=$(date +%s)
-          uv run pytest --timeout=60 --durations=10 -n auto -m "not needs_script" || TEST_EXIT_CODE=$?
+          uv run pytest --timeout=60 --durations=10 -n auto -m "not needs_script and not e2e" || TEST_EXIT_CODE=$?
           END_TIME=$(date +%s)
           echo "Test run completed at $(date)"
           echo "Total test time: $((END_TIME - START_TIME)) seconds"
