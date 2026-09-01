@@ -25,6 +25,8 @@ npm run css             # Rebuild Tailwind CSS (required after template changes)
 - `app/routes.py` — REST API endpoints (`/cv`, `/cv/html`, `/cv/pdf`)
 - `frontend/` — React operator SPA + TanStack Query
 - `tests/conftest.py` — Shared fixtures (auth fixtures at line 240+)
+- `terraform/modules/iam_secrets/` — service accounts, IAM bindings, Artifact Registry repo
+- `.github/workflows/` — `ci-cd.yml` (infra) and `deploy-app.yml` (app), path-filtered
 
 ## Non-Obvious Patterns
 
@@ -36,11 +38,18 @@ npm run css             # Rebuild Tailwind CSS (required after template changes)
 
 **Middleware order**: Runs outside-in. SecurityHeaders first (outermost), then Guard, CredentialedCORS, JWTAuth (innermost). See [app/main.py:166-188](app/main.py#L166-L188).
 
-**SPA deployment (spa-origin)**: React SPA builds to `frontend/dist/`, then packaged in a separate container (`Dockerfile.spa`) served by nginx on Cloud Run at `app.<apex>`. CI/CD workflow (`.github/workflows/ci-cd.yaml`) builds both `api-core` and `spa-origin` images, then deploys both services to Cloud Run. Static assets are hashed by Vite (long cache lifetime). See `terraform.tfvars.example` for static_assets config (optional Cloud CDN prefix-routing).
+**SPA deployment (spa-origin)**: React SPA builds to `frontend/dist/`, then packaged in a separate container (`frontend/Dockerfile`) served by nginx on Cloud Run at `app.<apex>`. Static assets are hashed by Vite (long cache lifetime). See `terraform.tfvars.example` for static_assets config (optional Cloud CDN prefix-routing).
 
-**CI/CD strategy**: `.github/workflows/ci-cd.yaml` is self-contained — all build and deploy logic lives there. No shell script dependency. Builds: api-core (Dockerfile), spa-origin (Dockerfile.spa), api-games (services/games/Dockerfile). Deploys: all three services to Cloud Run. IAM, secrets, and policies are managed by Terraform.
+**CI/CD strategy**: Two path-filtered workflows enforce the boundary "Terraform owns the platform; the app pipeline owns the released artifact."
 
-**Manual image builds** (first-time bootstrap or CI/CD unavailable): Use `just build-images <gcp-project>` to build and push all three images to GCR in parallel. Then `terraform apply` to deploy.
+- `.github/workflows/deploy-app.yml` — triggers on `app/**`, `frontend/**`, `services/**`, Dockerfiles. Lint + tests → builds api-core (Dockerfile), api-games (services/games/Dockerfile), spa-origin (frontend/Dockerfile) → `gcloud run deploy` per service → verify. Never touches Terraform state.
+- `.github/workflows/ci-cd.yml` — triggers on `terraform/**`. tflint + checkov → Infracost budget check → `terraform plan` (posted to the PR, uploaded as an artifact) → `terraform apply` of that exact reviewed plan, gated on the `dev` GitHub Environment's required reviewer.
+
+**Image field ownership**: `modules/cloud_run_service` sets `lifecycle { ignore_changes = [template[0].containers[0].image] }`. Terraform owns the service's shape (scaling, env vars, secrets, ingress); `gcloud run deploy` owns which image tag is live. Without this the two tools revert each other. `var.image_overrides` is now break-glass only — routine releases don't go through Terraform.
+
+**Manual image builds** (first-time bootstrap or CI/CD unavailable): Use `just build-images <gcp-project>` to build and push all three images to the `cv-images` Artifact Registry repo (`<region>-docker.pkg.dev/<project>/cv-images/<service>`) in parallel. Then `terraform apply` to deploy.
+
+**Deployer service account**: CI authenticates via WIF as `deployer@<project>.iam.gserviceaccount.com`, created and granted by `modules/iam_secrets`. The `GCP_DEPLOY_SA` GitHub secret MUST match it — a stale value pointing at another SA fails in a confusing way: `gcloud builds submit` and `services describe` succeed while every IAM-dependent call 403s. Legacy `cv-rest-mcp-server-deployer@` / `cv-ivanprytula-deployer@` SAs predate the Terraform module and are unmanaged.
 
 ## Bootstrap & Deployment
 
@@ -69,12 +78,14 @@ just deploy upload-cv
 just deploy verify
 ```
 
-**After bootstrap:** CI/CD (`terraform apply` for changes + `.github/workflows/ci-cd.yaml` for pushes to main) handles all further deployments. Manual steps are idempotent — re-running them is safe.
+**After bootstrap:** the two workflows handle all further deployments — `ci-cd.yml` for `terraform/**` changes, `deploy-app.yml` for application code. Manual steps are idempotent — re-running them is safe.
 
 **Removed from script:** `build`, `deploy`, `wif` stages. These are now:
 
-- `build` / `deploy` — handled by CI/CD workflow
+- `build` / `deploy` — handled by `deploy-app.yml`
 - `wif` — handled by Terraform module `github_wif`
+
+**Also owned by Terraform, not the script:** runtime/deployer service accounts and the `cv-images` Artifact Registry repo (`modules/iam_secrets`), and every API except `cloudresourcemanager` (`modules/gcp_apis`). The script's `bootstrap` only enables `cloudresourcemanager` (chicken-and-egg: Terraform's own `google_project_service` resources need it first), creates the CV data bucket, and grants Cloud Build IAM. Secret *containers and versions* stay script-owned (`bootstrap-secrets`) so key material never enters `.tfvars` or Terraform state; Terraform only binds `secretAccessor` to an existing secret ID.
 
 ## Cost Estimation
 

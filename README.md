@@ -143,7 +143,9 @@ Or build images manually for a GCP project:
 just build-images <your-gcp-project>
 ```
 
-This builds `api-core`, `spa-origin`, and any other service images and pushes them to GCR.
+This builds `api-core`, `spa-origin`, and any other service images and pushes them
+to the `cv-images` Artifact Registry repo
+(`<region>-docker.pkg.dev/<project>/cv-images/<service>`).
 
 ## Deployment
 
@@ -186,9 +188,24 @@ Budget: **$100/month**. Pre-commit hook and CI/CD automatically warn if costs tr
 
 **Subsequent releases:**
 
-Push to `main`. CI/CD workflow (`.github/workflows/ci-cd.yaml`) runs tests, builds both images, and deploys to Cloud Run automatically. Use `[skip deploy]` in your commit message to run CI without deploying.
+Two path-filtered workflows split infrastructure from application releases —
+Terraform owns the platform, `gcloud run deploy` ships the code:
 
-The deployed URL is printed by the CD verify job and visible in Google Cloud Console under Cloud Run.
+| You changed | Workflow | What runs |
+| --- | --- | --- |
+| `app/`, `frontend/`, `services/`, Dockerfiles | `deploy-app.yml` | lint + tests → build images to Artifact Registry → `gcloud run deploy` → verify |
+| `terraform/` | `ci-cd.yml` | tflint + checkov → Infracost → `terraform plan` → **approval gate** → `terraform apply` |
+
+An app-only commit never runs Terraform, and an infra-only commit never rebuilds
+images. Use `[skip deploy]` in a commit message to run checks without deploying.
+
+Infra applies are gated on the `dev` GitHub Environment: `terraform plan` posts its
+output to the PR, and the apply job waits for a required reviewer before running
+the exact reviewed plan. Application rollbacks don't need Terraform — redeploy a
+previously built image tag.
+
+The deployed URL is printed by the verify job and visible in Google Cloud Console
+under Cloud Run.
 
 ## Testing
 
