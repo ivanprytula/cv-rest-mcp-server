@@ -197,6 +197,10 @@ jobs:
           gcloud projects describe "${GCP_PROJECT}" \
             --format='value(projectId,projectNumber)' \
             --verbosity=error
+          echo "IAM policy on api-core-runtime as seen from CI:"
+          gcloud iam service-accounts get-iam-policy \
+            "api-core-runtime@${GCP_PROJECT}.iam.gserviceaccount.com" \
+            --format=json
 
       - name: Deploy all services to Cloud Run (sequential)
         env:
