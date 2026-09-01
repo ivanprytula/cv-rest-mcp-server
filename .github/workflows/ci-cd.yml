@@ -5,18 +5,18 @@ on:
     branches: [main]
     paths:
       - "terraform/**"
-      - ".github/workflows/ci-cd.yaml"
+      - ".github/workflows/ci-cd.yml"
   push:
     branches: [main]
     paths:
       - "terraform/**"
-      - ".github/workflows/ci-cd.yaml"
+      - ".github/workflows/ci-cd.yml"
 
 permissions:
   contents: read
 
 jobs:
-  code-quality:
+  terraform-quality:
     runs-on: ubuntu-latest
     concurrency:
       group: ${{ github.job }}-${{ github.workflow }}-${{ github.ref }}
@@ -27,17 +27,21 @@ jobs:
         with:
           enable-cache: true
           python-version: "3.14"
-      - name: Install dependencies
-        run: uv sync --group dev
-      - name: Ruff lint
-        run: uv run ruff check .
-      - name: Ruff format check
-        run: uv run ruff format --check .
-      - name: Type check
-        run: uv run ty check
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+      - name: Install tflint
+        run: |
+          curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
+      - name: tflint
+        run: tflint --chdir terraform --config .tflint.hcl
+      - name: checkov
+        run: |
+          uvx --from 'checkov' checkov -d terraform --quiet --compact \
+            --skip-check CKV_GCP_62,CKV_GCP_114,CKV_GCP_28,CKV_GCP_125,CKV_GCP_49,CKV_GCP_41,CKV_GCP_73,CKV_GCP_84
 
   cost-estimate:
-    needs: code-quality
+    needs: terraform-quality
     runs-on: ubuntu-latest
     concurrency:
       group: ${{ github.job }}-${{ github.workflow }}-${{ github.ref }}

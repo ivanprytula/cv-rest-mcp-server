@@ -181,6 +181,17 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
 
+      - name: Debug active identity
+        run: |
+          gcloud auth list
+          gcloud config list account
+          echo "--- testIamPermissions on api-core-runtime ---"
+          curl -s -X POST \
+            -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+            -H "Content-Type: application/json" \
+            -d '{"permissions": ["iam.serviceAccounts.actAs"]}' \
+            "https://iam.googleapis.com/v1/projects/${{ vars.GCP_PROJECT }}/serviceAccounts/api-core-runtime@${{ vars.GCP_PROJECT }}.iam.gserviceaccount.com:testIamPermissions"
+
       - name: Deploy new image tags to Cloud Run
         env:
           GCP_PROJECT: ${{ vars.GCP_PROJECT }}
