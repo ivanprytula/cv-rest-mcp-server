@@ -38,6 +38,14 @@ resource "google_project_iam_member" "deployer_secret_accessor" {
   member  = "serviceAccount:${google_service_account.deployer.email}"
 }
 
+# Deployer must pull images from GCR (Artifact Registry-backed) for
+# `gcloud run deploy` to fetch the container being deployed.
+resource "google_project_iam_member" "deployer_artifact_registry_reader" {
+  project = var.project
+  role    = "roles/artifactregistry.reader"
+  member  = "serviceAccount:${google_service_account.deployer.email}"
+}
+
 # CI/CD deployer needs to assign runtime SAs to Cloud Run services.
 # Scoped to deployer SA only; acceptable trade-off for CI/CD automation.
 resource "google_project_iam_member" "deployer_actAs" {
