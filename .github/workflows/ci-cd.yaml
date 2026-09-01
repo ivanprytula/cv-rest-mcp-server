@@ -117,6 +117,7 @@ jobs:
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
           service_account: ${{ secrets.GCP_DEPLOY_SA }}
+          token_format: access_token
 
       - uses: google-github-actions/setup-gcloud@v2
 
@@ -182,6 +183,7 @@ jobs:
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
           service_account: ${{ secrets.GCP_DEPLOY_SA }}
+          token_format: access_token
 
       - uses: google-github-actions/setup-gcloud@v2
 
@@ -246,6 +248,7 @@ jobs:
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
           service_account: ${{ secrets.GCP_DEPLOY_SA }}
+          token_format: access_token
 
       - uses: google-github-actions/setup-gcloud@v2
 

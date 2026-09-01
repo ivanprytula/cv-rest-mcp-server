@@ -36,3 +36,11 @@ resource "google_service_account_iam_member" "github_deployer" {
   role               = "roles/iam.workloadIdentityUser"
   member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${var.github_repo}"
 }
+
+# token_format: access_token (used in ci-cd.yaml) requires the WIF principal
+# to also mint access tokens for the deployer SA via generateAccessToken.
+resource "google_service_account_iam_member" "github_deployer_token_creator" {
+  service_account_id = "projects/${var.project}/serviceAccounts/${var.deployer_sa_email}"
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${var.github_repo}"
+}
