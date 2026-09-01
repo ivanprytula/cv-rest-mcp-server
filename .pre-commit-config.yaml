@@ -23,16 +23,12 @@ repos:
       - id: actionlint
         # Skip shellcheck linting in workflows; GitHub Actions context differs from bash
         args: ["-shellcheck="]
-  - repo: https://github.com/infracost/infracost
-    rev: v0.10.35
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: v1.96.1
     hooks:
-      - id: infracost
+      - id: infracost_breakdown
         args:
-          - breakdown
-          - --path
-          - terraform
-          - --format
-          - table
+          - --path=terraform
   - repo: local
     hooks:
       - id: ty
