@@ -201,6 +201,9 @@ jobs:
           GCP_PROJECT: ${{ vars.GCP_PROJECT }}
           GCP_REGION: ${{ vars.GCP_REGION }}
           GIT_SHA: ${{ github.sha }}
+          SVC_NAME_API_CORE: ${{ vars.SVC_NAME_API_CORE }}
+          SVC_NAME_API_GAMES: ${{ vars.SVC_NAME_API_GAMES }}
+          SVC_NAME_SPA_ORIGIN: ${{ vars.SVC_NAME_SPA_ORIGIN }}
           API_CORE_ENV_VARS: "TRUST_PROXY=true,CLIENT_IP_XFF_ENTRY=2,FAILBAN_THRESHOLD=6,CV_REFRESH_SECONDS=30,CORS_ORIGINS=https://app.example.com,CONTACT_NAME=${{ vars.CONTACT_NAME }},CONTACT_EMAIL=${{ vars.CONTACT_EMAIL }}"
         run: |
           SHORT_SHA=${GIT_SHA:0:7}
@@ -224,9 +227,9 @@ jobs:
               --service-account "${name}-runtime@${GCP_PROJECT}.iam.gserviceaccount.com"
           }
 
-          deploy_service "api-core" "api-core" "512Mi" "1" "${API_CORE_ENV_VARS}"
-          deploy_service "api-games" "api-games" "256Mi" "1" ""
-          deploy_service "spa-origin" "spa-origin" "128Mi" "1" ""
+          deploy_service "api-core" "${SVC_NAME_API_CORE}" "512Mi" "1" "${API_CORE_ENV_VARS}"
+          deploy_service "api-games" "${SVC_NAME_API_GAMES}" "256Mi" "1" ""
+          deploy_service "spa-origin" "${SVC_NAME_SPA_ORIGIN}" "128Mi" "1" ""
 
   verify:
     needs: deploy
@@ -250,8 +253,11 @@ jobs:
         env:
           GCP_PROJECT: ${{ vars.GCP_PROJECT }}
           GCP_REGION: ${{ vars.GCP_REGION }}
+          SVC_NAME_API_CORE: ${{ vars.SVC_NAME_API_CORE }}
+          SVC_NAME_API_GAMES: ${{ vars.SVC_NAME_API_GAMES }}
+          SVC_NAME_SPA_ORIGIN: ${{ vars.SVC_NAME_SPA_ORIGIN }}
         run: |
-          for svc in "api-core" "spa-origin" "api-games"; do
+          for svc in "${SVC_NAME_API_CORE}" "${SVC_NAME_SPA_ORIGIN}" "${SVC_NAME_API_GAMES}"; do
             echo "=== $svc service ==="
             gcloud run services describe "$svc" \
               --project "${{ vars.GCP_PROJECT }}" \
