@@ -6,18 +6,18 @@ resource "google_compute_security_policy" "cdn_protection" {
   description = "Cloud Armor protection for ${var.name_prefix} CDN static assets"
   project     = var.project
 
-  # Rate limiting: max configured requests per IP per interval
+  # Rate limiting: max configured requests per IP per interval (all traffic)
   rule {
-    action   = "rate-based-ban"
+    action   = "rate_based_ban"
     priority = "100"
     match {
       expr {
-        expression = "origin.region_code == 'US' || origin.region_code == 'EU'"
+        expression = "true"
       }
     }
     rate_limit_options {
       conform_action   = "allow"
-      exceed_action    = "deny-429"
+      exceed_action    = "deny(429)"
       enforce_on_key   = "IP"
       ban_duration_sec = 600
 
@@ -29,15 +29,15 @@ resource "google_compute_security_policy" "cdn_protection" {
     description = "Rate limit: ${var.rate_limit_count} requests per ${var.rate_limit_interval_sec}s per IP"
   }
 
-  # Allow normal traffic
+  # Default rule (required): allow all other traffic
   rule {
     action   = "allow"
-    priority = "1000"
+    priority = "2147483647"
     match {
       expr {
         expression = "true"
       }
     }
-    description = "Allow all other traffic"
+    description = "Default allow rule"
   }
 }

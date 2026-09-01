@@ -10,8 +10,8 @@ resource "google_iam_workload_identity_pool" "github" {
   disabled                  = false
 }
 
-# GitHub OIDC provider with attribute condition limiting tokens to this repo.
-# attribute_condition is a security best-practice for OIDC trust policies.
+# GitHub OIDC provider: repository-scoped trust via attribute condition.
+# attribute_condition checks the mapped attribute.repository against the configured repo.
 resource "google_iam_workload_identity_pool_provider" "github_oidc" {
   workload_identity_pool_id          = google_iam_workload_identity_pool.github.workload_identity_pool_id
   workload_identity_pool_provider_id = "gh-actions"
@@ -22,7 +22,8 @@ resource "google_iam_workload_identity_pool_provider" "github_oidc" {
     "attribute.repository" = "assertion.repository"
     "attribute.aud"        = "assertion.aud"
   }
-  attribute_condition = "assertion.aud == '${var.github_aud}'"
+  # Condition: only trust tokens from the configured repository
+  attribute_condition = "assertion.repository == '${var.github_repo}'"
 
   oidc {
     issuer_uri = "https://token.actions.githubusercontent.com"

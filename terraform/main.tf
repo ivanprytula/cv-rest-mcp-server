@@ -108,9 +108,9 @@ module "cloud_armor" {
   project     = var.project_id
   name_prefix = "cv-edge"
 
-  rate_limit_count       = var.cloud_armor_rate_limit_count
+  rate_limit_count        = var.cloud_armor_rate_limit_count
   rate_limit_interval_sec = var.cloud_armor_rate_limit_interval_sec
-  attach_to_proxy        = false # Static policy only; proxy attachment handled separately if needed
+  attach_to_proxy         = false # Static policy only; proxy attachment handled separately if needed
 }
 
 # GCS origin for Cloud CDN static assets (created when static_assets.enabled).

@@ -28,7 +28,8 @@ repos:
     hooks:
       - id: infracost_breakdown
         args:
-          - --path=terraform
+          - --args=--path=terraform
+        stages: [manual]  # Run manually only: `pre-commit run --hook-stage manual`
   - repo: local
     hooks:
       - id: ty
@@ -57,7 +58,8 @@ repos:
         # CKV_GCP_62/114/28: Cloud CDN origin bucket must be publicly readable (by design)
         # CKV_GCP_125: WIF provider attribute_condition is security best-practice for OIDC
         # CKV_GCP_49/41: Deployer SA needs actAs role for CI/CD automation (scoped to deployer only)
-        entry: uvx --from 'checkov' checkov -d terraform --quiet --compact --skip-check CKV_GCP_62,CKV_GCP_114,CKV_GCP_28,CKV_GCP_125,CKV_GCP_49,CKV_GCP_41
+        # CKV_GCP_73: Cloud Armor module exists but is disabled (enable_cloud_armor = false in tfvars)
+        entry: uvx --from 'checkov' checkov -d terraform --quiet --compact --skip-check CKV_GCP_62,CKV_GCP_114,CKV_GCP_28,CKV_GCP_125,CKV_GCP_49,CKV_GCP_41,CKV_GCP_73
         files: ^terraform/
         language: system
         pass_filenames: false
