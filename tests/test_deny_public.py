@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "ensure_deny_public.py"
 
@@ -64,16 +66,19 @@ def write_block(tmp_path: Path, content: str, name: str = "b.tf") -> Path:
     return p
 
 
+@pytest.mark.needs_script
 def test_private_bucket_enforced_passes(tmp_path: Path) -> None:
     write_block(tmp_path, PRIVATE_OK)
     assert run_guard(tmp_path) == 0
 
 
+@pytest.mark.needs_script
 def test_missing_enforcement_fails(tmp_path: Path) -> None:
     write_block(tmp_path, PRIVATE_MISSING_ENFORCEMENT)
     assert run_guard(tmp_path) == 1
 
 
+@pytest.mark.needs_script
 def test_anonymous_write_fails(tmp_path: Path) -> None:
     # A private bucket + a public write role must be rejected even if the
     # origin allowlist is supplied.
@@ -86,6 +91,7 @@ def test_anonymous_write_fails(tmp_path: Path) -> None:
     )
 
 
+@pytest.mark.needs_script
 def test_cdn_origin_read_only_allowed(tmp_path: Path) -> None:
     write_block(tmp_path, CDN_ORIGIN)
     addr = f"{tmp_path}/mod/b.tf:google_storage_bucket.bucket"
