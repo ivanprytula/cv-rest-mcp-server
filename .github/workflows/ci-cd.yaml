@@ -134,10 +134,20 @@ jobs:
           GIT_SHA: ${{ github.sha }}
         run: |
           SHORT_SHA=${GIT_SHA:0:7}
+          IMAGE_SHA="gcr.io/${{ vars.GCP_PROJECT }}/${{ matrix.service.name }}:${SHORT_SHA}"
+          IMAGE_LATEST="gcr.io/${{ vars.GCP_PROJECT }}/${{ matrix.service.name }}:latest"
+
+          cat > /tmp/cloudbuild.yaml <<EOF
+          steps:
+            - name: 'gcr.io/cloud-builders/docker'
+              args: ['build', '-f', '${{ matrix.service.dockerfile }}', '-t', '${IMAGE_SHA}', '-t', '${IMAGE_LATEST}', '.']
+          images:
+            - '${IMAGE_SHA}'
+            - '${IMAGE_LATEST}'
+          EOF
+
           gcloud builds submit --project "${{ vars.GCP_PROJECT }}" \
-            --tag "gcr.io/${{ vars.GCP_PROJECT }}/${{ matrix.service.name }}:${SHORT_SHA}" \
-            --tag "gcr.io/${{ vars.GCP_PROJECT }}/${{ matrix.service.name }}:latest" \
-            --file "${{ matrix.service.dockerfile }}" \
+            --config /tmp/cloudbuild.yaml \
             --quiet --async --format='value(id)' > /tmp/build_id.txt
           BUILD_ID=$(cat /tmp/build_id.txt)
           echo "${{ matrix.service.name }} Build ID: $BUILD_ID"
