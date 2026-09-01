@@ -42,7 +42,6 @@ jobs:
     concurrency:
       group: ${{ github.job }}-${{ github.workflow }}-${{ github.ref }}
       cancel-in-progress: false
-    if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v4
 
@@ -69,7 +68,7 @@ jobs:
           fi
 
   tests:
-    needs: code-quality
+    needs: cost-estimate
     runs-on: ubuntu-latest
     concurrency:
       group: ${{ github.job }}-${{ github.workflow }}-${{ github.ref }}
@@ -97,7 +96,7 @@ jobs:
           exit "${TEST_EXIT_CODE:-0}"
 
   build:
-    needs: [code-quality, tests]
+    needs: tests
     if: >-
       github.event_name == 'push' &&
       github.ref == 'refs/heads/main' &&
