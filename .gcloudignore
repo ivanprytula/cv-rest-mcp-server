@@ -26,6 +26,8 @@ node_modules/
 dist/
 build/
 .env
+.env.local
+.env.*.local
 data/*
 !data/cv.example.json
 !data/cv_baseline.json

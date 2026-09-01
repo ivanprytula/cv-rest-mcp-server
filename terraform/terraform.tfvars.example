@@ -120,6 +120,15 @@ github_repo      = "ivanprytula/cv-rest-mcp-server"  # your GitHub repo in owner
 # NOTE: Terraform will auto-enable cloudresourcemanager.googleapis.com (no manual step needed).
 setup_org_policies = true
 
+# --- Cloud Armor (DDoS/Abuse Protection) ---
+# Optional: protect static CDN assets from rate-abuse and DDoS attacks via edge firewall.
+# Attached to load balancer; blocks traffic before it hits Cloud CDN or origin.
+# NOT a bucket-level policy — provides edge-layer rate limiting and filtering.
+# Default: 100 req/IP per 60s (adjust for your traffic patterns; increase for legitimate high-traffic).
+enable_cloud_armor                  = false
+cloud_armor_rate_limit_count        = 100
+cloud_armor_rate_limit_interval_sec = 60
+
 # --- Bootstrap (one-time setup before terraform apply) ---
 # Use deploy-cloud-run.sh for first-time setup:
 #   just deploy bootstrap          # enable APIs (now also via Terraform gcp_apis module)

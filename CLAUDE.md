@@ -76,6 +76,20 @@ just deploy verify
 - `build` / `deploy` — handled by CI/CD workflow
 - `wif` — handled by Terraform module `github_wif`
 
+## Cost Estimation
+
+Infracost estimates GCP monthly costs before `terraform apply`. Budget: **$100/month**.
+
+```bash
+# Local estimate (requires Infracost CLI installed)
+infracost breakdown --path terraform/
+
+# Pre-commit hook runs automatically (warns if cost trending high)
+# CI/CD: posts cost estimate on every PR, fails if > $100
+```
+
+**Setup**: Set `INFRACOST_API_KEY` as a GitHub repository secret to enable CI/CD cost estimates.
+
 ## Testing
 
 ```bash

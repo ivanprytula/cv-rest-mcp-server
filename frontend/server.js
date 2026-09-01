@@ -2,12 +2,12 @@ const express = require('express');
 const path = require('path');
 const app = express();
 
-// Health check (before static middleware so it always works)
-app.get('/health', (req, res) => {
-  res.status(200).send('OK');
-});
-
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Health check endpoint (liveness probe for Docker/Cloud Run)
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok', service: 'spa-origin' });
+});
 
 // SPA fallback: unmatched routes serve index.html (React Router handles them)
 app.use((req, res) => {

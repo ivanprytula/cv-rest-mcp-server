@@ -6,10 +6,10 @@ FastAPI + FastMCP service rendering a CV as JSON, HTML, themed PDFs, and MCP too
 
 Two services, one codebase:
 
-| Service      | Role                                      | Deployed as             |
-| ------------ | ----------------------------------------- | ----------------------- |
-| **API**      | FastAPI + FastMCP; renders CV; validates operators | `api-core` image        |
-| **SPA**      | React 19 + Vite; operator login & dashboard | `spa-origin` image      |
+| Service | Role                                               | Deployed as        |
+| ------- | -------------------------------------------------- | ------------------ |
+| **API** | FastAPI + FastMCP; renders CV; validates operators | `api-core` image   |
+| **SPA** | React 19 + Vite; operator login & dashboard        | `spa-origin` image |
 
 **Locally:** Both run in dev mode (API on 8080, SPA on 5173). One `just dev` command starts both with hot reload.
 
@@ -20,6 +20,7 @@ Two services, one codebase:
 Operators sign in at `/login` with username/password. API issues an HS256 JWT token (httpOnly cookie, survives restarts). Refresh tokens stored in SQLite locally (Postgres in Phase 2).
 
 **Unauthenticated requests:**
+
 - `GET /` (landing page) — allowed
 - `GET /health` (health check) — allowed
 - `GET /cv*` (all CV endpoints) — **403 Forbidden**
@@ -34,7 +35,7 @@ See [CLAUDE.md](CLAUDE.md#authentication) for env vars (`JWT_SECRET`, `FIRST_ADM
 just setup && just dev
 ```
 
-Open http://localhost:8080, log in with credentials from `.env` (`FIRST_ADMIN_USERNAME` / `FIRST_ADMIN_PASSWORD`), then browse `/revisions`.
+Open <http://localhost:8080>, log in with credentials from `.env` (`FIRST_ADMIN_USERNAME` / `FIRST_ADMIN_PASSWORD`), then browse `/revisions`.
 
 **Want to modify the CV data?**
 
@@ -65,10 +66,10 @@ Requires authentication (via login JWT).
 
 Public endpoints (no auth):
 
-| Method | Path     | Description   |
-| ------ | -------- | ------------- |
-| GET    | `/`      | Landing page  |
-| GET    | `/health` | Health check  |
+| Method | Path      | Description  |
+| ------ | --------- | ------------ |
+| GET    | `/`       | Landing page |
+| GET    | `/health` | Health check |
 
 Interactive OpenAPI docs (Swagger UI): [`/docs`](http://localhost:8080/docs)
 
@@ -168,6 +169,20 @@ just deploy upload-cv          # Upload your CV data to GCS
 ```
 
 See [CLAUDE.md](CLAUDE.md#bootstrap--deployment) for the full step-by-step with configuration details.
+
+Cost Estimation (Infracost)
+
+Before deploying, estimate monthly GCP costs:
+
+```bash
+# Local estimate (requires Infracost CLI installed)
+infracost breakdown --path terraform/
+
+# Set up CI/CD cost estimates on PRs (requires INFRACOST_API_KEY secret)
+# See CLAUDE.md#cost-estimation for details
+```
+
+Budget: **$100/month**. Pre-commit hook and CI/CD automatically warn if costs trend high.
 
 **Subsequent releases:**
 

@@ -48,3 +48,13 @@ output "org_policies_enforced" {
   value       = var.setup_org_policies ? "true" : "false"
 }
 
+output "cloud_armor_policy_id" {
+  description = "Cloud Armor security policy ID for CDN DDoS protection (if enabled)."
+  value       = var.enable_cloud_armor ? module.cloud_armor[0].security_policy_id : ""
+}
+
+output "cloud_armor_rate_limit" {
+  description = "Cloud Armor rate limit config (requests per interval)."
+  value       = var.enable_cloud_armor ? "${var.cloud_armor_rate_limit_count}/${var.cloud_armor_rate_limit_interval_sec}s" : "disabled"
+}
+

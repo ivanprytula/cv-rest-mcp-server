@@ -148,6 +148,25 @@ variable "setup_org_policies" {
   default     = false
 }
 
+# Cloud Armor: DDoS/abuse protection for static CDN assets
+variable "enable_cloud_armor" {
+  description = "Enable Cloud Armor security policy for CDN protection"
+  type        = bool
+  default     = false
+}
+
+variable "cloud_armor_rate_limit_count" {
+  description = "Max requests per IP before rate limiting (Cloud Armor)"
+  type        = number
+  default     = 100
+}
+
+variable "cloud_armor_rate_limit_interval_sec" {
+  description = "Time window (seconds) for Cloud Armor rate limiting"
+  type        = number
+  default     = 60
+}
+
 # Private upload bucket for user-generated content (optional)
 variable "uploads" {
   description = <<-EOT

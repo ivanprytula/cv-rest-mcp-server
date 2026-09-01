@@ -100,6 +100,19 @@ module "edge_lb" {
   path_routes = local.cdn_path_route
 }
 
+# Cloud Armor: DDoS/abuse protection for CDN static assets
+module "cloud_armor" {
+  count  = var.enable_cloud_armor ? 1 : 0
+  source = "./modules/cloud_armor"
+
+  project     = var.project_id
+  name_prefix = "cv-edge"
+
+  rate_limit_count       = var.cloud_armor_rate_limit_count
+  rate_limit_interval_sec = var.cloud_armor_rate_limit_interval_sec
+  attach_to_proxy        = false # Static policy only; proxy attachment handled separately if needed
+}
+
 # GCS origin for Cloud CDN static assets (created when static_assets.enabled).
 module "static_bucket" {
   source       = "./modules/static_bucket"

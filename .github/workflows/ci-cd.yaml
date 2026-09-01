@@ -39,6 +39,47 @@ jobs:
       - name: Type check
         run: uv run ty check
 
+  cost-estimate:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ci-${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - uses: infracost/actions/setup@v2
+        with:
+          api-key: ${{ secrets.INFRACOST_API_KEY }}
+
+      - name: Generate Infracost cost estimate
+        run: |
+          infracost breakdown \
+            --path terraform \
+            --format json \
+            --out-file /tmp/infracost.json
+
+      - name: Check monthly cost threshold ($100)
+        run: |
+          MONTHLY_COST=$(jq '.totalMonthlyCost' /tmp/infracost.json)
+          BUDGET=100
+          echo "Estimated monthly cost: \$$MONTHLY_COST"
+          if (( $(echo "$MONTHLY_COST > $BUDGET" | bc -l) )); then
+            echo "❌ Cost estimate (\$$MONTHLY_COST) exceeds budget (\$$BUDGET)"
+            exit 1
+          else
+            echo "✓ Cost estimate (\$$MONTHLY_COST) within budget (\$$BUDGET)"
+          fi
+
+      - name: Comment cost estimate on PR
+        if: always()
+        uses: infracost/actions/comment@v2
+        with:
+          path: /tmp/infracost.json
+          behavior: update
+
   tests:
     needs: code-quality
     runs-on: ubuntu-latest
