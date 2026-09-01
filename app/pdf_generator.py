@@ -2,7 +2,6 @@ import asyncio
 import hashlib
 import importlib
 import json
-import os
 import threading
 from collections import OrderedDict
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -32,9 +31,9 @@ def load_themes() -> dict[str, Theme]:
     remaining themes are ordered alphabetically for determinism.
     """
     discovered: dict[str, Theme] = {}
-    for filename in os.listdir(THEMES_DIR):
-        if filename.endswith(".py") and filename != "__init__.py":
-            module_name = filename[:-3]
+    for path in THEMES_DIR.iterdir():
+        if path.suffix == ".py" and path.name != "__init__.py":
+            module_name = path.stem
             try:
                 module = importlib.import_module(f"app.themes.{module_name}")
                 if not isinstance(module, Theme):
