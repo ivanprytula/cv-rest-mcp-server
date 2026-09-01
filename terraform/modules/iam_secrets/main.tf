@@ -46,6 +46,27 @@ resource "google_project_iam_member" "deployer_actAs" {
   member  = "serviceAccount:${google_service_account.deployer.email}"
 }
 
+# Project-level serviceAccountUser above should cover actAs, but Cloud Run
+# deploy checks have been observed to require a direct binding on the
+# target runtime SA. Explicit bindings avoid IAM-policy-inheritance gaps.
+resource "google_service_account_iam_member" "deployer_actas_api_core" {
+  service_account_id = google_service_account.api_core_runtime.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.deployer.email}"
+}
+
+resource "google_service_account_iam_member" "deployer_actas_spa_origin" {
+  service_account_id = google_service_account.spa_origin_runtime.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.deployer.email}"
+}
+
+resource "google_service_account_iam_member" "deployer_actas_api_games" {
+  service_account_id = google_service_account.api_games_runtime.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.deployer.email}"
+}
+
 # API-core requires read access to CV data bucket + logging
 resource "google_project_iam_member" "api_core_storage" {
   project = var.project
