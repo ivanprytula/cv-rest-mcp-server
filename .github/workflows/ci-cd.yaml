@@ -41,7 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     concurrency:
       group: ${{ github.job }}-${{ github.workflow }}-${{ github.ref }}
-      cancel-in-progress: true
+      cancel-in-progress: false
     if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v4
@@ -73,7 +73,7 @@ jobs:
     runs-on: ubuntu-latest
     concurrency:
       group: ${{ github.job }}-${{ github.workflow }}-${{ github.ref }}
-      cancel-in-progress: true
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
