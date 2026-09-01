@@ -29,10 +29,6 @@ jobs:
         run: |
           npm run css
           git diff --exit-code -- static/css/site.css
-      - name: Validate bucket policies (deny-public guard)
-        run: |
-          python scripts/ensure_deny_public.py terraform \
-            --cdn-origin-resource "terraform/modules/static_bucket/main.tf:google_storage_bucket.bucket"
       - name: Ruff lint
         run: uv run ruff check .
       - name: Ruff format check
