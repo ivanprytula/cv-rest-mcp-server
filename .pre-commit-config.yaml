@@ -12,7 +12,7 @@ repos:
         args: ["--maxkb=1024"]
       - id: check-merge-conflict
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.4
+    rev: v0.16.5
     hooks:
       - id: ruff-check
         args: [--fix]
@@ -23,6 +23,16 @@ repos:
       - id: actionlint
         # Skip shellcheck linting in workflows; GitHub Actions context differs from bash
         args: ["-shellcheck="]
+  - repo: https://github.com/infracost/infracost
+    rev: v0.10.35
+    hooks:
+      - id: infracost
+        args:
+          - breakdown
+          - --path
+          - terraform
+          - --format
+          - table
   - repo: local
     hooks:
       - id: ty
