@@ -224,7 +224,7 @@ jobs:
               --service-account "${name}-runtime@${GCP_PROJECT}.iam.gserviceaccount.com"
           }
 
-          deploy_service "api-core" "cv-rest-mcp-server" "512Mi" "1" "${API_CORE_ENV_VARS}"
+          deploy_service "api-core" "api-core" "512Mi" "1" "${API_CORE_ENV_VARS}"
           deploy_service "api-games" "api-games" "256Mi" "1" ""
           deploy_service "spa-origin" "spa-origin" "128Mi" "1" ""
 
@@ -251,7 +251,7 @@ jobs:
           GCP_PROJECT: ${{ vars.GCP_PROJECT }}
           GCP_REGION: ${{ vars.GCP_REGION }}
         run: |
-          for svc in "cv-rest-mcp-server" "spa-origin" "api-games"; do
+          for svc in "api-core" "spa-origin" "api-games"; do
             echo "=== $svc service ==="
             gcloud run services describe "$svc" \
               --project "${{ vars.GCP_PROJECT }}" \
