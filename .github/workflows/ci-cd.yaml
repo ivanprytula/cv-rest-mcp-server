@@ -75,10 +75,11 @@ jobs:
 
       - name: Comment cost estimate on PR
         if: always()
-        uses: infracost/actions/comment@v2
+        uses: infracost/actions@v2
         with:
           path: /tmp/infracost.json
           behavior: update
+          operation: comment
 
   tests:
     needs: code-quality
