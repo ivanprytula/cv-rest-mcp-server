@@ -129,21 +129,45 @@ jobs:
         with:
           name: tfplan
           path: terraform/tfplan
-          retention-days: 1
+          # Must outlive the approval gate on the dev environment: an apply
+          # waiting on a reviewer can't download an expired artifact. A plan
+          # that goes stale is rejected by Terraform itself (state serial
+          # mismatch), so a longer window trades no safety.
+          retention-days: 5
+
+      # Rendered once, reused by both review surfaces below. Truncated to stay
+      # under GitHub's 1MB job-summary cap (and the 65KB PR-comment cap);
+      # the untruncated plan is in this job's log and the tfplan artifact.
+      - name: Render plan
+        working-directory: terraform
+        run: |
+          terraform show -no-color tfplan > /tmp/plan.txt
+          terraform show -no-color tfplan | tail -1 > /tmp/plan-summary.txt
+
+          {
+            echo "### Terraform Plan"
+            echo ""
+            echo "\`$(cat /tmp/plan-summary.txt)\`"
+            echo ""
+            echo '```terraform'
+            head -c 60000 /tmp/plan.txt
+            if [ "$(wc -c < /tmp/plan.txt)" -gt 60000 ]; then
+              echo ""
+              echo "... truncated — see the full plan in this job's log."
+            fi
+            echo '```'
+          } > /tmp/plan-body.md
+
+      # Shows the plan on the run's own page, directly above the approval
+      # button for the dev environment. Works on push, unlike the PR comment.
+      - name: Plan to job summary
+        run: cat /tmp/plan-body.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Comment plan on PR
         if: github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        working-directory: terraform
-        run: |
-          {
-            echo "### Terraform Plan"
-            echo '```'
-            terraform show -no-color tfplan
-            echo '```'
-          } > /tmp/plan-comment.md
-          gh pr comment "${{ github.event.pull_request.number }}" --body-file /tmp/plan-comment.md
+        run: gh pr comment "${{ github.event.pull_request.number }}" --body-file /tmp/plan-body.md
 
   terraform-apply:
     needs: terraform-plan
