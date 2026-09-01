@@ -173,6 +173,11 @@ jobs:
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
           service_account: ${{ secrets.GCP_DEPLOY_SA }}
+          # gcloud run deploy performs an actAs check on the runtime service
+          # account; the plain WIF external_account credential fails that
+          # check (see commit 05346cb history). access_token exchanges for
+          # an impersonated_service_account credential, which actAs accepts.
+          token_format: access_token
 
       - uses: google-github-actions/setup-gcloud@v2
 
