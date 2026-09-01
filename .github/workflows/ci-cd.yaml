@@ -60,7 +60,7 @@ jobs:
 
       - name: Check cost threshold ($100/month)
         run: |
-          MONTHLY_COST=$(jq '.totalMonthlyCost' /tmp/infracost.json)
+          MONTHLY_COST=$(jq -r '.totalMonthlyCost' /tmp/infracost.json)
           BUDGET=100
           echo "Estimated monthly cost: \$$MONTHLY_COST"
           if (( $(echo "$MONTHLY_COST > $BUDGET" | bc -l) )); then
