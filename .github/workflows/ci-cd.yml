@@ -119,7 +119,15 @@ jobs:
       # on the next CI apply. One file, one place to edit, no drift possible.
       - name: Write terraform.tfvars
         working-directory: terraform
-        run: echo "${{ secrets.TF_VARS_FILE }}" > terraform.tfvars
+        env:
+          TF_VARS_FILE: ${{ secrets.TF_VARS_FILE }}
+        # The secret must never be interpolated directly into the run: script
+        # text (i.e. never `echo "${{ secrets.X }}"`) — GitHub substitutes it
+        # into the generated shell script BEFORE bash parses it, so any "
+        # or other shell-special character inside the secret's own content
+        # corrupts the command. Passing it via env: and reading with $VAR
+        # keeps it a single opaque shell value bash never re-parses.
+        run: printf '%s' "$TF_VARS_FILE" > terraform.tfvars
 
       - name: Terraform plan
         id: plan
