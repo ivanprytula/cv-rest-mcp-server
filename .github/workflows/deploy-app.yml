@@ -114,19 +114,29 @@ jobs:
           GCP_PROJECT: ${{ vars.GCP_PROJECT }}
           GCP_REGION: ${{ vars.GCP_REGION }}
           GIT_SHA: ${{ github.sha }}
+          PORTFOLIO_BASE_URL: ${{ vars.PORTFOLIO_BASE_URL }}
         run: |
           SHORT_SHA=${GIT_SHA:0:7}
           REPO="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT}/cv-images"
 
+          # Optional 3rd arg: a single "KEY=value" Docker build-arg. Only
+          # spa-origin needs one (PORTFOLIO_BASE_URL is baked into the JS
+          # bundle at build time — see frontend/Dockerfile); api-core and
+          # api-games pass nothing and get the plain build they always had.
           build_service() {
-            local name="$1" dockerfile="$2"
+            local name="$1" dockerfile="$2" build_arg="${3:-}"
             local image_sha="${REPO}/${name}:${SHORT_SHA}"
             local image_latest="${REPO}/${name}:latest"
+            local docker_args="'build', '-f', '${dockerfile}'"
+            if [[ -n "$build_arg" ]]; then
+              docker_args="${docker_args}, '--build-arg', '${build_arg}'"
+            fi
+            docker_args="${docker_args}, '-t', '${image_sha}', '-t', '${image_latest}', '.'"
 
             cat > /tmp/cloudbuild-"${name}".yaml <<EOF
           steps:
             - name: 'gcr.io/cloud-builders/docker'
-              args: ['build', '-f', '${dockerfile}', '-t', '${image_sha}', '-t', '${image_latest}', '.']
+              args: [${docker_args}]
           images:
             - '${image_sha}'
             - '${image_latest}'
@@ -151,7 +161,7 @@ jobs:
 
           build_service "api-core" "Dockerfile"
           build_service "api-games" "services/games/Dockerfile"
-          build_service "spa-origin" "frontend/Dockerfile"
+          build_service "spa-origin" "frontend/Dockerfile" "PORTFOLIO_BASE_URL=${PORTFOLIO_BASE_URL}"
 
   deploy:
     needs: build
