@@ -1,7 +1,7 @@
 """Settings required by shared modules (rate_limiter, future shared infra).
 
 Each service populates these from its own environment before shared modules are
-imported.  No service should import app.settings into shared/ — that creates
+imported.  No service should import services.portfolio.settings into shared/ — that creates
 a hard coupling to the api-core dependency tree (GCS, WeasyPrint, MCP, etc.)
 which games does not have.
 """

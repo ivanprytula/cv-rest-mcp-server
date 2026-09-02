@@ -44,7 +44,7 @@ Homepage = "https://github.com/ivanprytula/cv-rest-mcp-server"
 
 [tool.uv.workspace]
 members = [
-    "app",
+    "services/portfolio",
     "services/games",
 ]
 
@@ -57,7 +57,7 @@ select = ["E", "F", "I", "UP", "B", "PTH"]
 ignore = ["E501"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["app"]
+known-first-party = ["services.portfolio"]
 lines-after-imports = 2
 
 [tool.pytest.ini_options]
@@ -69,7 +69,7 @@ markers = [
 ]
 
 [tool.coverage.run]
-source = ["app"]
+source = ["services/portfolio"]
 
 [tool.coverage.report]
 show_missing = true

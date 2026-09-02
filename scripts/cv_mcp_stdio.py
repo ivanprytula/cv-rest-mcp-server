@@ -16,7 +16,7 @@ import logging  # noqa: E402
 
 import anyio  # noqa: E402
 
-from app.main import app, mcp  # noqa: E402
+from services.portfolio.main import app, mcp  # noqa: E402
 
 
 logging.basicConfig(stream=sys.stderr, level=logging.INFO, force=True)

@@ -1,0 +1,7 @@
+[project]
+name = "api-core"
+version = "0.1.0"
+description = "CV REST/MCP Server — api-core service"
+requires-python = ">=3.14"
+# Dependencies are declared in root pyproject.toml; this file exists only to
+# mark `services/portfolio/` as a uv workspace member.

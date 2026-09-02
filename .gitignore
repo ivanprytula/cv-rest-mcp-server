@@ -50,8 +50,5 @@ terraform.tfvars.json
 *.tfbackend
 !*.tfbackend.example
 
-# Scripts and temporary files
-scripts/ensure_deny_public.py
-
 tfplan
 

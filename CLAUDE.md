@@ -9,7 +9,7 @@ All commands use `uv` for local development (see [AGENTS.md](AGENTS.md#python-en
 ```bash
 uv sync --group dev     # Install dependencies (first time)
 uv run pytest           # Run test suite (all tests, 405 total)
-uv run pytest tests/test_auth.py -k <pattern>  # Run specific auth tests
+uv run pytest services/portfolio/tests/test_auth.py -k <pattern>  # Run specific auth tests
 just dev                # Start dev server with hot reload (port 8080)
 just code-quality       # Ruff check + format + type check
 npm run css             # Rebuild Tailwind CSS (required after template changes)
@@ -20,11 +20,11 @@ npm run css             # Rebuild Tailwind CSS (required after template changes)
 **Current phase**: Phase 1d — Operator SPA (React 19 + Vite + TypeScript) + JWT auth (HS256).
 
 **Key files**:
-- `app/main.py` — FastAPI app setup, middleware, lifespan
-- `app/auth/user_store.py` — Async SQLAlchemy user repo (aiosqlite, Phase 2 Postgres-ready)
-- `app/routes.py` — REST API endpoints (`/cv`, `/cv/html`, `/cv/pdf`)
+- `services/portfolio/main.py` — FastAPI app setup, middleware, lifespan
+- `services/portfolio/auth/user_store.py` — Async SQLAlchemy user repo (aiosqlite, Phase 2 Postgres-ready)
+- `services/portfolio/routes.py` — REST API endpoints (`/cv`, `/cv/html`, `/cv/pdf`)
 - `frontend/` — React operator SPA + TanStack Query
-- `tests/conftest.py` — Shared fixtures (auth fixtures at line 240+)
+- `services/portfolio/tests/conftest.py` — Shared fixtures (see `auth_settings`/`user_service`/`auth_client` for auth)
 - `terraform/modules/iam_secrets/` — service accounts, IAM bindings, Artifact Registry repo
 - `.github/workflows/` — `ci-cd.yml` (infra) and `deploy-app.yml` (app), path-filtered
 
@@ -36,13 +36,13 @@ npm run css             # Rebuild Tailwind CSS (required after template changes)
 
 **Lifecycle separation**: Engine init/schema/teardown moved from `UserService` to app lifespan in `main.py` (commit 0c6d30b). Business logic stays in service; infrastructure stays in the boundary.
 
-**Middleware order**: Runs outside-in. SecurityHeaders first (outermost), then Guard, CredentialedCORS, JWTAuth (innermost). See [app/main.py:166-188](app/main.py#L166-L188).
+**Middleware order**: Runs outside-in. SecurityHeaders first (outermost), then Guard, CredentialedCORS, JWTAuth (innermost). See the `app.add_middleware(...)` block and its comment in `services/portfolio/main.py`.
 
 **SPA deployment (spa-origin)**: React SPA builds to `frontend/dist/`, then packaged in a separate container (`frontend/Dockerfile`) served by nginx on Cloud Run at `app.<apex>`. Static assets are hashed by Vite (long cache lifetime). See `terraform.tfvars.example` for static_assets config (optional Cloud CDN prefix-routing).
 
 **CI/CD strategy**: Two path-filtered workflows enforce the boundary "Terraform owns the platform; the app pipeline owns the released artifact."
 
-- `.github/workflows/deploy-app.yml` — triggers on `app/**`, `frontend/**`, `services/**`, Dockerfiles. Lint + tests → builds api-core (Dockerfile), api-games (services/games/Dockerfile), spa-origin (frontend/Dockerfile) → `gcloud run deploy` per service → verify. Never touches Terraform state.
+- `.github/workflows/deploy-app.yml` — triggers on `services/portfolio/**`, `frontend/**`, `services/**`, Dockerfiles. Lint + tests → builds api-core (Dockerfile), api-games (services/games/Dockerfile), spa-origin (frontend/Dockerfile) → `gcloud run deploy` per service → verify. Never touches Terraform state.
 - `.github/workflows/ci-cd.yml` — triggers on `terraform/**`. tflint + checkov → Infracost budget check → `terraform plan` (posted to the PR, uploaded as an artifact) → `terraform apply` of that exact reviewed plan, gated on the `dev` GitHub Environment's required reviewer.
 
 **Image field ownership**: `modules/cloud_run_service` sets `lifecycle { ignore_changes = [template[0].containers[0].image] }`. Terraform owns the service's shape (scaling, env vars, secrets, ingress); `gcloud run deploy` owns which image tag is live. Without this the two tools revert each other. `var.image_overrides` is now break-glass only — routine releases don't go through Terraform.
@@ -87,6 +87,30 @@ just deploy verify
 
 **Also owned by Terraform, not the script:** runtime/deployer service accounts and the `cv-images` Artifact Registry repo (`modules/iam_secrets`), and every API except `cloudresourcemanager` (`modules/gcp_apis`). The script's `bootstrap` only enables `cloudresourcemanager` (chicken-and-egg: Terraform's own `google_project_service` resources need it first), creates the CV data bucket, and grants Cloud Build IAM. Secret *containers and versions* stay script-owned (`bootstrap-secrets`) so key material never enters `.tfvars` or Terraform state; Terraform only binds `secretAccessor` to an existing secret ID.
 
+**Cloud Build source-staging bucket (`gs://<project>_cloudbuild`)**: auto-created
+by GCP the first time `gcloud builds submit` runs — not Terraform-managed, has
+no lifecycle rule by default, and accumulates one source tarball per build
+forever. Set a 7-day auto-delete rule once, manually:
+
+```bash
+cat > /tmp/cloudbuild-lifecycle.json <<'EOF'
+{
+  "rule": [
+    { "action": { "type": "Delete" }, "condition": { "age": 7 } }
+  ]
+}
+EOF
+gsutil lifecycle set /tmp/cloudbuild-lifecycle.json gs://<project>_cloudbuild
+```
+
+Check current size/rule and purge an existing backlog if the rule was added late:
+
+```bash
+gsutil du -sh gs://<project>_cloudbuild
+gsutil lifecycle get gs://<project>_cloudbuild
+gsutil -m rm "gs://<project>_cloudbuild/source/**"   # safe: only completed builds' old source
+```
+
 ## Cost Estimation
 
 Infracost estimates GCP monthly costs before `terraform apply`. Budget: **$100/month**.
@@ -121,6 +145,8 @@ tripped over:
 - Type-hint public functions/methods (incl. return types); Google-style docstrings.
 - `pathlib`, not `os.path`. F-strings, not `.format()`/`%`. EAFP over pre-checks.
 - Validate request bodies with Pydantic models.
+- No hardcoded file paths/line numbers in comments or docstrings — name the
+  function/fixture instead. Line refs go stale on the next rename or refactor.
 
 Follow [ACROSS design principles](https://github.com/your-org/cv-rest-mcp-server/blob/main/ACROSS.md):
 
