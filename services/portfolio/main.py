@@ -29,6 +29,7 @@ from services.portfolio.auth.user_store import (
     user_service,
 )
 from services.portfolio.constants import (
+    API_V1_PREFIX,
     PDF_CACHE_MAX_ENTRIES,
     PDF_EXECUTOR_MAX_WORKERS,
     STATIC_DIR,
@@ -78,7 +79,7 @@ app = FastAPI(
         "- `GET /cv/html?theme=` — rendered CV page\n"
         "- `GET /cv/preview?theme=` — interactive preview toolbar\n"
         "- `GET /cv/pdf?theme=` — PDF download (rate-limited)\n"
-        "- `POST /cv/tailor` — tailored CV from a JD (Bearer-token protected, "
+        "- `POST /api/v1/cv/tailor` — tailored CV from a JD (Bearer-token protected, "
         "text/Markdown/JSON/PDF/DOCX)\n\n"
         'Errors use `{"detail": ...}`; documented codes: 404, 413, 422, 429, '
         "500, 503.\n\n"
@@ -186,11 +187,11 @@ app.add_middleware(GuardMiddleware)
 # so it stamps CSP etc. on every response, including the 401/403/503 from
 # JWTAuth. CredentialedCORS runs before the wildcard CORS so it can
 # override the wildcard `*` header on the auth endpoints. Guard runs before
-# JWTAuth so geo/failban/service-hours still apply to /cv/tailor and the
-# /api/v1/* surface, and failban can ban a client before we even bother
-# verifying a JWT. JWTAuth short-circuits on the /api/v1/* namespace and the
-# tailoring surface (/cv/tailor + ?tailored= reads); everything else passes
-# through untouched.
+# JWTAuth so geo/failban/service-hours still apply to the /api/v1/* surface
+# (which now includes /api/v1/cv/tailor) and the ?tailored= reads, and
+# failban can ban a client before we even bother verifying a JWT. JWTAuth
+# short-circuits on the /api/v1/* namespace and the remaining tailoring
+# surface (?tailored= reads); everything else passes through untouched.
 app.add_middleware(JWTAuthMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 
@@ -345,15 +346,16 @@ _TAILOR_REQUEST_BODY = {
 
 _openapi_getter = app.openapi
 
-# The /cv/tailor route and the `?tailored=` revision reads are JWT-gated by
-# JWTAuthMiddleware (migrated from TailorAuthMiddleware, ADR-018); Swagger UI
-# needs the security scheme declared on those operations so the Authorize button
-# sends `Authorization: Bearer <access_token>`. The reads are only protected
-# WHEN a `tailored` selector is present — extra auth headers on the public
-# surface are harmless, so the declaration is unconditional here.
+# The /api/v1/cv/tailor route and the `?tailored=` revision reads are
+# JWT-gated by JWTAuthMiddleware (migrated from TailorAuthMiddleware,
+# ADR-018); Swagger UI needs the security scheme declared on those operations
+# so the Authorize button sends `Authorization: Bearer <access_token>`. The
+# reads are only protected WHEN a `tailored` selector is present — extra auth
+# headers on the public surface are harmless, so the declaration is
+# unconditional here.
 _TAILOR_SECURITY_SCHEME = {"type": "http", "scheme": "bearer"}
 _TAILOR_SECURE_OPERATIONS = {
-    ("/cv/tailor", "post"),
+    (f"{API_V1_PREFIX}/cv/tailor", "post"),
     ("/cv/html", "get"),
     ("/cv/preview", "get"),
     ("/cv/pdf", "get"),
@@ -367,7 +369,7 @@ def _openapi_with_tailor_contract() -> dict[str, Any]:
         if operation is None:
             continue
         operation["security"] = [{"HTTPBearer": []}]
-        if path == "/cv/tailor" and "requestBody" not in operation:
+        if path == f"{API_V1_PREFIX}/cv/tailor" and "requestBody" not in operation:
             operation["requestBody"] = _TAILOR_REQUEST_BODY
     components = schema.setdefault("components", {})
     security_schemes = components.setdefault("securitySchemes", {})

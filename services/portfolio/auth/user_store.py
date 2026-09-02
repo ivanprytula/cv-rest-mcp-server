@@ -67,7 +67,7 @@ class User(BaseModel):
 
     Exactly two roles (ADR-022): the privileged `admin` and the read-only
     `user`. The role is stamped on issued access tokens and gates the tailored
-    surface (`/cv/tailor` is admin-only).
+    surface (`/api/v1/cv/tailor` is admin-only).
     """
 
     model_config = ConfigDict(from_attributes=True)

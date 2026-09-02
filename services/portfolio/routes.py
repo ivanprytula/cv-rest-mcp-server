@@ -8,7 +8,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 
-from services.portfolio.constants import CONFIG_DIR
+from services.portfolio.constants import API_V1_PREFIX, CONFIG_DIR
 from services.portfolio.dependencies import get_pdf_service
 from services.portfolio.jd_input import PayloadTooLargeError, parse_jd_input
 from services.portfolio.matching.baseline import BaselineError, get_baseline
@@ -114,7 +114,7 @@ def _load_tailored_revision(name: str, *, default: dict) -> dict:
     """Resolve an optional ``?tailored=`` revision selector to a CV dict.
 
     ``name`` is the bare ``cv_tailored-<UTC timestamp>.json`` filename
-    returned by ``/cv/tailor`` in ``saved_to``, or the literal ``latest`` for
+    returned by ``/api/v1/cv/tailor`` in ``saved_to``, or the literal ``latest`` for
     the most recently written revision (timestamps sort chronologically).
     Only ``.json`` files directly inside ``settings.cv_tailored_dir`` are
     accepted — path separators and everything else is rejected — and an empty
@@ -223,7 +223,7 @@ async def get_cv_html(
 
     With `consent` (or a non-empty `company`), appends the GDPR/RODO
     recruitment-consent clause, naming the company when provided. With
-    `tailored` (a bare `cv_tailored-<ts>.json` filename from /cv/tailor's
+    `tailored` (a bare `cv_tailored-<ts>.json` filename from /api/v1/cv/tailor's
     `saved_to`, or `latest`), renders that revision instead of the live CV.
     """
     if theme not in pdf_service.themes:
@@ -283,7 +283,7 @@ async def get_cv_pdf(
 
     With `consent` (or a non-empty `company`), the PDF carries the
     GDPR/RODO recruitment-consent clause on its last page. With `tailored`
-    (a bare `cv_tailored-<ts>.json` filename from /cv/tailor's `saved_to`,
+    (a bare `cv_tailored-<ts>.json` filename from /api/v1/cv/tailor's `saved_to`,
     or `latest`), renders that revision instead of the live CV.
     """
     cv = _load_tailored_revision(tailored, default=pdf_service.cv_data)
@@ -297,7 +297,11 @@ async def get_cv_pdf(
     )
 
 
-@router.post("/cv/tailor", tags=["CV"], responses=_responses(413, 422, 429, 500, 503))
+@router.post(
+    f"{API_V1_PREFIX}/cv/tailor",
+    tags=["CV"],
+    responses=_responses(413, 422, 429, 500, 503),
+)
 @limits("10/minute", "60/hour")
 async def tailor_cv_endpoint(
     request: Request,
@@ -368,10 +372,10 @@ async def tailor_cv_endpoint(
     return {**tailored, "saved_to": str(revision_path)}
 
 
-@router.get("/api/v1/revisions", tags=["CV"], responses=_responses(429, 503))
+@router.get(f"{API_V1_PREFIX}/revisions", tags=["CV"], responses=_responses(429, 503))
 @limits("30/minute", "300/hour")
 async def list_tailored_revisions(request: Request):
-    """List tailored CV revisions written by ``/cv/tailor``, newest first.
+    """List tailored CV revisions written by ``/api/v1/cv/tailor``, newest first.
 
     Requires the `cv:read` scope (same as the `?tailored=` revision reads).
     """

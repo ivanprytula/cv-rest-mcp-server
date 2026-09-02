@@ -3,8 +3,9 @@
 TailorAuthMiddleware (a dedicated bearer token) was removed; the tailoring
 surface now rides the same JWTAuthMiddleware as /api/v1/*:
 
-  - POST /cv/tailor requires `Authorization: Bearer <jwt>` with the `cv:manage`
-    scope. It is header-only — a `?token=` query param is never accepted.
+  - POST /api/v1/cv/tailor requires `Authorization: Bearer <jwt>` for an
+    **admin-role** user (the `role` claim, not a scope). It is header-only —
+    a `?token=` query param is never accepted.
   - GET /cv/html|pdf|preview WITH a `?tailored=` selector requires a `cv:read`
     JWT, via the Authorization header OR `?token=` (the preview page embeds its
     revision in an iframe that cannot send a header).
@@ -26,12 +27,12 @@ def _read_token(scopes, role="user"):
 
 
 # ---------------------------------------------------------------------------
-# POST /cv/tailor — mutation, header-only, needs admin ROLE
+# POST /api/v1/cv/tailor — mutation, header-only, needs admin ROLE
 # ---------------------------------------------------------------------------
 
 
 async def test_tailor_mutation_requires_valid_jwt(auth_client):
-    resp = await auth_client.post("/cv/tailor", content="Required: Python")
+    resp = await auth_client.post("/api/v1/cv/tailor", content="Required: Python")
     assert resp.status_code == 401
 
 
@@ -41,7 +42,7 @@ async def test_tailor_mutation_header_only_rejects_query_token(
     # A cv:manage token given ONLY in the query string must NOT authorize the
     # mutation — the JWT must never ride a URL (logs the secret).
     resp = await auth_client.post(
-        f"/cv/tailor?token={admin_access_token}", content="Required: Python"
+        f"/api/v1/cv/tailor?token={admin_access_token}", content="Required: Python"
     )
     assert resp.status_code == 401
 
@@ -50,7 +51,7 @@ async def test_tailor_mutation_requires_admin_role(auth_client):
     # A `user`-role token (default) is denied even though it carries cv:read.
     token = _read_token(["cv:read"])
     resp = await auth_client.post(
-        "/cv/tailor",
+        "/api/v1/cv/tailor",
         content="Required: Python",
         headers={"Authorization": f"Bearer {token}"},
     )
@@ -62,7 +63,7 @@ async def test_tailor_mutation_denies_manage_scope_without_admin_role(auth_clien
     # token with cv:manage scope must STILL be denied.
     token = _read_token(["cv:read", "cv:manage"])
     resp = await auth_client.post(
-        "/cv/tailor",
+        "/api/v1/cv/tailor",
         content="Required: Python",
         headers={"Authorization": f"Bearer {token}"},
     )
@@ -71,7 +72,7 @@ async def test_tailor_mutation_denies_manage_scope_without_admin_role(auth_clien
 
 async def test_tailor_mutation_succeeds_with_admin(auth_client, admin_access_token):
     resp = await auth_client.post(
-        "/cv/tailor",
+        "/api/v1/cv/tailor",
         content="Required: Python; FastAPI",
         headers={
             "Authorization": f"Bearer {admin_access_token}",

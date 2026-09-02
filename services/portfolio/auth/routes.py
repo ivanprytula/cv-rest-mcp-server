@@ -25,6 +25,7 @@ from services.portfolio.auth.crypto import (
 )
 from services.portfolio.auth.models import LoginRequest, MeResponse, TokenPair
 from services.portfolio.auth.token_store import token_store
+from services.portfolio.constants import API_V1_PREFIX
 from services.portfolio.settings import settings
 
 
@@ -34,7 +35,7 @@ def _user_service():
     return user_store_module.user_service
 
 
-auth_router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
+auth_router = APIRouter(prefix=f"{API_V1_PREFIX}/auth", tags=["auth"])
 
 _REFRESH_COOKIE = "__Host-refresh_token"
 # The __Host- prefix REQUIRES Path=/ (plus Secure and no Domain); a narrower

@@ -14,7 +14,7 @@ a bounded thread pool.
 | Module | Responsibility |
 | --- | --- |
 | `app/main.py` | FastAPI app, middleware stack, MCP tools + `/static` mount, lifespan |
-| `app/routes.py` | REST endpoints (`/`, `/health`, `/cv`, `/cv/html`, `/cv/preview`, `/cv/pdf`, `/cv/tailor`, games) — see `docs/api.md` for the contract |
+| `app/routes.py` | REST endpoints (`/`, `/health`, `/cv`, `/cv/html`, `/cv/preview`, `/cv/pdf`, `/api/v1/cv/tailor`, games) — see `docs/api.md` for the contract |
 | `app/pdf_generator.py` | `PdfService` class: cache, thread pool, sync/async PDF generation |
 | `app/renderer.py` | Jinja2 HTML rendering via `templates/cv_base.html` |
 | `app/cv_data.py` | Pydantic models + `validate_cv_payload` / `load_cv_data(path)` |

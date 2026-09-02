@@ -79,7 +79,7 @@ async def culture_bingo(request: Request):
     return HTMLResponse(content=html)
 
 
-@router.get("/api/games/culture-bingo/content", tags=["Games"])
+@router.get("/api/v1/culture-bingo/content", tags=["Games"])
 @limits("30/minute", "120/hour")
 async def bingo_content(request: Request):
     """Return the bingo game content as JSON."""
