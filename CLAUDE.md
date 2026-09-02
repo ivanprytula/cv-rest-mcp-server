@@ -131,6 +131,32 @@ Follow [ACROSS design principles](https://github.com/your-org/cv-rest-mcp-server
 
 Ruff + type checking enforced pre-commit. Run locally: `just code-quality`.
 
+## Markdown Style
+
+Always tag fenced code blocks with a language — never a bare ` ``` `. Use `text`
+for plain output, ASCII diagrams, and command output; `bash`, `python`, `hcl`,
+`yaml`, `json`, `mermaid` where they apply. Surround lists and fences with blank
+lines. See [AGENTS.md](AGENTS.md#markdown-style).
+
+## Paired Docs (public repo — read before editing infra docs)
+
+Two infra docs exist in two versions. The `.agent/` copies hold **real** values
+and are gitignored; the `docs/` copies use `<PLACEHOLDERS>` and are public.
+
+| Local (real) | Committed (sanitised) |
+| --- | --- |
+| `.agent/infrastructure_local.md` | `docs/infrastructure.md` |
+| `.agent/architecture-diagrams_local.md` | `docs/architecture-diagrams.md` |
+
+**Update both in the same change** whenever a concrete value appears or changes
+— project id/number, IP, hostname, DNS zone, bucket, service-account email, WIF
+path, Artifact Registry path, port, image tag scheme. This includes values
+produced by `terraform apply`, `gcloud` resource creation, or new GitHub
+secrets/variables, not just direct edits to the files.
+
+Never commit a real project number, service-account email, state bucket name, or
+WIF provider path. See [AGENTS.md](AGENTS.md#paired-documentation).
+
 ## Git Workflow
 
 Branch from `main` as `feature/<name>` — never commit directly to `main`.

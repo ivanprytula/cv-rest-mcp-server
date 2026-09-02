@@ -73,7 +73,7 @@ mints short-lived V4 signed URLs.
 
 ### Key layout (privacy)
 
-```
+```text
 avatars/{user_id}/{uuid}.jpg
 photos/{user_id}/{uuid}.png
 ```

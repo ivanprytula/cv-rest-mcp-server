@@ -225,6 +225,51 @@ pyproject.toml          # Python 3.14+, deps, ruff/ty config, pytest asyncio_mod
 - **Tests are CV-data-independent**: tests must NOT assert on `data/cv.json` wording, names, or counts (the file is user content that changes often). Use the `SYNTHETIC_CV` fixtures from `tests/conftest.py` (`synthetic_cv`, `synthetic_cv_path`, `pdf_service`, `override_pdf_service`). Only structural smoke checks (e.g., "experience is a list") are allowed against the real file.
 - **Chrome DevTools MCP privacy**: NEVER attach to or enumerate the user's real browser window/tabs. Always open test pages with `isolatedContext` set (incognito-equivalent) and close them when done.
 
+## Markdown Style
+
+- **Always tag fenced code blocks with a language.** Never a bare ` ``` `.
+  Drives syntax highlighting and satisfies markdownlint MD040.
+- Use `text` for plain output, ASCII diagrams, and command output;
+  `bash`, `python`, `hcl`, `yaml`, `json`, `sql`, `mermaid` where they apply.
+- Surround lists and fenced blocks with blank lines (MD032, MD031).
+
+```bash
+uv run pytest
+```
+
+```text
+Plan: 3 to add, 0 to change, 0 to destroy.
+```
+
+## Paired documentation
+
+Two infra docs exist in **two versions**: a gitignored operator copy holding
+real values, and a sanitised copy committed to the public repo.
+
+| Local (gitignored, real values) | Committed (sanitised) |
+| --- | --- |
+| `.agent/infrastructure_local.md` | `docs/infrastructure.md` |
+| `.agent/architecture-diagrams_local.md` | `docs/architecture-diagrams.md` |
+
+**Rule: never update one without the other.** Whenever a change introduces or
+alters a concrete infrastructure value — project id or number, IP address,
+domain or hostname, DNS zone, bucket, service-account email, WIF provider path,
+Artifact Registry path, port, image tag scheme — update the local copy with the
+real value **and** the committed copy with a placeholder, in the same change.
+
+This applies to edits made directly to these files and to changes that *produce*
+new values: `terraform apply`, `gcloud` commands that create or rename
+resources, new Terraform modules or outputs, DNS/registrar changes, and new
+GitHub secrets or variables.
+
+Placeholders in the committed copies use angle brackets: `<PROJECT_ID>`,
+`<PROJECT_NUMBER>`, `<APEX_DOMAIN>`, `<DNS_ZONE>`, `<LB_IPV4>`,
+`<GITHUB_OWNER>/<REPO>`, `<registrar>`. Keep a `verify` command beside each
+value so a reader can obtain the real one themselves.
+
+The repository is **public** — never commit a real project number, service
+account email, state bucket name, or WIF provider path.
+
 ## Self-Correction Protocol
 
 > This section defines how this file stays alive and accurate.
@@ -242,4 +287,4 @@ pyproject.toml          # Python 3.14+, deps, ruff/ty config, pytest asyncio_mod
 
 5. **Promotion rule.** Before promoting a learning to this file, check `.learnings/LEARNINGS.md` for related entries. If a pattern has `Recurrence-Count >= 3`, has been seen across at least 2 distinct tasks, and occurred within a 30-day window, it qualifies for promotion. Write the promoted rule as a short prevention rule, not a long incident write-up.
 
-6. **Docs sync.** When architecture, design, or ADRs change, update `docs/architecture.md`, `docs/design.md`, or `docs/decisions.md` respectively. Do not leave implementation drift between code and docs.
+6. **Docs sync.** When architecture, design, or ADRs change, update `docs/architecture.md`, `docs/design.md`, or `docs/decisions.md` respectively. Do not leave implementation drift between code and docs. Paired infra docs have an extra rule — see [Paired documentation](#paired-documentation).
