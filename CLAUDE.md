@@ -10,7 +10,8 @@ All commands use `uv` for local development (see [AGENTS.md](AGENTS.md#python-en
 uv sync --group dev     # Install dependencies (first time)
 uv run pytest           # Run test suite (all tests, 405 total)
 uv run pytest services/portfolio/tests/test_auth.py -k <pattern>  # Run specific auth tests
-just dev                # Start dev server with hot reload (port 8080)
+just dev-local          # Start dev server with hot reload (port 8080)
+just dev-spa            # Start the operator SPA dev server (port 5173)
 just code-quality       # Ruff check + format + type check
 npm run css             # Rebuild Tailwind CSS (required after template changes)
 ```
@@ -32,7 +33,7 @@ npm run css             # Rebuild Tailwind CSS (required after template changes)
 
 **CSS build sync**: `static/css/site.css` is a committed Tailwind build artifact. Must be rebuilt and committed when template classes change. Pre-commit hooks do NOT run `npm run css` — you must do it manually. See [AGENTS.md](AGENTS.md#css-build-sync).
 
-**Auth testing**: Tests use isolated in-memory SQLite repos per test. Local dev seeding reads `FIRST_ADMIN_*` env vars. Swagger UI runs on `/docs` with optional contact metadata from `CONTACT_NAME` / `CONTACT_EMAIL` (injected by `just dev` via `.env`).
+**Auth testing**: Tests use isolated in-memory SQLite repos per test. Local dev seeding reads `FIRST_ADMIN_*` env vars. Swagger UI runs on `/docs` with optional contact metadata from `CONTACT_NAME` / `CONTACT_EMAIL` (injected by `just dev-local` via `.env`).
 
 **Lifecycle separation**: Engine init/schema/teardown moved from `UserService` to app lifespan in `main.py` (commit 0c6d30b). Business logic stays in service; infrastructure stays in the boundary.
 

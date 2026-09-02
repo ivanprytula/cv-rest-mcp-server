@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import { listRevisions } from '../api/revisions'
 
 export default function Revisions() {
@@ -23,7 +24,9 @@ export default function Revisions() {
       <tbody>
         {data.map((revision) => (
           <tr key={revision.name}>
-            <td>{revision.name}</td>
+            <td>
+              <Link to={`/revisions/${encodeURIComponent(revision.name)}`}>{revision.name}</Link>
+            </td>
             <td>{new Date(revision.created_at).toLocaleString()}</td>
             <td>{(revision.size_bytes / 1024).toFixed(1)} KB</td>
           </tr>

@@ -16,18 +16,18 @@ from code; this document is the readable form of that contract.
 - **Errors**: every non-2xx response is JSON `{"detail": "<message>"}` — a single
   `detail` string. FastAPI's automatic validation errors are the exception and
   also carry `detail`.
-- **Machine API vs. UI pages**: `/cv`, `/cv/html`, `/cv/pdf`,
-  `/api/v1/cv/tailor`, `/api/v1/culture-bingo/content` are the machine API.
-  `/`, `/cv/preview`, `/culture-bingo` are HTML pages for humans and outside
-  the contract's code guarantees.
-- **Auth**: `POST /api/v1/cv/tailor` and the `?tailored=` revision reads (`/cv/html`,
-  `/cv/preview`, `/cv/pdf`) require `Authorization: Bearer <token>`. The three
-  revision reads additionally accept the token as a `?token=` query parameter
-  (a browser iframe cannot send an Authorization header); the mutation route is
-  header-only. Every 401 carries `WWW-Authenticate: Bearer`. All other endpoints
-  are unauthenticated; `CORS` is public-read (wildcard origin, no credentials).
-  The private console auth lives under `/api/v1/auth/*` (see the Auth section
-  below).
+- **Machine API vs. UI pages**: `/cv`, `/cv/html`, `/cv/pdf`, `/api/v1/cv/tailor`,
+  `/api/v1/cv`, `/api/v1/cv/pdf`, `/api/v1/culture-bingo/content` are the
+  machine API. `/`, `/cv/preview`, `/culture-bingo` are HTML pages for humans
+  and outside the contract's code guarantees.
+- **Auth**: `POST /api/v1/cv/tailor`, `GET /api/v1/cv`, `GET /api/v1/cv/pdf`,
+  and the `?tailored=` read on `/cv/html` require `Authorization: Bearer
+  <token>` (header only — no `?token=` fallback anywhere). The public `/cv`,
+  `/cv/preview`, and `/cv/pdf` never accept a `tailored` selector; tailored
+  previews/PDFs exist only in the operator SPA. Every 401 carries
+  `WWW-Authenticate: Bearer`. All other endpoints are unauthenticated; `CORS`
+  is public-read (wildcard origin, no credentials). The private console auth
+  lives under `/api/v1/auth/*` (see the Auth section below).
 - **Infra**: `GET /health` is exempt from access gate and rate limits.
 
 ## Status codes
@@ -71,9 +71,9 @@ Raw CV document as it is served to renderers.
 | Item         | Value                                          |
 | ------------ | ---------------------------------------------- |
 | Content-Type | `application/json`                             |
-| Params       | none                                           |
+| Query params | `tailored` (requires auth — see `/cv/html`)    |
 | Success      | `200` — CV object (schema in `app/cv_data.py`) |
-| Errors       | `429`, `503`                                   |
+| Errors       | `401`, `404`, `429`, `503`                     |
 
 ```bash
 curl -s https://<origin>/cv | jq '.name, .title'
@@ -101,27 +101,52 @@ curl -s "https://<origin>/cv/html?theme=minimal" -o cv.html
 
 ### `GET /cv/preview`
 
-Interactive toolbar page embedding `/cv/html` in an iframe (human UI).
+Interactive toolbar page embedding `/cv/html` in an iframe (human UI). Public,
+unauthenticated, live-CV-only — no `tailored` selector exists here; tailored
+previews live only in the operator SPA (`/revisions/:name`).
 
-| Item         | Value                                                                                     |
-| ------------ | ----------------------------------------------------------------------------------------- |
-| Content-Type | `text/html`                                                                               |
-| Query params | as `/cv/html`; forwarded to the embedded frame and download button (incl. auth `?token=`) |
-| Errors       | `401`, `404`, `429`, `503`                                                                |
+<!-- markdownlint-disable MD060 -->
+| Item         | Value                                                           |
+| ------------ | ---------------------------------------------------------------- |
+| Content-Type | `text/html`                                                     |
+| Query params | `theme`, `company`, `consent` (as `/cv/html`, minus `tailored`) |
+| Errors       | `404`, `429`, `503`                                             |
+<!-- markdownlint-enable MD060 -->
 
 ---
 
 ### `GET /cv/pdf`
 
-Downloadable PDF, attachment via `Content-Disposition`.
+Downloadable PDF, attachment via `Content-Disposition`. Public, unauthenticated,
+live-CV-only — see `/api/v1/cv/pdf` for the operator-only tailored equivalent.
 
+<!-- markdownlint-disable MD060 -->
 | Item         | Value                                                                                                |
 | ------------ | ---------------------------------------------------------------------------------------------------- |
 | Content-Type | `application/pdf`                                                                                    |
 | Headers      | `Content-Disposition: attachment; filename="CV_<name>_<title>_<ts>.pdf"`                             |
-| Query params | as `/cv/html` (theme/company/consent/`tailored`)                                                     |
+| Query params | `theme`, `company`, `consent` (as `/cv/html`, minus `tailored`)                                       |
 | Success      | `200` — PDF bytes (single page + optional last-page GDPR/RODO consent clause, part of the cache key) |
-| Errors       | `401`, `404` (unknown theme / revision), `422`, `429`, `503`                                         |
+| Errors       | `404` (unknown theme), `422`, `429`, `503`                                                            |
+<!-- markdownlint-enable MD060 -->
+
+---
+
+### `GET /api/v1/cv/pdf`
+
+Operator-only tailored PDF download (Bearer-authenticated, `cv:read` scope).
+Same rendering as `/cv/pdf`, but always resolves a tailored revision instead
+of the live CV. Powers the SPA's revision-preview download button.
+
+<!-- markdownlint-disable MD060 -->
+| Item         | Value                                                               |
+| ------------ | ---------------------------------------------------------------------- |
+| Content-Type | `application/pdf`                                                   |
+| Headers      | `Content-Disposition: attachment; filename="CV_<name>_<title>_<ts>.pdf"` |
+| Query params | `theme`, `company`, `consent`, `tailored` (default `latest`)        |
+| Success      | `200` — PDF bytes                                                   |
+| Errors       | `401`, `403`, `404` (unknown theme / revision), `422`, `429`, `503` |
+<!-- markdownlint-enable MD060 -->
 
 ---
 
@@ -210,28 +235,29 @@ curl -s -X POST "https://<origin>/api/v1/cv/tailor" \
 
 ### Reading a tailored revision
 
-Tailored revisions written by `POST /api/v1/cv/tailor` can be rendered with the same
-three read endpoints by passing `tailored`:
+Tailored revisions written by `POST /api/v1/cv/tailor` can be fetched by
+passing `tailored`:
 
 - `tailored=<name>` — the bare `cv_tailored-<UTC-ts>.json` filename returned in
   `saved_to` (e.g. `cv_tailored-2026-08-29_10-00-00.json`), or
 - `tailored=latest` — the most recently written revision.
 
 Because revisions can contain JD-derived content, these calls are gated by the
-same JWT flow as the mutation route (the `?tailored=` selector requires the
-`cv:read` scope — both admin and any future user roles have it). Use the
-Authorization header for scripts, or `?token=` when the request comes from a
-browser iframe (the `/cv/preview` toolbar does this for you). `tailored` only
-names a `.json` file directly inside the revisions dir — path separators are
-rejected with `404`, so no traversal beyond that dir is possible.
+same JWT flow as the mutation route (`cv:read` scope, Authorization header
+only — there is no `?token=` fallback). This works on `GET /api/v1/cv` (JSON),
+`GET /cv/html` (rendered HTML), and `GET /api/v1/cv/pdf` (PDF download); the
+public `/cv`, `/cv/preview`, and `/cv/pdf` never accept `tailored` at all.
+Tailored previewing lives only in the operator SPA (`/revisions/:name`).
+`tailored` only names a `.json` file directly inside the revisions dir — path
+separators are rejected with `404`, so no traversal beyond that dir is
+possible.
 
 ```bash
-# render the latest revision as HTML/PDF/preview (header auth)
-curl -s "https://<origin>/cv/pdf?theme=minimal&tailored=latest" \
-  -H "authorization: Bearer $TOKEN" -o tailored.pdf
+curl -s "https://<origin>/api/v1/cv?tailored=latest" \
+  -H "authorization: Bearer $TOKEN" | jq '.name, .title'
 
-# preview page for a specific revision (query auth for the embedded iframe)
-open "https://<origin>/cv/preview?theme=classic&tailored=cv_tailored-2026-08-29_10-00-00.json&token=$TOKEN"
+curl -s "https://<origin>/api/v1/cv/pdf?theme=minimal&tailored=latest" \
+  -H "authorization: Bearer $TOKEN" -o tailored.pdf
 ```
 
 ---

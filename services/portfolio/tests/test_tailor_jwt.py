@@ -6,10 +6,12 @@ surface now rides the same JWTAuthMiddleware as /api/v1/*:
   - POST /api/v1/cv/tailor requires `Authorization: Bearer <jwt>` for an
     **admin-role** user (the `role` claim, not a scope). It is header-only —
     a `?token=` query param is never accepted.
-  - GET /cv/html|pdf|preview WITH a `?tailored=` selector requires a `cv:read`
-    JWT, via the Authorization header OR `?token=` (the preview page embeds its
-    revision in an iframe that cannot send a header).
-  - The public CV surface (no `tailored` selector) is untouched — no JWT needed.
+  - GET /cv|cv/html WITH a `?tailored=` selector, and GET /api/v1/cv/pdf,
+    require a `cv:read` JWT via the Authorization header only — no `?token=`
+    fallback anywhere (tailored previews/PDFs are operator-SPA-only, so
+    nothing embeds them in an iframe that can't send a header).
+  - The public /cv/preview and /cv/pdf never accept `tailored` at all; the
+    public CV surface otherwise is untouched — no JWT needed.
 
 All failures are fail-closed: missing/invalid token -> 401, wrong scope -> 403,
 no signing key configured -> 503. These tests drive the real app through an
@@ -85,7 +87,7 @@ async def test_tailor_mutation_succeeds_with_admin(auth_client, admin_access_tok
 
 
 # ---------------------------------------------------------------------------
-# GET /cv/html|pdf|preview with ?tailored= — read, header or ?token=, cv:read
+# GET /cv|cv/html with ?tailored= — header-only auth, cv:read
 # ---------------------------------------------------------------------------
 
 
@@ -94,13 +96,24 @@ async def test_tailored_read_requires_valid_jwt(auth_client):
     assert resp.status_code == 401
 
 
-async def test_tailored_read_accepts_query_token(auth_client, admin_access_token):
-    # The preview page's iframe cannot send an Authorization header, so a
-    # cv:read token in `?token=` must authorize the revision read. The fresh
-    # test store has no revision yet, so the AUTH gate passing shows up as a
-    # 404 from the route (not a 401/403).
-    resp = await auth_client.get(f"/cv/html?tailored=latest&token={admin_access_token}")
+async def test_cv_json_tailored_requires_valid_jwt(auth_client):
+    resp = await auth_client.get("/api/v1/cv?tailored=latest")
+    assert resp.status_code == 401
+
+
+async def test_cv_json_tailored_succeeds_with_read_scope(auth_client):
+    token = _read_token(["cv:read"])
+    resp = await auth_client.get(
+        "/api/v1/cv?tailored=latest", headers={"Authorization": f"Bearer {token}"}
+    )
+    # No revision exists yet in this fresh test store -> 404 from the route,
+    # which still proves the auth gate let it through (not 401/403).
     assert resp.status_code == 404
+
+
+async def test_public_cv_json_never_requires_jwt(auth_client):
+    resp = await auth_client.get("/cv")
+    assert resp.status_code == 200
 
 
 async def test_tailored_read_requires_cv_read_scope(auth_client):
@@ -129,6 +142,39 @@ async def test_empty_tailored_value_not_a_revision_view(auth_client):
 
 
 # ---------------------------------------------------------------------------
+# GET /api/v1/cv/pdf -- operator-only tailored PDF download, cv:read scope
+# ---------------------------------------------------------------------------
+
+
+async def test_tailored_pdf_requires_valid_jwt(auth_client):
+    resp = await auth_client.get("/api/v1/cv/pdf")
+    assert resp.status_code == 401
+
+
+async def test_tailored_pdf_requires_cv_read_scope(auth_client):
+    token = _read_token([])
+    resp = await auth_client.get(
+        "/api/v1/cv/pdf", headers={"Authorization": f"Bearer {token}"}
+    )
+    assert resp.status_code == 403
+
+
+async def test_tailored_pdf_succeeds_with_read_scope(auth_client, override_pdf_service):
+    from unittest.mock import AsyncMock
+
+    override_pdf_service.generate_cv_pdf_async = AsyncMock(
+        return_value=b"%PDF-1.7 fake"
+    )
+    token = _read_token(["cv:read"])
+    resp = await auth_client.get(
+        "/api/v1/cv/pdf", headers={"Authorization": f"Bearer {token}"}
+    )
+    # Fresh test store has no revisions yet -> 404 from the route, which
+    # still proves the auth gate let it through (not 401/403).
+    assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
 # Fail-closed when auth is not configured
 # ---------------------------------------------------------------------------
 
@@ -147,6 +193,8 @@ async def test_tailoring_fail_closed_without_signing_key(auth_client, monkeypatc
 
 
 async def test_public_cv_surface_needs_no_jwt(auth_client):
+    resp = await auth_client.get("/cv")
+    assert resp.status_code == 200
     resp = await auth_client.get("/cv/html")
     assert resp.status_code == 200
     resp = await auth_client.get("/cv/pdf")

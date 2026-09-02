@@ -4,6 +4,7 @@ import { AuthProvider } from './auth/AuthContext'
 import RequireAuth from './auth/RequireAuth'
 import AdminShell from './routes/AdminShell'
 import Login from './routes/Login'
+import RevisionPreview from './routes/RevisionPreview'
 import Revisions from './routes/Revisions'
 
 const queryClient = new QueryClient()
@@ -24,6 +25,7 @@ export default function App() {
               }
             >
               <Route index element={<Revisions />} />
+              <Route path="revisions/:name" element={<RevisionPreview />} />
             </Route>
           </Routes>
         </BrowserRouter>

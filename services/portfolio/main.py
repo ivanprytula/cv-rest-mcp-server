@@ -346,19 +346,20 @@ _TAILOR_REQUEST_BODY = {
 
 _openapi_getter = app.openapi
 
-# The /api/v1/cv/tailor route and the `?tailored=` revision reads are
-# JWT-gated by JWTAuthMiddleware (migrated from TailorAuthMiddleware,
+# The /api/v1/cv/tailor mutation, the dedicated /api/v1/cv/pdf (operator-only
+# tailored PDF download), and the `?tailored=` revision reads on /cv|/cv/html
+# are all JWT-gated by JWTAuthMiddleware (migrated from TailorAuthMiddleware,
 # ADR-018); Swagger UI needs the security scheme declared on those operations
-# so the Authorize button sends `Authorization: Bearer <access_token>`. The
-# reads are only protected WHEN a `tailored` selector is present — extra auth
-# headers on the public surface are harmless, so the declaration is
-# unconditional here.
+# so the Authorize button sends `Authorization: Bearer <access_token>`. /cv
+# and /cv/html are only actually protected WHEN a `tailored` selector is
+# present — extra auth headers on the public surface are harmless, so the
+# declaration is unconditional here.
 _TAILOR_SECURITY_SCHEME = {"type": "http", "scheme": "bearer"}
 _TAILOR_SECURE_OPERATIONS = {
     (f"{API_V1_PREFIX}/cv/tailor", "post"),
+    (f"{API_V1_PREFIX}/cv", "get"),
+    (f"{API_V1_PREFIX}/cv/pdf", "get"),
     ("/cv/html", "get"),
-    ("/cv/preview", "get"),
-    ("/cv/pdf", "get"),
 }
 
 
