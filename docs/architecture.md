@@ -104,7 +104,12 @@ are added last so they run first, before CORS and rate limiting; every response
 carries `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, and
 `Referrer-Policy: strict-origin-when-cross-origin`. CORS is public-read:
 wildcard origin, no credentials. Pure-ASGI guard rejects before any handler
-work.
+work. `TrustedProxySchemeMiddleware` (`app/proxy_scheme_middleware.py`) is
+added even later than that (outermost of all) so `scope["scheme"]` reflects
+the real client protocol — behind the GCP Load Balancer, TLS terminates
+before Cloud Run, so `request.base_url` would otherwise always report
+`http://` — before anything else runs; it never touches `scope["client"]`,
+only the scheme, and is a no-op unless `TRUST_PROXY=true`.
 Evaluation order: allowlist (`ALLOWED_IPS`) → blocklist (`BLOCKED_IPS`) →
 dynamic bans (`FAILBAN_*`) → service hours (`SERVICE_HOURS_*`). Each list may
 be inline (comma-separated) or file-based (`BLOCKED_IPS_FILE` /
