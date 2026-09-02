@@ -29,6 +29,7 @@ from services.portfolio.auth.user_store import (
     user_service,
 )
 from services.portfolio.constants import (
+    API_V1_PREFIX,
     PDF_CACHE_MAX_ENTRIES,
     PDF_EXECUTOR_MAX_WORKERS,
     STATIC_DIR,
@@ -354,7 +355,7 @@ _openapi_getter = app.openapi
 # unconditional here.
 _TAILOR_SECURITY_SCHEME = {"type": "http", "scheme": "bearer"}
 _TAILOR_SECURE_OPERATIONS = {
-    ("/api/v1/cv/tailor", "post"),
+    (f"{API_V1_PREFIX}/cv/tailor", "post"),
     ("/cv/html", "get"),
     ("/cv/preview", "get"),
     ("/cv/pdf", "get"),
@@ -368,7 +369,7 @@ def _openapi_with_tailor_contract() -> dict[str, Any]:
         if operation is None:
             continue
         operation["security"] = [{"HTTPBearer": []}]
-        if path == "/api/v1/cv/tailor" and "requestBody" not in operation:
+        if path == f"{API_V1_PREFIX}/cv/tailor" and "requestBody" not in operation:
             operation["requestBody"] = _TAILOR_REQUEST_BODY
     components = schema.setdefault("components", {})
     security_schemes = components.setdefault("securitySchemes", {})

@@ -34,6 +34,7 @@ from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from services.portfolio.auth.crypto import AuthUnconfiguredError, verify_access_token
+from services.portfolio.constants import API_V1_PREFIX
 from services.portfolio.settings import settings
 
 
@@ -43,23 +44,22 @@ logger = logging.getLogger(__name__)
 # (login/refresh) or only consume them via the cookie (logout) explicitly fall
 # through so they can run unauthenticated — they carry their own auth material
 # (password / httpOnly refresh cookie), not a bearer access token.
-_API_PREFIX = "/api/v1"
-_TOKEN_PATH = "/api/v1/auth/token"
-_REFRESH_PATH = "/api/v1/auth/refresh"
-_LOGOUT_PATH = "/api/v1/auth/logout"
+_TOKEN_PATH = f"{API_V1_PREFIX}/auth/token"
+_REFRESH_PATH = f"{API_V1_PREFIX}/auth/refresh"
+_LOGOUT_PATH = f"{API_V1_PREFIX}/auth/logout"
 
 # Tailoring surface (migrated from TailorAuthMiddleware). The mutation route is
 # header-only; the revision reads accept `?token=` because the preview page's
 # iframe cannot send an Authorization header. The mutation route lives under
-# _API_PREFIX, so _is_protected's `/api/v1/*` branch already covers it — this
+# API_V1_PREFIX, so _is_protected's `/api/v1/*` branch already covers it — this
 # constant is only needed by _is_tailor_mutation for the admin-role check.
 _TAILOR_MUTATION_METHOD = "POST"
-_TAILOR_MUTATION_PATH = "/api/v1/cv/tailor"
+_TAILOR_MUTATION_PATH = f"{API_V1_PREFIX}/cv/tailor"
 _TAILORED_READ_METHOD = "GET"
 _TAILORED_READ_PATHS = {"/cv/html", "/cv/pdf", "/cv/preview"}
 
 _REVISIONS_LIST_METHOD = "GET"
-_REVISIONS_LIST_PATH = "/api/v1/revisions"
+_REVISIONS_LIST_PATH = f"{API_V1_PREFIX}/revisions"
 
 _SCOPE_READ = "cv:read"
 
@@ -102,7 +102,7 @@ def _is_protected(scope: Scope) -> bool:
     method = scope.get("method", "")
     if method == "OPTIONS":
         return False
-    if path.startswith(_API_PREFIX):
+    if path.startswith(API_V1_PREFIX):
         return path not in {_TOKEN_PATH, _REFRESH_PATH, _LOGOUT_PATH}
     return _is_tailored_read(scope)
 

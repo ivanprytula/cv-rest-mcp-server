@@ -8,7 +8,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 
-from services.portfolio.constants import CONFIG_DIR
+from services.portfolio.constants import API_V1_PREFIX, CONFIG_DIR
 from services.portfolio.dependencies import get_pdf_service
 from services.portfolio.jd_input import PayloadTooLargeError, parse_jd_input
 from services.portfolio.matching.baseline import BaselineError, get_baseline
@@ -298,7 +298,9 @@ async def get_cv_pdf(
 
 
 @router.post(
-    "/api/v1/cv/tailor", tags=["CV"], responses=_responses(413, 422, 429, 500, 503)
+    f"{API_V1_PREFIX}/cv/tailor",
+    tags=["CV"],
+    responses=_responses(413, 422, 429, 500, 503),
 )
 @limits("10/minute", "60/hour")
 async def tailor_cv_endpoint(
@@ -370,7 +372,7 @@ async def tailor_cv_endpoint(
     return {**tailored, "saved_to": str(revision_path)}
 
 
-@router.get("/api/v1/revisions", tags=["CV"], responses=_responses(429, 503))
+@router.get(f"{API_V1_PREFIX}/revisions", tags=["CV"], responses=_responses(429, 503))
 @limits("30/minute", "300/hour")
 async def list_tailored_revisions(request: Request):
     """List tailored CV revisions written by ``/api/v1/cv/tailor``, newest first.
