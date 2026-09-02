@@ -76,8 +76,6 @@ jobs:
         run: uv sync --group dev
       - name: Install Playwright browsers
         run: uv run playwright install chromium
-      - name: Install pytest-timeout and pytest-xdist for diagnostics
-        run: uv pip install pytest-timeout pytest-xdist
       - name: Run test suite with diagnostics
         run: |
           echo "Starting test run at $(date)"
