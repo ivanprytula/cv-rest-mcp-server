@@ -369,7 +369,7 @@ flowchart LR
         i1["terraform-quality<br/>tflint + checkov"]:::job
         i2["cost-estimate<br/>Infracost, $100 budget"]:::job
         i3["terraform-plan<br/>→ job summary + PR comment<br/>→ artifact (5 days)"]:::job
-        i4{{"dev environment<br/>APPROVAL GATE"}}:::gate
+        i4{{"production environment<br/>APPROVAL GATE"}}:::gate
         i5["terraform-apply<br/>applies the reviewed plan"]:::job
         i1 --> i2 --> i3 --> i4 --> i5
     end

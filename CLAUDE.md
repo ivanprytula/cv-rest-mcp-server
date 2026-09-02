@@ -43,7 +43,7 @@ npm run css             # Rebuild Tailwind CSS (required after template changes)
 **CI/CD strategy**: Two path-filtered workflows enforce the boundary "Terraform owns the platform; the app pipeline owns the released artifact."
 
 - `.github/workflows/deploy-app.yml` — triggers on `services/portfolio/**`, `frontend/**`, `services/**`, Dockerfiles. Lint + tests → builds api-core (Dockerfile), api-games (services/games/Dockerfile), spa-origin (frontend/Dockerfile) → `gcloud run deploy` per service → verify. Never touches Terraform state.
-- `.github/workflows/ci-cd.yml` — triggers on `terraform/**`. tflint + checkov → Infracost budget check → `terraform plan` (posted to the PR, uploaded as an artifact) → `terraform apply` of that exact reviewed plan, gated on the `dev` GitHub Environment's required reviewer.
+- `.github/workflows/ci-cd.yml` — triggers on `terraform/**`. tflint + checkov → Infracost budget check → `terraform plan` (posted to the PR, uploaded as an artifact) → `terraform apply` of that exact reviewed plan, gated on the `production` GitHub Environment's required reviewer.
 
 **Image field ownership**: `modules/cloud_run_service` sets `lifecycle { ignore_changes = [template[0].containers[0].image] }`. Terraform owns the service's shape (scaling, env vars, secrets, ingress); `gcloud run deploy` owns which image tag is live. Without this the two tools revert each other. `var.image_overrides` is now break-glass only — routine releases don't go through Terraform.
 
