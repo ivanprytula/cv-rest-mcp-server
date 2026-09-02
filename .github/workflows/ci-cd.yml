@@ -111,22 +111,25 @@ jobs:
         working-directory: terraform
         run: terraform validate
 
+      # Single source of truth: the operator's real terraform.tfvars (gitignored
+      # locally) is stored whole as one secret. This replaces ~15 individual
+      # TF_VAR_* secrets/vars that had to be updated by hand every time a new
+      # variable was added to tfvars — that manual sync was skipped for
+      # api_core_secret_ids and Terraform silently destroyed two IAM bindings
+      # on the next CI apply. One file, one place to edit, no drift possible.
+      - name: Write terraform.tfvars
+        working-directory: terraform
+        run: echo "${{ secrets.TF_VARS_FILE }}" > terraform.tfvars
+
       - name: Terraform plan
         id: plan
         working-directory: terraform
-        env:
-          TF_VAR_project_id: ${{ vars.GCP_PROJECT }}
-          TF_VAR_region: ${{ vars.GCP_REGION }}
-          TF_VAR_apex_domain: ${{ secrets.TF_VAR_APEX_DOMAIN }}
-          TF_VAR_create_dns_zone: ${{ vars.TF_VAR_CREATE_DNS_ZONE }}
-          TF_VAR_services: ${{ secrets.TF_VAR_SERVICES_JSON }}
-          TF_VAR_host_routing: ${{ secrets.TF_VAR_HOST_ROUTING_JSON }}
-          TF_VAR_static_assets: ${{ secrets.TF_VAR_STATIC_ASSETS_JSON }}
-          TF_VAR_uploads: ${{ secrets.TF_VAR_UPLOADS_JSON }}
-          TF_VAR_jwt_signing_secret_id: ${{ vars.TF_VAR_JWT_SIGNING_SECRET_ID }}
-          TF_VAR_setup_github_wif: ${{ vars.TF_VAR_SETUP_GITHUB_WIF }}
-          TF_VAR_github_repo: ${{ vars.TF_VAR_GITHUB_REPO }}
         run: terraform plan -out=tfplan -no-color
+
+      - name: Remove terraform.tfvars
+        if: always()
+        working-directory: terraform
+        run: rm -f terraform.tfvars
 
       - name: Upload plan artifact
         uses: actions/upload-artifact@v4

@@ -1,6 +1,15 @@
 # Copy to terraform.tfvars (gitignored) and fill the real values.
 # Single managed environment — this file is the whole deployment.
 #
+# CI reads this SAME file, not a separate copy: after any edit to the real
+# terraform.tfvars, push the whole file to the one GitHub secret CI writes
+# back out before every plan/apply —
+#   gh secret set TF_VARS_FILE < terraform.tfvars
+# There is no second place to keep in sync. Forgetting this step is the
+# single most common way local and CI Terraform state diverge — it silently
+# destroyed two IAM bindings once already (2026-09-02) when a new variable
+# was added locally but never pushed to the CI secret.
+#
 # Prereq: run `just deploy bootstrap-state` once (creates the GCS state bucket
 # and writes terraform/backend.tfbackend). Without it, `terraform init` has no
 # backend and `just tf-plan` will fail.
