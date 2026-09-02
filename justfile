@@ -6,7 +6,7 @@ setup:
     uv sync --group dev
 
 dev-local:
-    uv run uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload --reload-include '*.html'
+    uv run uvicorn services.portfolio.main:app --host 0.0.0.0 --port 8080 --reload --reload-include '*.html'
 
 dev-spa:
     cd frontend && npm run dev -- --port 5173
@@ -20,13 +20,14 @@ test:
     uv run pytest
 
 # Browser e2e tests (Playwright); excluded from `just test` by default.
-# Scoped to tests/ (api-core) only: each service owns an independent test
-# suite (see services/games/tests/), and two session-scoped sync_playwright()
-# fixtures cannot coexist in one pytest run — `-m e2e` across the whole repo
-# fails with "Live server failed to start" on the second one collected.
+# Scoped to services/portfolio/tests/ only: each service owns an independent
+# test suite (see services/games/tests/), and two session-scoped
+# sync_playwright() fixtures cannot coexist in one pytest run — `-m e2e`
+# across the whole repo fails with "Live server failed to start" on the
+# second one collected.
 test-ui:
     uv run playwright install chromium
-    uv run pytest tests/ -m e2e --no-cov
+    uv run pytest services/portfolio/tests/ -m e2e --no-cov
 
 # Browser e2e tests for the games service (services/games/). Run separately
 # from test-ui — see the comment above for why.
@@ -35,7 +36,7 @@ test-ui-games:
     uv run pytest services/games/tests/ -m e2e --no-cov
 
 # Recompute the SHA-256 hash of FastAPI's /docs inline init script.
-# Run after upgrading FastAPI; paste output into app/main.py _CSP_DIRECTIVE.
+# Run after upgrading FastAPI; paste output into services/portfolio/main.py _CSP_DIRECTIVE.
 # Requires dev server running on :8080 (just dev).
 csp-swaggerui-hash:
     python3 scripts/csp_swaggerui_hash.py

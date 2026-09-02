@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - "app/**"
+      - "services/portfolio/**"
       - "frontend/**"
       - "services/**"
       - "static/**"
@@ -18,7 +18,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "app/**"
+      - "services/portfolio/**"
       - "frontend/**"
       - "services/**"
       - "static/**"

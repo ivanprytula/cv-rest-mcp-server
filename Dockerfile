@@ -55,7 +55,7 @@ COPY --chown=65532:65532 static/ ./static/
 # enters the image.
 COPY --chown=65532:65532 data/ ./data/
 COPY --chown=65532:65532 config/ ./config/
-COPY --chown=65532:65532 app/ ./app/
+COPY --chown=65532:65532 services/portfolio/ ./services/portfolio/
 COPY --chown=65532:65532 pyproject.toml ./
 
 USER 65532
@@ -68,4 +68,4 @@ EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s CMD wget -qO- http://localhost:$PORT/health || exit 1
 
-CMD ["python", "-m", "app.main"]
+CMD ["python", "-m", "services.portfolio.main"]
