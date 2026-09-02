@@ -51,6 +51,7 @@ services = {
       # every other CORS response is credential-less. Update when the apex
       # domain changes — keep aligned with app.<apex> from host_routing.
       CORS_ORIGINS         = "https://app.example.com"
+      GAMES_BASE_URL       = "https://games.example.com"
     }
     # Phase-1c: HS256 issuer (single shared secret). Secret in Secret Manager;
     # version is "latest" for now (rotate by re-uploading + bumping below).

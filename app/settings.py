@@ -19,6 +19,12 @@ class Settings(BaseSettings):
     contact_name: str = ""
     contact_email: str = ""
 
+    # Base URL of the games service. Empty = same-origin (local dev, where the
+    # games router is mounted in this app). In production the games workload is
+    # a separate Cloud Run service on its own host, so set e.g.
+    # "https://games.example.com" — no trailing slash.
+    games_base_url: str = ""
+
     # CV content delivery (GCS)
     cv_data_gcs_uri: str = ""
     cv_refresh_seconds: int = 30

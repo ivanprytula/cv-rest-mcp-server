@@ -59,6 +59,20 @@ resource "google_cloud_run_v2_service" "service" {
   }
 }
 
+# Invoker binding. Requests arriving through the load balancer are still
+# unauthenticated as far as Cloud Run is concerned, so a public-facing service
+# needs allUsers/run.invoker even though `ingress` already restricts the
+# traffic source to the LB. Without this the edge returns 403.
+resource "google_cloud_run_v2_service_iam_member" "invoker" {
+  count = var.allow_unauthenticated ? 1 : 0
+
+  project  = var.project
+  location = google_cloud_run_v2_service.service.location
+  name     = google_cloud_run_v2_service.service.name
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}
+
 # Serverless NEG so the Load Balancer can route to this service. The NEG
 # authenticates to Cloud Run with default service identity and the URL-map
 # host rule targets it; direct public access is governed by `ingress`.
