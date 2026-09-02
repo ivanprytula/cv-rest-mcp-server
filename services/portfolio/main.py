@@ -43,6 +43,7 @@ from services.portfolio.mcp_limits import (
     enforce_mcp_read_limit,
 )
 from services.portfolio.pdf_generator import PdfService, ThemeNotFoundError
+from services.portfolio.proxy_scheme_middleware import TrustedProxySchemeMiddleware
 from services.portfolio.rate_limiter import limiter
 from services.portfolio.routes import router
 from services.portfolio.settings import settings
@@ -173,6 +174,8 @@ class SecurityHeadersMiddleware:
 
 # Middleware runs in reverse addition order: SecurityHeaders then Guard execute
 # first, so responses carry headers even when the guard rejects the client.
+# TrustedProxyScheme is added LAST (outermost of all) so scope["scheme"] is
+# corrected before any other middleware or route handler runs.
 app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(
     CORSMiddleware,
@@ -194,6 +197,7 @@ app.add_middleware(GuardMiddleware)
 # surface (?tailored= reads); everything else passes through untouched.
 app.add_middleware(JWTAuthMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(TrustedProxySchemeMiddleware)
 
 mcp = FastMCP("cv-rest-mcp-server")
 
