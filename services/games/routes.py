@@ -11,6 +11,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 from jinja2 import Environment, FileSystemLoader
 
+from services.games.settings import settings
 from shared.rate_limiter import limits
 
 
@@ -54,7 +55,11 @@ def load_bingo_content(path: Path) -> dict:
 
 def _render_bingo_template(title: str, cells: list) -> str:
     template = _jinja_env.get_template("games/culture_bingo.html")
-    return template.render(title=title, cells=cells)
+    return template.render(
+        title=title,
+        cells=cells,
+        portfolio_base_url=settings.portfolio_base_url.rstrip("/"),
+    )
 
 
 _BINGO_CONTENT = load_bingo_content(GAMES_CONTENT_PATH)

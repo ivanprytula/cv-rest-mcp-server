@@ -5,7 +5,6 @@ from __future__ import annotations
 import base64
 import hashlib
 import logging
-import os
 import re
 import sys
 from pathlib import Path
@@ -22,6 +21,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from starlette.types import ASGIApp
 
 from services.games.routes import router
+from services.games.settings import settings
 from shared.rate_limiter import limiter
 
 
@@ -119,5 +119,4 @@ async def health():
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8080))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run(app, host="0.0.0.0", port=settings.port)

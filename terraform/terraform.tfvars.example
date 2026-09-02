@@ -69,7 +69,12 @@ services = {
     image                 = "europe-west1-docker.pkg.dev/cv-rest-mcp-server/cv-images/api-games:latest"
     service_account       = "api-games-runtime@cv-rest-mcp-server.iam.gserviceaccount.com"
     allow_unauthenticated = true
-    max_instances         = 1
+    env_vars = {
+      # "Back to portfolio" needs an absolute URL — games runs as a separate
+      # Cloud Run service from the apex/api-core host.
+      PORTFOLIO_BASE_URL = "https://example.com"
+    }
+    max_instances = 1
   }
   spa-origin = {
     image                 = "europe-west1-docker.pkg.dev/cv-rest-mcp-server/cv-images/spa-origin:latest"
