@@ -20,9 +20,19 @@ test:
     uv run pytest
 
 # Browser e2e tests (Playwright); excluded from `just test` by default.
+# Scoped to tests/ (api-core) only: each service owns an independent test
+# suite (see services/games/tests/), and two session-scoped sync_playwright()
+# fixtures cannot coexist in one pytest run — `-m e2e` across the whole repo
+# fails with "Live server failed to start" on the second one collected.
 test-ui:
     uv run playwright install chromium
-    uv run pytest -m e2e --no-cov
+    uv run pytest tests/ -m e2e --no-cov
+
+# Browser e2e tests for the games service (services/games/). Run separately
+# from test-ui — see the comment above for why.
+test-ui-games:
+    uv run playwright install chromium
+    uv run pytest services/games/tests/ -m e2e --no-cov
 
 # Recompute the SHA-256 hash of FastAPI's /docs inline init script.
 # Run after upgrading FastAPI; paste output into app/main.py _CSP_DIRECTIVE.
