@@ -49,9 +49,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The official action retries and verifies the download. The previous
+      # `curl ... | sh` swallowed network failures (curl exit 35 left no binary,
+      # and the next step died with "infracost: command not found").
       - name: Install Infracost CLI
-        run: |
-          curl -fsSL https://raw.githubusercontent.com/infracost/infracost/master/scripts/install.sh | sh
+        uses: infracost/actions/setup@v3
+        with:
+          api-key: ${{ secrets.INFRACOST_API_KEY }}
 
       - name: Generate cost estimate
         env:
