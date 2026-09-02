@@ -11,9 +11,13 @@ requests, fail-closed. It gates two families of routes:
    - `POST /api/v1/cv/tailor` — requires a JWT for an **admin-role** user (the
      `role` claim), presented ONLY via the Authorization header (the secret
      never goes in a URL/log).
-   - `GET /cv/html|pdf|preview` WITH a `?tailored=` selector — requires a JWT
-     with the `cv:read` scope, via Authorization header, or via `?token=` for
-     the preview page whose embedded iframe cannot send a header.
+   - `GET /cv/html` WITH a `?tailored=` selector, and `GET /api/v1/cv` /
+     `GET /api/v1/cv/pdf` (the operator-only equivalents of the public
+     `/cv` and `/cv/pdf`) — require a JWT with the `cv:read` scope, via the
+     Authorization header only (no `?token=` fallback: tailored
+     previews/PDFs are operator-SPA-only, so nothing embeds them in an
+     iframe that can't send a header). The public `/cv`, `/cv/preview`, and
+     `/cv/pdf` never accept a `tailored` selector at all.
    - `GET /api/v1/revisions` — requires a JWT with the `cv:read` scope (same
      as the tailored reads); lists the tailored CV revisions on disk for the
      SPA's revisions screen.
@@ -48,35 +52,35 @@ _TOKEN_PATH = f"{API_V1_PREFIX}/auth/token"
 _REFRESH_PATH = f"{API_V1_PREFIX}/auth/refresh"
 _LOGOUT_PATH = f"{API_V1_PREFIX}/auth/logout"
 
-# Tailoring surface (migrated from TailorAuthMiddleware). The mutation route is
-# header-only; the revision reads accept `?token=` because the preview page's
-# iframe cannot send an Authorization header. The mutation route lives under
+# Tailoring surface (migrated from TailorAuthMiddleware). All of it is
+# header-only Bearer auth now — nothing embeds a tailored view in an iframe,
+# so there is no `?token=` fallback anywhere. The mutation route lives under
 # API_V1_PREFIX, so _is_protected's `/api/v1/*` branch already covers it — this
 # constant is only needed by _is_tailor_mutation for the admin-role check.
 _TAILOR_MUTATION_METHOD = "POST"
 _TAILOR_MUTATION_PATH = f"{API_V1_PREFIX}/cv/tailor"
-_TAILORED_READ_METHOD = "GET"
-_TAILORED_READ_PATHS = {"/cv/html", "/cv/pdf", "/cv/preview"}
 
-_REVISIONS_LIST_METHOD = "GET"
 _REVISIONS_LIST_PATH = f"{API_V1_PREFIX}/revisions"
+
+# GET routes requiring the cv:read scope: /cv/html?tailored= (public path,
+# conditionally protected — see _is_tailored_read), plus the always-protected
+# operator-only /api/v1/cv and /api/v1/cv/pdf (equivalents of the public
+# /cv and /cv/pdf, always under API_V1_PREFIX so _is_protected's `/api/v1/*`
+# branch already gates them).
+_READ_SCOPED_PATH = "/cv/html"
+_READ_SCOPED_API_PATHS = {f"{API_V1_PREFIX}/cv", f"{API_V1_PREFIX}/cv/pdf"}
 
 _SCOPE_READ = "cv:read"
 
 _ROLE_ADMIN = "admin"
-
-_DIRECT_QUERY_TOKEN = "token"
 
 _BEARER_PREFIX = "bearer "  # case-insensitive per RFC 6750
 _WWW_AUTHENTICATE = "Bearer"
 
 
 def _is_tailored_read(scope: Scope) -> bool:
-    """True for the GET routes only when a `tailored` selector is present."""
-    if (
-        scope.get("method") != _TAILORED_READ_METHOD
-        or scope.get("path") not in _TAILORED_READ_PATHS
-    ):
+    """True for /cv/html only when a `tailored` selector is present."""
+    if scope.get("method") != "GET" or scope.get("path") != _READ_SCOPED_PATH:
         return False
     return bool(_query_param(scope, "tailored"))
 
@@ -142,9 +146,7 @@ class JWTAuthMiddleware:
     1. Non-HTTP scope, or a request not protected by this middleware ->
        pass through.
     2. Auth not configured (no signing key) -> 503.
-    3. Missing/malformed token -> for GET revision reads only, the `?token=`
-       query parameter is accepted as a fallback (an iframe cannot send a
-       header); otherwise 401.
+    3. Missing/malformed Authorization header -> 401.
     4. Token fails signature/exp/iss/aud verification -> 401.
     5. Token lacks the required scope -> 403.
     6. Verified -> inject decoded claims into `scope["auth"]` and continue.
@@ -163,15 +165,6 @@ class JWTAuthMiddleware:
             return
 
         token, malformed = _extract_bearer(scope.get("headers", []))
-        is_read = _is_tailored_read(scope)
-        if malformed or token is None:
-            # The preview page embeds the revision in an iframe, which cannot
-            # set an Authorization header — accept `?token=` for GET reads
-            # only. The mutation route and /api/v1/* are header-only so the
-            # JWT never leaks into the query string's log footprint.
-            if is_read:
-                token = _query_param(scope, _DIRECT_QUERY_TOKEN) or None
-                malformed = token is None
         if malformed or token is None:
             await self._deny(
                 scope, receive, send, 401, "Missing or malformed Authorization header"
@@ -219,17 +212,19 @@ class JWTAuthMiddleware:
         return JWTAuthMiddleware._is_tailor_mutation(scope)
 
     @staticmethod
-    def _is_revisions_list(scope: Scope) -> bool:
-        return (
-            scope.get("method") == _REVISIONS_LIST_METHOD
-            and scope.get("path") == _REVISIONS_LIST_PATH
+    def _is_read_scoped_api_path(scope: Scope) -> bool:
+        return scope.get("method") == "GET" and scope.get("path") in (
+            _REVISIONS_LIST_PATH,
+            *_READ_SCOPED_API_PATHS,
         )
 
     @staticmethod
     def _required_scope(scope: Scope) -> str | None:
         if JWTAuthMiddleware._requires_admin(scope):
             return None  # role-gated, not scope-gated
-        if _is_tailored_read(scope) or JWTAuthMiddleware._is_revisions_list(scope):
+        if _is_tailored_read(scope) or JWTAuthMiddleware._is_read_scoped_api_path(
+            scope
+        ):
             return _SCOPE_READ
         return None  # /api/v1/* — authenticated only
 

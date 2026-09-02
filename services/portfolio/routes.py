@@ -205,8 +205,26 @@ async def health(request: Request):
 @router.get("/cv", tags=["CV"], responses=_responses(429, 503))
 @limits("30/minute", "600/hour")
 async def get_cv_json(request: Request, pdf_service=get_pdf_service_dep):
-    """Return the raw CV data as JSON, exactly as served to renderers."""
+    """Return the raw CV data as JSON, exactly as served to renderers.
+
+    Public, unauthenticated, live-CV-only — see /api/v1/cv for the
+    operator-only tailored equivalent.
+    """
     return pdf_service.cv_data
+
+
+@router.get(f"{API_V1_PREFIX}/cv", tags=["CV"], responses=_responses(404, 429, 503))
+@limits("30/minute", "600/hour")
+async def get_tailored_cv_json(
+    request: Request, tailored: str = "latest", pdf_service=get_pdf_service_dep
+):
+    """Return a tailored revision's raw CV JSON (operator console only).
+
+    Requires a JWT with the `cv:read` scope (see JWTAuthMiddleware). `tailored`
+    is a bare `cv_tailored-<ts>.json` filename from /api/v1/cv/tailor's
+    `saved_to`, or the literal `latest`. Powers the SPA's revision-preview page.
+    """
+    return _load_tailored_revision(tailored, default=pdf_service.cv_data)
 
 
 @router.get("/cv/html", tags=["CV"], responses=_responses(404, 429, 503))
@@ -237,36 +255,47 @@ async def get_cv_html(
     return HTMLResponse(content=html)
 
 
-@router.get("/cv/preview", tags=["Pages"], responses=_responses(404, 429, 503))
+@router.get("/cv/preview", tags=["Pages"], responses=_responses(429, 503))
 @limits("30/minute", "300/hour")
 async def preview_cv(
     request: Request,
     theme: str = "classic",
     company: str = "",
     consent: bool = False,
-    tailored: str = "",
     pdf_service=get_pdf_service_dep,
 ):
-    """Interactive preview page: theme picker toolbar embedding the rendered CV (/cv/html).
+    """Interactive preview page: theme picker toolbar embedding the live CV (/cv/html).
 
-    Forwards `consent` / `company` / `tailored` / `token` to the embedded CV,
-    the theme links, and the download button so previews match the final PDF.
+    Forwards `consent` / `company` to the embedded CV, the theme links, and the
+    download button so previews match the final PDF. Public, unauthenticated,
+    live-CV-only surface — tailored revisions are previewed only in the
+    operator SPA (see /revisions/:name), never here.
     """
     if theme not in pdf_service.themes:
         raise ThemeNotFoundError(theme)
-    cv = _load_tailored_revision(tailored, default=pdf_service.cv_data)
     kwargs = _consent_kwargs(company, consent)
     html = render_template(
         "preview.html",
-        cv_name=cv.get("name", ""),
+        cv_name=pdf_service.cv_data.get("name", ""),
         theme=theme,
         themes=pdf_service.list_themes(),
         consent=kwargs["consent"],
         company=kwargs["consent_company"],
-        tailored=tailored,
-        token=request.query_params.get("token", ""),
     )
     return HTMLResponse(content=html)
+
+
+async def _render_cv_pdf_response(
+    cv: dict, theme: str, company: str, consent: bool, pdf_service
+) -> Response:
+    pdf_bytes = await pdf_service.generate_cv_pdf_async(
+        theme, cv, **_consent_kwargs(company, consent)
+    )
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{_pdf_filename(cv)}"'},
+    )
 
 
 @router.get("/cv/pdf", tags=["CV"], responses=_responses(404, 429, 503))
@@ -276,25 +305,39 @@ async def get_cv_pdf(
     theme: str = "classic",
     company: str = "",
     consent: bool = False,
-    tailored: str = "",
     pdf_service=get_pdf_service_dep,
 ):
-    """Generate the CV as a themed PDF and return it as a downloadable attachment.
+    """Generate the live CV as a themed PDF and return it as a downloadable attachment.
 
     With `consent` (or a non-empty `company`), the PDF carries the
-    GDPR/RODO recruitment-consent clause on its last page. With `tailored`
-    (a bare `cv_tailored-<ts>.json` filename from /api/v1/cv/tailor's `saved_to`,
-    or `latest`), renders that revision instead of the live CV.
+    GDPR/RODO recruitment-consent clause on its last page. Public, unauthenticated
+    surface — tailored revisions are never reachable here; see
+    `/api/v1/cv/pdf` for the authenticated, operator-only equivalent.
+    """
+    return await _render_cv_pdf_response(
+        pdf_service.cv_data, theme, company, consent, pdf_service
+    )
+
+
+@router.get(f"{API_V1_PREFIX}/cv/pdf", tags=["CV"], responses=_responses(404, 429, 503))
+@limits("5/15minute", "15/hour")
+async def get_tailored_cv_pdf(
+    request: Request,
+    theme: str = "classic",
+    company: str = "",
+    consent: bool = False,
+    tailored: str = "latest",
+    pdf_service=get_pdf_service_dep,
+):
+    """Generate a tailored CV revision as a themed PDF (operator console only).
+
+    Requires a JWT with the `cv:read` scope (see JWTAuthMiddleware). `tailored`
+    is a bare `cv_tailored-<ts>.json` filename from /api/v1/cv/tailor's
+    `saved_to`, or the literal `latest`. Powers the SPA's revision-preview
+    download button; the public `/cv/pdf` never accepts a `tailored` selector.
     """
     cv = _load_tailored_revision(tailored, default=pdf_service.cv_data)
-    pdf_bytes = await pdf_service.generate_cv_pdf_async(
-        theme, cv, **_consent_kwargs(company, consent)
-    )
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{_pdf_filename(cv)}"'},
-    )
+    return await _render_cv_pdf_response(cv, theme, company, consent, pdf_service)
 
 
 @router.post(

@@ -30,9 +30,10 @@ async def test_favicon_served(client):
 
 
 async def test_openapi_declares_tailor_bearer_auth(client):
-    # Swagger UI's Authorize button is wired to the Bearer scheme on /api/v1/cv/tailor
-    # AND the ?tailored= revision reads, so a recruiter-op can try them from
-    # /docs without copy-pasting headers.
+    # Swagger UI's Authorize button is wired to the Bearer scheme on
+    # /api/v1/cv/tailor, /api/v1/cv, /api/v1/cv/pdf, AND the ?tailored=
+    # revision reads on /cv/html, so an operator can try them from /docs
+    # without copy-pasting headers.
     resp = await client.get("/openapi.json")
     assert resp.status_code == status.HTTP_200_OK
     schema = resp.json()
@@ -43,10 +44,12 @@ async def test_openapi_declares_tailor_bearer_auth(client):
     assert "requestBody" in operation
     # The tailored revision reads carry the same requirement so the Authorize
     # button attaches the header to them too.
-    for path in ("/cv/html", "/cv/preview", "/cv/pdf"):
+    for path in ("/cv/html", "/api/v1/cv", "/api/v1/cv/pdf"):
         assert schema["paths"][path]["get"]["security"] == [{"HTTPBearer": []}]
-    # Fully public routes must not carry the security requirement.
-    assert "security" not in schema["paths"]["/cv"]["get"]
+    # /cv, /cv/preview, and /cv/pdf never accept a tailored selector, so they
+    # must not carry the security requirement.
+    for path in ("/health", "/cv", "/cv/preview", "/cv/pdf"):
+        assert "security" not in schema["paths"][path]["get"]
 
 
 async def test_site_css_served(client):
@@ -479,6 +482,25 @@ async def test_tailor_cv_internal_error_is_500_sanitized(
     assert "secret" not in resp.text
 
 
+async def test_tailored_cv_json_returns_revision(
+    client, override_pdf_service, synthetic_cv
+):
+    from services.portfolio.settings import settings
+
+    revision = {**synthetic_cv, "name": "Tailored Jane"}
+    rev_path = settings.cv_tailored_dir / "cv_tailored-2026-08-29_10-00-00.json"
+    rev_path.parent.mkdir(parents=True, exist_ok=True)
+    rev_path.write_text(json.dumps(revision), encoding="utf-8")
+
+    resp = await client.get("/api/v1/cv?tailored=latest")
+    assert resp.status_code == status.HTTP_200_OK
+    assert resp.json()["name"] == "Tailored Jane"
+
+    live = await client.get("/cv")
+    assert live.status_code == status.HTTP_200_OK
+    assert live.json()["name"] != "Tailored Jane"
+
+
 async def test_tailored_html_renders_revision(
     client, override_pdf_service, synthetic_cv
 ):
@@ -503,6 +525,7 @@ async def test_tailored_html_renders_revision(
 
 
 async def test_tailored_pdf_uses_revision(client, override_pdf_service, synthetic_cv):
+    # The operator-only /api/v1/cv/pdf is the sole way to download a tailored PDF.
     from services.portfolio.settings import settings
 
     revision = {**synthetic_cv, "title": "Tailored Engineer"}
@@ -513,7 +536,7 @@ async def test_tailored_pdf_uses_revision(client, override_pdf_service, syntheti
     override_pdf_service.generate_cv_pdf_async = AsyncMock(
         return_value=b"%PDF-1.7 fake"
     )
-    resp = await client.get("/cv/pdf?tailored=latest")
+    resp = await client.get("/api/v1/cv/pdf?tailored=latest")
     assert resp.status_code == status.HTTP_200_OK
     assert resp.headers["content-type"] == "application/pdf"
     override_pdf_service.generate_cv_pdf_async.assert_awaited_once_with(
@@ -521,26 +544,6 @@ async def test_tailored_pdf_uses_revision(client, override_pdf_service, syntheti
     )
     pattern = r'attachment; filename="CV_Jane_Doe_Tailored_Engineer_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.pdf"'
     assert re.match(pattern, resp.headers["content-disposition"])
-
-
-async def test_tailored_preview_forwards_revision(
-    client, override_pdf_service, synthetic_cv, admin_access_token
-):
-    from services.portfolio.settings import settings
-
-    revision = {**synthetic_cv, "name": "Tailored Jane"}
-    rev_path = settings.cv_tailored_dir / "cv_tailored-2026-08-29_10-00-00.json"
-    rev_path.parent.mkdir(parents=True, exist_ok=True)
-    rev_path.write_text(json.dumps(revision), encoding="utf-8")
-
-    resp = await client.get(
-        f"/cv/preview?tailored=cv_tailored-2026-08-29_10-00-00.json&token={admin_access_token}"
-    )
-    assert resp.status_code == status.HTTP_200_OK
-    assert "Tailored Jane" in resp.text
-    # the iframe + links carry the token so the browser can fetch them
-    assert "tailored=cv_tailored-2026-08-29_10-00-00.json" in resp.text
-    assert f"token={admin_access_token}" in resp.text
 
 
 async def test_tailored_revision_rejects_non_basename_paths(
