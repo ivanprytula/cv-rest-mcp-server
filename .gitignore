@@ -36,6 +36,9 @@ data/*
 .agent/
 .github/prompts/
 
+# Operator diagnostics — hardcodes project id, domain, and SA names
+scripts/netdoctor.sh
+
 # Terraform
 .terraform/
 *.tfstate

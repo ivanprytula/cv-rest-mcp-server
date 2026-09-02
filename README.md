@@ -149,6 +149,11 @@ to the `cv-images` Artifact Registry repo
 
 ## Deployment
 
+New to DNS, load balancers, or Terraform? [docs/infrastructure.md](docs/infrastructure.md)
+explains how a browser request reaches your code — DNS delegation, SSL
+certificates, the load balancer, Cloud Run, and how Terraform ties them
+together — using this project's real resources.
+
 ### Local Development
 
 ```bash

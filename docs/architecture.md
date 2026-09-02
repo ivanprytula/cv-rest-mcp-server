@@ -1,5 +1,9 @@
 # Architecture
 
+> Scope: what happens *inside* the application. For how a request reaches it —
+> DNS, SSL, load balancer, Cloud Run, Terraform — see
+> [infrastructure.md](infrastructure.md).
+
 FastAPI + FastMCP service that renders a CV as JSON or themed PDFs. Browser styling is
 compiled from the templates into `static/css/site.css` during the build; production
 serves that committed asset without a third-party CDN. All PDF generation happens in
