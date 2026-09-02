@@ -207,7 +207,18 @@ are intentionally loose enough to survive doc prose edits while still
 catching format changes; first-line maintenance when an issue fires is
 updating one JSON entry.
 
-## ADR-015: Unified CI/CD workflow with automatic main deployment
+## ADR-015: Unified CI/CD workflow with automatic main deployment — superseded
+
+**Status.** Superseded. The single `cd.yaml` workflow and `SVC_NAME`-driven
+`scripts/deploy-cloud-run.sh build`/`deploy`/`wif` stages described below no
+longer exist. CI/CD is now two path-filtered workflows —
+`deploy-app.yml` (build + `gcloud run deploy`) and `ci-cd.yml` (Terraform
+plan → gated apply) — and `github_wif`/`iam_secrets` Terraform modules own
+identity and service-account provisioning. The `cv-ivanprytula` service and
+its `SVC_NAME`-derived service accounts this ADR describes were the
+project's original single-service deployment and have been deleted; see
+`.agent/handoffs/2026-09-02-0207-go-live-cicd-split-auth-wiring.md` for the
+migration. Kept below for historical context only — do not follow it.
 
 **Context.** Deploys were copy-paste gcloud blocks in a checklist. The team
 wanted PR/main CI (lint, types, tests) and a path from manual deploys to
