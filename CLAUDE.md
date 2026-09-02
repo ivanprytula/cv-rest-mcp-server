@@ -87,6 +87,30 @@ just deploy verify
 
 **Also owned by Terraform, not the script:** runtime/deployer service accounts and the `cv-images` Artifact Registry repo (`modules/iam_secrets`), and every API except `cloudresourcemanager` (`modules/gcp_apis`). The script's `bootstrap` only enables `cloudresourcemanager` (chicken-and-egg: Terraform's own `google_project_service` resources need it first), creates the CV data bucket, and grants Cloud Build IAM. Secret *containers and versions* stay script-owned (`bootstrap-secrets`) so key material never enters `.tfvars` or Terraform state; Terraform only binds `secretAccessor` to an existing secret ID.
 
+**Cloud Build source-staging bucket (`gs://<project>_cloudbuild`)**: auto-created
+by GCP the first time `gcloud builds submit` runs — not Terraform-managed, has
+no lifecycle rule by default, and accumulates one source tarball per build
+forever. Set a 7-day auto-delete rule once, manually:
+
+```bash
+cat > /tmp/cloudbuild-lifecycle.json <<'EOF'
+{
+  "rule": [
+    { "action": { "type": "Delete" }, "condition": { "age": 7 } }
+  ]
+}
+EOF
+gsutil lifecycle set /tmp/cloudbuild-lifecycle.json gs://<project>_cloudbuild
+```
+
+Check current size/rule and purge an existing backlog if the rule was added late:
+
+```bash
+gsutil du -sh gs://<project>_cloudbuild
+gsutil lifecycle get gs://<project>_cloudbuild
+gsutil -m rm "gs://<project>_cloudbuild/source/**"   # safe: only completed builds' old source
+```
+
 ## Cost Estimation
 
 Infracost estimates GCP monthly costs before `terraform apply`. Budget: **$100/month**.
