@@ -52,11 +52,15 @@ services = {
       # domain changes — keep aligned with app.<apex> from host_routing.
       CORS_ORIGINS         = "https://app.example.com"
       GAMES_BASE_URL       = "https://games.example.com"
+      FIRST_ADMIN_USERNAME       = "CHANGEME-pick-a-non-obvious-name"
+      FIRST_ADMIN_EMAIL       = "admin@example.com"
     }
     # Phase-1c: HS256 issuer (single shared secret). Secret in Secret Manager;
     # version is "latest" for now (rotate by re-uploading + bumping below).
     # secrets = {
-    #   JWT_SIGNING_KEY = { secret_id = "cv-rest-mcp-server-jwt-signing-key", version = "latest" }
+    #   JWT_SIGNING_KEY      = { secret_id = "cv-jwt-signing-key", version = "latest" }
+    #   REFRESH_TOKEN_PEPPER = { secret_id = "cv-refresh-token-pepper", version = "latest" }
+    #   FIRST_ADMIN_PASSWORD = { secret_id = "cv-first-admin-password", version = "latest" }
     # }
     max_instances = 1
     memory        = "512Mi"

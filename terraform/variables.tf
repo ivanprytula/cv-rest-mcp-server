@@ -122,6 +122,12 @@ variable "static_assets" {
 
 # IAM binding target only — secrets themselves are created by
 # scripts/deploy-cloud-run.sh bootstrap-secrets, not Terraform.
+variable "api_core_secret_ids" {
+  description = "Additional Secret Manager secret IDs api-core reads (e.g. refresh-token pepper, first-admin password). Created by bootstrap-secrets; Terraform only grants read access."
+  type        = list(string)
+  default     = []
+}
+
 variable "jwt_signing_secret_id" {
   description = "Existing Secret Manager secret ID for JWT signing key (create via scripts/deploy-cloud-run.sh bootstrap-secrets)"
   type        = string

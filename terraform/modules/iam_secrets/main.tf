@@ -215,6 +215,18 @@ resource "google_secret_manager_secret_iam_member" "api_core_jwt_key" {
   member    = "serviceAccount:${google_service_account.api_core_runtime.email}"
 }
 
+# Every other secret api-core reads at runtime. The secrets themselves (and
+# their versions) are created by scripts/deploy-cloud-run.sh bootstrap-secrets;
+# this only grants read access. A secret listed here must exist before apply.
+resource "google_secret_manager_secret_iam_member" "api_core_secrets" {
+  for_each = toset(var.api_core_secret_ids)
+
+  project   = var.project
+  secret_id = each.value
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.api_core_runtime.email}"
+}
+
 # Cloud Build permissions (shared across all builders)
 resource "google_project_iam_member" "cloud_build_artifact_writer" {
   project = var.project

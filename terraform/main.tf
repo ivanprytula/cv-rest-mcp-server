@@ -18,6 +18,7 @@ module "iam_secrets" {
   project               = var.project_id
   region                = var.region
   jwt_signing_secret_id = var.jwt_signing_secret_id
+  api_core_secret_ids   = var.api_core_secret_ids
 }
 
 # GitHub Workload Identity Federation for CI/CD (optional)

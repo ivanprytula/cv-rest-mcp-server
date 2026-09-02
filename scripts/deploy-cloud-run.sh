@@ -4,7 +4,7 @@
 # EXECUTION ORDER (required):
 #   1. bootstrap          Enable cloudresourcemanager API, create CV bucket, grant Cloud Build permissions
 #   2. bootstrap-state    Create versioned TF remote-state bucket + init
-#   3. bootstrap-secrets  Create Secret Manager secrets (cv-jwt-signing-key, refresh-token-pepper)
+#   3. bootstrap-secrets  Create empty Secret Manager secrets (you add the values)
 #   4. (Run: terraform apply)  Terraform deploys IAM, Org Policies, Cloud Run services
 #   5. upload-cv          Publish data/cv.json to GCS (application data)
 #   6. verify             Health check + smoke test URLs (optional, manual verification)
@@ -147,24 +147,56 @@ EOF
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STEP 3: Secret Manager secrets — JWT key + refresh token pepper
+# STEP 3: Secret Manager secrets — JWT key, refresh pepper, first-admin password
 # ─────────────────────────────────────────────────────────────────────────────
+
 bootstrap_secrets() {
     require_project
-    log "STEP 3: Create Secret Manager secrets"
+    log "STEP 3: Create Secret Manager secrets (empty containers)"
 
-    log "  3a. Creating Secret Manager secrets"
-    for secret in cv-jwt-signing-key cv-refresh-token-pepper; do
+    log "  3a. Creating secrets"
+    for secret in cv-jwt-signing-key cv-refresh-token-pepper cv-first-admin-password; do
         if gcloud secrets describe "$secret" --project "$GCP_PROJECT" >/dev/null 2>&1; then
             echo "    $secret exists, skipping create"
         else
             gcloud secrets create "$secret" --project "$GCP_PROJECT" --replication-policy="automatic"
-            echo "    Created $secret. Add initial version with: gcloud secrets versions add $secret --data-file=-"
+            echo "    Created $secret (no version yet)"
         fi
     done
 
-    log "  3b. IAM: runtime SA gets secret read access (terraform handles this via iam_secrets module)"
-    warn "Secret creation/versions are managed here only. terraform/modules/iam_secrets/ only binds IAM access. For manual updates, use: gcloud secrets versions add <secret-id> --data-file=-"
+    log "  3b. IAM: runtime SA read access is granted by terraform (modules/iam_secrets)"
+    warn "Secret values are NEVER set by this script. Add them yourself below."
+
+    cat <<EOF
+
+  ── Add a version to each secret (paste your own value, then Ctrl-D) ──
+
+    gcloud secrets versions add cv-jwt-signing-key \\
+      --project $GCP_PROJECT --data-file=-
+
+    gcloud secrets versions add cv-refresh-token-pepper \\
+      --project $GCP_PROJECT --data-file=-
+
+    gcloud secrets versions add cv-first-admin-password \\
+      --project $GCP_PROJECT --data-file=-
+
+  Or generate a strong random value without it touching your shell history:
+
+    python3 -c "import secrets;print(secrets.token_urlsafe(32))" \\
+      | tr -d '\\n' \\
+      | gcloud secrets versions add <secret-id> --project $GCP_PROJECT --data-file=-
+
+  Read a value back (e.g. the admin password, to log in the first time):
+
+    gcloud secrets versions access latest --secret=cv-first-admin-password \\
+      --project $GCP_PROJECT
+
+  WARNING: a secret with NO version breaks silently rather than loudly —
+  app/auth/crypto.py HMACs with an empty pepper, and
+  seed_first_admin_from_settings() skips seeding when the password is empty,
+  so login is impossible while everything *looks* configured.
+
+EOF
 
     cat <<EOF
 
