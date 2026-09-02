@@ -59,7 +59,7 @@ services = {
       # (`/api/v1/auth/refresh`) sets `Access-Control-Allow-Credentials: true`;
       # every other CORS response is credential-less. Update when the apex
       # domain changes — keep aligned with app.<apex> from host_routing.
-      CORS_ORIGINS         = "https://app.example.com"
+      CORS_ORIGIN          = "https://app.example.com"
       GAMES_BASE_URL       = "https://games.example.com"
       FIRST_ADMIN_USERNAME       = "CHANGEME-pick-a-non-obvious-name"
       FIRST_ADMIN_EMAIL       = "admin@example.com"
