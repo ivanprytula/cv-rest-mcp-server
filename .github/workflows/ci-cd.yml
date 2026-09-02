@@ -144,7 +144,7 @@ jobs:
         with:
           name: tfplan
           path: terraform/tfplan
-          # Must outlive the approval gate on the dev environment: an apply
+          # Must outlive the approval gate on the production environment: an apply
           # waiting on a reviewer can't download an expired artifact. A plan
           # that goes stale is rejected by Terraform itself (state serial
           # mismatch), so a longer window trades no safety.
@@ -174,7 +174,7 @@ jobs:
           } > /tmp/plan-body.md
 
       # Shows the plan on the run's own page, directly above the approval
-      # button for the dev environment. Works on push, unlike the PR comment.
+      # button for the production environment. Works on push, unlike the PR comment.
       - name: Plan to job summary
         run: cat /tmp/plan-body.md >> "$GITHUB_STEP_SUMMARY"
 
@@ -188,7 +188,7 @@ jobs:
     needs: terraform-plan
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    environment: dev
+    environment: production
     concurrency:
       group: infra-apply
       cancel-in-progress: false

@@ -24,7 +24,7 @@
 set -euo pipefail
 
 GCP_PROJECT="${GCP_PROJECT:-}"   # required; validated per-stage by require_project
-GCP_ENV="${GCP_ENV:-dev}"
+GCP_ENV="${GCP_ENV:-production}"  # default production (e.g. dev, stage, production)
 GCP_REGION="${GCP_REGION:-europe-west1}"
 CV_BUCKET="${GCP_PROJECT}-cv-data"
 # Terraform remote state (Phase 1a). The SAME versioned bucket provides both

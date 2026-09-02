@@ -49,6 +49,11 @@ services = {
     service_account       = "api-core-runtime@cv-rest-mcp-server.iam.gserviceaccount.com"
     allow_unauthenticated = true
     env_vars = {
+      # Gates settings.environment == "production" checks — e.g. the
+      # __Host-refresh_token cookie's Secure flag (auth/routes.py). Missing
+      # this silently defaults to "development" and breaks that cookie in
+      # prod (browser rejects SameSite=None without Secure).
+      ENVIRONMENT          = "production"
       TRUST_PROXY          = "true"
       CLIENT_IP_XFF_ENTRY  = "2"
       BLOCKED_IPS_FILE     = "config/blocked_geo.txt"
