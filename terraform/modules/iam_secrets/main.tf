@@ -38,6 +38,15 @@ resource "google_project_iam_member" "deployer_secret_accessor" {
   member  = "serviceAccount:${google_service_account.deployer.email}"
 }
 
+# terraform apply grants api_core_secret_ids read access to api-core-runtime
+# (google_secret_manager_secret_iam_member below) — that requires setIamPolicy
+# on the secret itself, which secretAccessor above does not include.
+resource "google_project_iam_member" "deployer_secret_admin" {
+  project = var.project
+  role    = "roles/secretmanager.admin"
+  member  = "serviceAccount:${google_service_account.deployer.email}"
+}
+
 # Deployer runs `terraform plan`, which reads existing state for
 # google_project_service (gcp_apis), google_iam_workload_identity_pool
 # (github_wif), and bucket IAM policies (static_bucket, uploads) — each of
