@@ -7,6 +7,18 @@ WORKDIR /app/frontend
 COPY frontend/package*.json ./
 RUN npm ci
 COPY frontend/ ./
+
+# Vite bakes import.meta.env.VITE_* into the JS bundle at build time — there
+# is no runtime injection for a compiled SPA (unlike api-core's env_vars,
+# which the running container reads via os.environ). Build-arg is named for
+# the service it targets (matches api-core's PORTFOLIO_BASE_URL naming, and
+# leaves room for a future GAMES_BASE_URL equivalent if games.* ever gets a
+# UI); Vite itself still requires the VITE_ prefix to expose it at runtime.
+# Default matches frontend/.env.example for a plain `docker build` with no
+# arg supplied.
+ARG PORTFOLIO_BASE_URL=http://localhost:8080
+ENV VITE_API_BASE_URL=$PORTFOLIO_BASE_URL
+
 RUN npm run build && ls -la dist/
 
 # Stage 2: minimal HTTP server
