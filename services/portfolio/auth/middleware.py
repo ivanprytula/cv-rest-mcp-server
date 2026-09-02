@@ -8,9 +8,9 @@ requests, fail-closed. It gates two families of routes:
    credentials, so they are not gated here.
 2. The tailoring surface, migrated from `TailorAuthMiddleware` (ADR-018) to the
    same JWT flow:
-   - `POST /cv/tailor` — requires a JWT for an **admin-role** user (the `role`
-     claim), presented ONLY via the Authorization header (the secret never goes
-     in a URL/log).
+   - `POST /api/v1/cv/tailor` — requires a JWT for an **admin-role** user (the
+     `role` claim), presented ONLY via the Authorization header (the secret
+     never goes in a URL/log).
    - `GET /cv/html|pdf|preview` WITH a `?tailored=` selector — requires a JWT
      with the `cv:read` scope, via Authorization header, or via `?token=` for
      the preview page whose embedded iframe cannot send a header.
@@ -50,9 +50,11 @@ _LOGOUT_PATH = "/api/v1/auth/logout"
 
 # Tailoring surface (migrated from TailorAuthMiddleware). The mutation route is
 # header-only; the revision reads accept `?token=` because the preview page's
-# iframe cannot send an Authorization header.
+# iframe cannot send an Authorization header. The mutation route lives under
+# _API_PREFIX, so _is_protected's `/api/v1/*` branch already covers it — this
+# constant is only needed by _is_tailor_mutation for the admin-role check.
 _TAILOR_MUTATION_METHOD = "POST"
-_TAILOR_MUTATION_PATH = "/cv/tailor"
+_TAILOR_MUTATION_PATH = "/api/v1/cv/tailor"
 _TAILORED_READ_METHOD = "GET"
 _TAILORED_READ_PATHS = {"/cv/html", "/cv/pdf", "/cv/preview"}
 
@@ -102,8 +104,6 @@ def _is_protected(scope: Scope) -> bool:
         return False
     if path.startswith(_API_PREFIX):
         return path not in {_TOKEN_PATH, _REFRESH_PATH, _LOGOUT_PATH}
-    if method == _TAILOR_MUTATION_METHOD and path == _TAILOR_MUTATION_PATH:
-        return True
     return _is_tailored_read(scope)
 
 

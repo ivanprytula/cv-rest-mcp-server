@@ -30,7 +30,7 @@ async def test_favicon_served(client):
 
 
 async def test_openapi_declares_tailor_bearer_auth(client):
-    # Swagger UI's Authorize button is wired to the Bearer scheme on /cv/tailor
+    # Swagger UI's Authorize button is wired to the Bearer scheme on /api/v1/cv/tailor
     # AND the ?tailored= revision reads, so a recruiter-op can try them from
     # /docs without copy-pasting headers.
     resp = await client.get("/openapi.json")
@@ -38,7 +38,7 @@ async def test_openapi_declares_tailor_bearer_auth(client):
     schema = resp.json()
     schemes = schema["components"]["securitySchemes"]
     assert schemes["HTTPBearer"] == {"type": "http", "scheme": "bearer"}
-    operation = schema["paths"]["/cv/tailor"]["post"]
+    operation = schema["paths"]["/api/v1/cv/tailor"]["post"]
     assert operation["security"] == [{"HTTPBearer": []}]
     assert "requestBody" in operation
     # The tailored revision reads carry the same requirement so the Authorize
@@ -265,7 +265,7 @@ async def test_cv_pdf_rate_limit_returns_429_on_sixth_request(
 
 async def test_tailor_cv_endpoint(client, override_pdf_service):
     resp = await client.post(
-        "/cv/tailor",
+        "/api/v1/cv/tailor",
         json={"jd_text": "Required: Python, FastAPI"},
     )
     assert resp.status_code == status.HTTP_200_OK
@@ -280,7 +280,7 @@ async def test_tailor_cv_skills_match_bank_atoms(client, override_pdf_service):
     # The synthetic bank's only vouched atom on SYNTHETIC_CV is pytest, so a
     # JD naming it must produce exactly the bank atom under its category_hint.
     resp = await client.post(
-        "/cv/tailor",
+        "/api/v1/cv/tailor",
         content=b"Required: pytest",
         headers={"content-type": "text/plain"},
     )
@@ -297,7 +297,7 @@ async def test_tailor_cv_skills_match_bank_atoms(client, override_pdf_service):
 
 async def test_tailor_cv_no_match_rebuilds_empty_skills(client, override_pdf_service):
     resp = await client.post(
-        "/cv/tailor",
+        "/api/v1/cv/tailor",
         content=b"Required: Cobol on a Mainframe",
         headers={"content-type": "text/plain"},
     )
@@ -317,7 +317,7 @@ async def test_tailor_cv_writes_revision_file_and_roundtrips(
     from services.portfolio.settings import settings
 
     resp = await client.post(
-        "/cv/tailor",
+        "/api/v1/cv/tailor",
         content=b"Required: pytest",
         headers={"content-type": "text/plain"},
     )
@@ -340,7 +340,7 @@ async def test_tailor_cv_writes_revision_file_and_roundtrips(
 
 async def test_tailor_cv_missing_jd_text(client, override_pdf_service):
     resp = await client.post(
-        "/cv/tailor",
+        "/api/v1/cv/tailor",
         content=b"{}",
         headers={"content-type": "application/json"},
     )
@@ -350,13 +350,13 @@ async def test_tailor_cv_missing_jd_text(client, override_pdf_service):
 
 
 async def test_tailor_cv_empty_body(client, override_pdf_service):
-    resp = await client.post("/cv/tailor", content=b"")
+    resp = await client.post("/api/v1/cv/tailor", content=b"")
     assert resp.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
 
 async def test_tailor_cv_invalid_json(client, override_pdf_service):
     resp = await client.post(
-        "/cv/tailor",
+        "/api/v1/cv/tailor",
         content=b"not json",
         headers={"content-type": "application/json"},
     )
@@ -366,7 +366,7 @@ async def test_tailor_cv_invalid_json(client, override_pdf_service):
 async def test_tailor_cv_raw_text_with_newlines(client, override_pdf_service):
     jd_with_linebreaks = "The Role\n\nYou will take ownership\n- Of the pipeline\n"
     resp = await client.post(
-        "/cv/tailor",
+        "/api/v1/cv/tailor",
         content=jd_with_linebreaks.encode(),
         headers={"content-type": "text/plain"},
     )
@@ -380,7 +380,7 @@ async def test_tailor_cv_raw_text_sends_invalid_json_as_jd(
     client, override_pdf_service
 ):
     resp = await client.post(
-        "/cv/tailor",
+        "/api/v1/cv/tailor",
         content=b"not json",
         headers={"content-type": "text/plain"},
     )
@@ -394,7 +394,7 @@ async def test_tailor_cv_json_with_literal_newlines_is_422_not_500(
     # must reject cleanly (422) instead of crashing (500).
     body = b'{"jd_text": "The Role\n\nYou will take ownership", "title": ""}'
     resp = await client.post(
-        "/cv/tailor",
+        "/api/v1/cv/tailor",
         content=body,
         headers={"content-type": "application/json"},
     )
@@ -408,7 +408,7 @@ async def test_tailor_cv_pdf_upload(client, override_pdf_service):
         string="<html><body><p>Required: Python, FastAPI</p></body></html>"
     ).write_pdf()
     resp = await client.post(
-        "/cv/tailor",
+        "/api/v1/cv/tailor",
         content=pdf_bytes,
         headers={"content-type": "application/pdf"},
     )
@@ -427,7 +427,7 @@ async def test_tailor_cv_docx_upload(client, override_pdf_service):
     buffer = BytesIO()
     document.save(buffer)
     resp = await client.post(
-        "/cv/tailor",
+        "/api/v1/cv/tailor",
         content=buffer.getvalue(),
         headers={
             "content-type": (
@@ -442,7 +442,7 @@ async def test_tailor_cv_docx_upload(client, override_pdf_service):
 
 async def test_tailor_cv_corrupt_pdf_is_422_not_500(client, override_pdf_service):
     resp = await client.post(
-        "/cv/tailor",
+        "/api/v1/cv/tailor",
         content=b"%PDF not a real pdf",
         headers={"content-type": "application/pdf"},
     )
@@ -454,7 +454,7 @@ async def test_tailor_cv_oversize_body_is_413(
 ):
     monkeypatch.setattr("services.portfolio.jd_input.MAX_JD_PAYLOAD_BYTES", 100)
     resp = await client.post(
-        "/cv/tailor",
+        "/api/v1/cv/tailor",
         content=b"x" * 200,
         headers={"content-type": "text/plain"},
     )
@@ -470,7 +470,7 @@ async def test_tailor_cv_internal_error_is_500_sanitized(
 
     monkeypatch.setattr("services.portfolio.routes.tailor_cv", boom)
     resp = await client.post(
-        "/cv/tailor",
+        "/api/v1/cv/tailor",
         content=b"Required: Python",
         headers={"content-type": "text/plain"},
     )

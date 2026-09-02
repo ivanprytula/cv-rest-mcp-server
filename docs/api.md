@@ -10,17 +10,17 @@ from code; this document is the readable form of that contract.
   Hosts: `https://api.<apex>` (api-core), `https://www.<apex>` (Jinja landing,
   same api-core workload), `https://app.<apex>` (private React SPA), and
   `https://games.<apex>` (api-games). Local dev: `http://localhost:8000`.
-- **Versioning**: current REST surface is unversioned (paths under `/cv`,
-  `/api`, `/health`) and — per Phase 1a — **kept on the same paths** regardless
-  of which subdomain front them, so recruiter links and `config/mcp_clients.json`
-  base URLs keep working. New auth/SPA endpoints arrive as `/api/v1/*` (Phase 1c).
+- **Versioning**: recruiter/tool-facing paths (`/`, `/health`, `/cv*`, `/mcp`)
+  stay unversioned so external links keep working. Console-only endpoints
+  (auth, tailoring, SPA data APIs) live under `/api/v1/*`.
 - **Errors**: every non-2xx response is JSON `{"detail": "<message>"}` — a single
   `detail` string. FastAPI's automatic validation errors are the exception and
   also carry `detail`.
-- **Machine API vs. UI pages**: `/cv`, `/cv/html`, `/cv/pdf`, `/cv/tailor`,
-  `/api/games/...` are the machine API. `/`, `/cv/preview`, `/culture-bingo`
-  are HTML pages for humans and outside the contract's code guarantees.
-- **Auth**: `POST /cv/tailor` and the `?tailored=` revision reads (`/cv/html`,
+- **Machine API vs. UI pages**: `/cv`, `/cv/html`, `/cv/pdf`,
+  `/api/v1/cv/tailor`, `/api/v1/culture-bingo/content` are the machine API.
+  `/`, `/cv/preview`, `/culture-bingo` are HTML pages for humans and outside
+  the contract's code guarantees.
+- **Auth**: `POST /api/v1/cv/tailor` and the `?tailored=` revision reads (`/cv/html`,
   `/cv/preview`, `/cv/pdf`) require `Authorization: Bearer <token>`. The three
   revision reads additionally accept the token as a `?token=` query parameter
   (a browser iframe cannot send an Authorization header); the mutation route is
@@ -36,29 +36,31 @@ from code; this document is the readable form of that contract.
 | Code | Meaning                                                                                          | Typical source                                                   |
 | ---- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------- |
 | 200  | Success (JSON document or rendered representation)                                               | all endpoints                                                    |
-| 401  | Missing/malformed `Authorization` header, or invalid token                                       | `POST /cv/tailor`; `?tailored=` reads                            |
+| 401  | Missing/malformed `Authorization` header, or invalid token                                       | `POST /api/v1/cv/tailor`; `?tailored=` reads                     |
 | 404  | Unknown theme, or tailored revision not found                                                    | `/cv/html`, `/cv/pdf`, `/cv/preview`                             |
-| 413  | JD body exceeds the 10 MB payload cap                                                            | `POST /cv/tailor`                                                |
-| 422  | Malformed/empty JD body, or FastAPI query-param validation                                       | `/cv/*`, `/cv/tailor`                                            |
+| 413  | JD body exceeds the 10 MB payload cap                                                            | `POST /api/v1/cv/tailor`                                         |
+| 422  | Malformed/empty JD body, or FastAPI query-param validation                                       | `/cv/*`, `/api/v1/cv/tailor`                                     |
 | 429  | Rate limit exceeded (see table below)                                                            | all endpoints                                                    |
-| 500  | Unexpected internal error (sanitized; no internals leaked)                                       | `POST /cv/tailor`                                                |
-| 503  | CV source / PDF service not initialized; **or** tailor endpoint requested without a bearer token | `/cv*` (via `Depends`); `/cv/tailor` + `?tailored=` reads (auth) |
+| 500  | Unexpected internal error (sanitized; no internals leaked)                                       | `POST /api/v1/cv/tailor`                                         |
+| 503  | CV source / PDF service not initialized; **or** tailor endpoint requested without a bearer token | `/cv*` (via `Depends`); `/api/v1/cv/tailor` + `?tailored=` reads (auth) |
 <!-- markdownlint-enable MD060 -->
 
 ## Rate limits
 
 Limits are stacked (burst + sustained); breaches return `429`.
 
-| Endpoint                           | Burst    | Sustained |
-| ---------------------------------- | -------- | --------- |
-| `/`                                | 30/min   | 120/hour  |
-| `/health`                          | 60/min   | —         |
-| `/cv`, `/cv/html`, `/cv/preview`   | 30/min   | 300/hour  |
-| `/cv/pdf`                          | 5/15 min | 15/hour   |
-| `/cv/tailor`                       | 10/min   | 60/hour   |
-| `/culture-bingo`, `/api/games/...` | 30/min   | 120/hour  |
-| MCP read tools                     | 30/min   | 240/hour  |
-| MCP `generate_cv_pdf_tool`         | 5/15 min | 15/hour   |
+<!-- markdownlint-disable MD060 -->
+| Endpoint                            | Burst    | Sustained |
+| ------------------------------------ | -------- | --------- |
+| `/`                                  | 30/min   | 120/hour  |
+| `/health`                            | 60/min   | —         |
+| `/cv`, `/cv/html`, `/cv/preview`     | 30/min   | 300/hour  |
+| `/cv/pdf`                            | 5/15 min | 15/hour   |
+| `/api/v1/cv/tailor`                  | 10/min   | 60/hour   |
+| `/culture-bingo`, `/api/v1/culture-bingo/content` | 30/min | 120/hour |
+| MCP read tools                      | 30/min   | 240/hour  |
+| MCP `generate_cv_pdf_tool`          | 5/15 min | 15/hour   |
+<!-- markdownlint-enable MD060 -->
 
 ## Endpoints
 
@@ -123,7 +125,7 @@ Downloadable PDF, attachment via `Content-Disposition`.
 
 ---
 
-### `POST /cv/tailor`
+### `POST /api/v1/cv/tailor`
 
 Match a job description against the **skill bank** (`data/cv_baseline.json`) and
 return a tailored CV. Skills are **rebuilt** from bank atoms, not reordered from
@@ -165,7 +167,7 @@ payload wins for the JSON format).
 | Errors  | `401`, `413`, `422`, `429`, `500`, `503` (see below)                                                                                                                  |
 <!-- markdownlint-enable MD060 -->
 
-**Error details for `POST /cv/tailor`:**
+**Error details for `POST /api/v1/cv/tailor`:**
 
 - `401 Unauthorized` — missing `Authorization` header, malformed header (anything
   other than `Bearer <token>`), or invalid token. Every 401 response carries
@@ -190,25 +192,25 @@ payload wins for the JSON format).
 TOKEN="$(curl -s -X POST https://<origin>/api/v1/auth/token \
   -H 'content-type: application/json' \
   -d '{"username":"operator","password":"..."}' | jq -r .access_token)"
-curl -s -X POST "https://<origin>/cv/tailor" \
+curl -s -X POST "https://<origin>/api/v1/cv/tailor" \
   -H "authorization: Bearer $TOKEN" \
   -H "content-type: text/plain" --data-binary @jd.txt
 
 # JSON
-curl -s -X POST "https://<origin>/cv/tailor" \
+curl -s -X POST "https://<origin>/api/v1/cv/tailor" \
   -H "authorization: Bearer $TOKEN" \
   -H "content-type: application/json" \
   -d '{"jd_text": "Required: Python, FastAPI", "title": ""}'
 
 # PDF / DOCX
-curl -s -X POST "https://<origin>/cv/tailor" \
+curl -s -X POST "https://<origin>/api/v1/cv/tailor" \
   -H "authorization: Bearer $TOKEN" \
   -H "content-type: application/pdf" --data-binary @jd.pdf
 ```
 
 ### Reading a tailored revision
 
-Tailored revisions written by `POST /cv/tailor` can be rendered with the same
+Tailored revisions written by `POST /api/v1/cv/tailor` can be rendered with the same
 three read endpoints by passing `tailored`:
 
 - `tailored=<name>` — the bare `cv_tailored-<UTC-ts>.json` filename returned in
@@ -234,7 +236,7 @@ open "https://<origin>/cv/preview?theme=classic&tailored=cv_tailored-2026-08-29_
 
 ---
 
-### `GET /api/games/culture-bingo/content`
+### `GET /api/v1/culture-bingo/content`
 
 Company Culture Bingo tile content (machine-readable game data).
 
@@ -335,7 +337,7 @@ Return the operator identity + scopes from a valid access token.
 
 ### `GET /api/v1/revisions`
 
-List tailored CV revisions written by `POST /cv/tailor`, newest first. Backs
+List tailored CV revisions written by `POST /api/v1/cv/tailor`, newest first. Backs
 the SPA's revisions screen.
 
 | Item        | Value                                                                      |

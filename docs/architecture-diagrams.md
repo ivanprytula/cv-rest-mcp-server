@@ -131,7 +131,7 @@ flowchart TB
     end
 
     subgraph routing["Routing"]
-        routes["<b>routes.py</b><br/>/ /health /cv /cv/html<br/>/cv/pdf /cv/tailor"]:::comp
+        routes["<b>routes.py</b><br/>/ /health /cv /cv/html<br/>/cv/pdf /api/v1/cv/tailor"]:::comp
         mcp["<b>FastMCP</b><br/>/mcp — tool surface"]:::comp
         authr["<b>auth routes</b><br/>login, refresh, logout"]:::comp
     end

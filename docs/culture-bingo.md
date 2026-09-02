@@ -20,7 +20,7 @@ the same twice.
 | Route | Method | Description |
 | --- | --- | --- |
 | `/culture-bingo` | GET | Renders the game page (HTML) |
-| `/api/games/culture-bingo/content` | GET | Returns the raw content JSON |
+| `/api/v1/culture-bingo/content` | GET | Returns the raw content JSON |
 
 Both endpoints are rate-limited (`30/min`, `120/hour`).
 

@@ -73,7 +73,7 @@ def load_baseline(path: Path) -> list[dict[str, Any]]:
     """Parse and validate the bank, returning the active atoms (top-level ``skills``).
 
     Raises :class:`BaselineError` on any schema violation — a broken bank
-    aborts a /cv/tailor call loudly rather than silently emitting an empty
+    aborts a /api/v1/cv/tailor call loudly rather than silently emitting an empty
     or partial skills section.
     """
     try:

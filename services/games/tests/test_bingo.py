@@ -13,7 +13,7 @@ async def test_culture_bingo_page(client):
 
 
 async def test_culture_bingo_content_endpoint(client):
-    resp = await client.get("/api/games/culture-bingo/content")
+    resp = await client.get("/api/v1/culture-bingo/content")
     assert resp.status_code == status.HTTP_200_OK
     data = resp.json()
     assert "title" in data
@@ -26,7 +26,7 @@ async def test_culture_bingo_content_endpoint(client):
 
 
 async def test_culture_bingo_content_cell_count_matches_grid(client):
-    resp = await client.get("/api/games/culture-bingo/content")
+    resp = await client.get("/api/v1/culture-bingo/content")
     data = resp.json()
     assert isinstance(data["cells"], list)
     assert len(data["cells"]) == data["settings"]["gridSize"] ** 2
