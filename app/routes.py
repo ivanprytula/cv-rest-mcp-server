@@ -186,6 +186,7 @@ async def root(request: Request, pdf_service=get_pdf_service_dep):
         python_version=f"{sys.version_info.major}.{sys.version_info.minor}",
         mcp_clients=_client_mcp_configs(mcp_url),
         themes=pdf_service.list_themes(),
+        games_base_url=settings.games_base_url.rstrip("/"),
     )
     return HTMLResponse(content=html)
 
