@@ -73,8 +73,15 @@ resource "google_cloud_run_v2_service" "service" {
   # Terraform owns the service's shape (scaling, secrets, env vars); the
   # deploy-app.yml pipeline owns which image tag is live via `gcloud run
   # deploy`. Without this, each tool reverts the other's most recent change.
+  #
+  # Autoscaling is configured in template.scaling above. The SERVICE-level
+  # `scaling` block is a separate Cloud Run v2 field (manual instance pinning)
+  # that this module never sets; the API still returns zeros for it, which
+  # Terraform reads as a removable block and re-plans on every run. Ignoring it
+  # keeps `terraform plan` clean in CI instead of showing a diff that never
+  # converges.
   lifecycle {
-    ignore_changes = [template[0].containers[0].image]
+    ignore_changes = [template[0].containers[0].image, scaling]
   }
 }
 
