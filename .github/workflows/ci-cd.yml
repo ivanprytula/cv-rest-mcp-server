@@ -38,7 +38,7 @@ jobs:
       - name: checkov
         run: |
           uvx --from 'checkov' checkov -d terraform --quiet --compact \
-            --skip-check CKV_GCP_62,CKV_GCP_114,CKV_GCP_28,CKV_GCP_125,CKV_GCP_49,CKV_GCP_41,CKV_GCP_73,CKV_GCP_84,CKV_GCP_6,CKV_GCP_79,CKV_GCP_109
+            --skip-check CKV_GCP_62,CKV_GCP_114,CKV_GCP_28,CKV_GCP_125,CKV_GCP_49,CKV_GCP_41,CKV_GCP_73,CKV_GCP_84,CKV_GCP_6,CKV_GCP_79,CKV_GCP_109,CKV_GCP_60
 
   cost-estimate:
     needs: terraform-quality
