@@ -16,7 +16,7 @@ terraform {
   # bucket exists you may also pin it here directly, then `terraform init`:
   #
   backend "gcs" {
-    bucket = "cv-rest-mcp-server-dev-tfstate"
+    bucket = "cv-rest-mcp-server-production-tfstate"
     prefix = "terraform/state"
   }
 }
