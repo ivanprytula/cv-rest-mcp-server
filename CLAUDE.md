@@ -73,10 +73,16 @@ just deploy bootstrap-secrets
 cd terraform && terraform plan
 terraform apply
 
-# STEP 5: Upload CV data to GCS
+# STEP 5: Cloud SQL only (Phase 2, enable_cloud_sql=true) — compose
+# cv-database-url from the instance's connection name + cv-db-password,
+# then terraform apply again to wire DATABASE_URL into api-core.
+just deploy bootstrap-database-url
+terraform apply
+
+# STEP 6: Upload CV data to GCS
 just deploy upload-cv
 
-# STEP 6: Verify deployment (optional, manual health check)
+# STEP 7: Verify deployment (optional, manual health check)
 just deploy verify
 ```
 

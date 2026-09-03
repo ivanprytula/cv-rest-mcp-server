@@ -5,9 +5,13 @@
 #   1. bootstrap          Enable cloudresourcemanager API, create CV bucket, grant Cloud Build permissions
 #   2. bootstrap-state    Create versioned TF remote-state bucket + init
 #   3. bootstrap-secrets  Create empty Secret Manager secrets (you add the values)
-#   4. (Run: terraform apply)  Terraform deploys IAM, Org Policies, Cloud Run services
-#   5. upload-cv          Publish data/cv.json to GCS (application data)
-#   6. verify             Health check + smoke test URLs (optional, manual verification)
+#   4. (Run: terraform apply)  Terraform deploys IAM, Org Policies, Cloud Run services,
+#                          Cloud SQL (Phase 2, enable_cloud_sql=true)
+#   5. bootstrap-database-url  Compose+store cv-database-url from the Cloud SQL
+#                          connection name + cv-db-password (needs step 4's instance
+#                          to exist; re-run terraform apply once to pick up the secret)
+#   6. upload-cv           Publish data/cv.json to GCS (application data)
+#   7. verify              Health check + smoke test URLs (optional, manual verification)
 #
 # Usage:
 #   scripts/deploy-cloud-run.sh <stage>
@@ -155,7 +159,7 @@ bootstrap_secrets() {
     log "STEP 3: Create Secret Manager secrets (empty containers)"
 
     log "  3a. Creating secrets"
-    for secret in cv-jwt-signing-key cv-refresh-token-pepper cv-first-admin-password cv-db-password; do
+    for secret in cv-jwt-signing-key cv-refresh-token-pepper cv-first-admin-password cv-db-password cv-database-url; do
         if gcloud secrets describe "$secret" --project "$GCP_PROJECT" >/dev/null 2>&1; then
             echo "    $secret exists, skipping create"
         else
@@ -183,6 +187,11 @@ bootstrap_secrets() {
     gcloud secrets versions add cv-db-password \\
       --project $GCP_PROJECT --data-file=-
 
+  cv-database-url is NOT filled in here — it's composed from cv-db-password
+  + the Cloud SQL connection name (only known after terraform apply creates
+  the instance). Run scripts/deploy-cloud-run.sh bootstrap-database-url
+  once step 4 (terraform apply) has created the instance.
+
   Or generate a strong random value without it touching your shell history:
 
     python3 -c "import secrets;print(secrets.token_urlsafe(32))" \\
@@ -204,6 +213,55 @@ EOF
     cat <<EOF
 
 ✓ STEP 3 complete. Next: STEP 4 (manual, not in this script)
+
+EOF
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 5: Compose + store cv-database-url (Phase 2 Cloud SQL, after terraform
+# apply has created the instance)
+# ─────────────────────────────────────────────────────────────────────────────
+bootstrap_database_url() {
+    require_project
+    log "STEP 5: Compose cv-database-url from Cloud SQL connection name + cv-db-password"
+
+    # database_name/database_user match modules/cloud_sql/variables.tf defaults
+    # (cv_portfolio/cv_app) — update both places together if either changes.
+    local instance_name="cv-postgres"
+    local database_name="cv_portfolio"
+    local database_user="cv_app"
+
+    local connection_name
+    connection_name="$(gcloud sql instances describe "$instance_name" \
+        --project "$GCP_PROJECT" --format 'value(connectionName)')" \
+        || die "Cloud SQL instance '$instance_name' not found — run terraform apply first (STEP 4)."
+
+    local password
+    password="$(gcloud secrets versions access latest --secret=cv-db-password --project "$GCP_PROJECT")" \
+        || die "cv-db-password has no version yet — run: gcloud secrets versions add cv-db-password --project $GCP_PROJECT --data-file=-"
+
+    log "  Composing DATABASE_URL (asyncpg, Auth Proxy Unix-socket path)"
+    printf 'postgresql+asyncpg://%s:%s@/%s?host=/cloudsql/%s' \
+        "$database_user" "$password" "$database_name" "$connection_name" \
+        | gcloud secrets versions add cv-database-url --project "$GCP_PROJECT" --data-file=-
+
+    cat <<EOF
+
+✓ STEP 5 complete. cv-database-url now points at $instance_name.
+
+  api-core reads it via the DATABASE_URL secret binding (terraform.tfvars
+  services.api-core.secrets — needs api_core_secret_ids to include
+  "cv-database-url" too, or the runtime SA can't read it). The next
+  api-core revision (terraform apply, or the next deploy-app.yml release)
+  runs \`alembic upgrade head\` automatically at startup (main.py lifespan,
+  ADR-023) — no separate manual migration step.
+
+  Force a restart now instead of waiting for the next release:
+
+    gcloud run services update api-core --project $GCP_PROJECT --region $GCP_REGION \\
+      --update-secrets DATABASE_URL=cv-database-url:latest
+
+Next: STEP 6 (upload-cv)
 
 EOF
 }
@@ -280,6 +338,7 @@ case "$1" in
     bootstrap)        bootstrap ;;
     bootstrap-state)  bootstrap_state ;;
     bootstrap-secrets) bootstrap_secrets ;;
+    bootstrap-database-url) bootstrap_database_url ;;
     upload-cv)        upload_cv ;;
     verify)           verify ;;
     *)                sed -n '2,30p' "$0"; exit 1 ;;
