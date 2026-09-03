@@ -8,14 +8,6 @@ COPY frontend/package*.json ./
 RUN npm ci
 COPY frontend/ ./
 
-# Dev stage: local docker-compose-watch stack ONLY (compose.yml's `spa`
-# service builds `target: dev`) — never used for the deployed image. Runs
-# Vite's own dev server so `develop.watch`'s `action: sync` (compose.yml)
-# gives real HMR on save, same as running `npm run dev` natively.
-FROM builder AS dev
-EXPOSE 5173
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173"]
-
 # Vite bakes import.meta.env.VITE_* into the JS bundle at build time — there
 # is no runtime injection for a compiled SPA (unlike api-core's env_vars,
 # which the running container reads via os.environ). Build-arg is named for
@@ -28,6 +20,19 @@ ARG PORTFOLIO_BASE_URL=http://localhost:8080
 ENV VITE_API_BASE_URL=$PORTFOLIO_BASE_URL
 
 RUN npm run build && ls -la dist/
+
+# Dev stage: local docker-compose-watch stack ONLY (compose.yml's `spa`
+# service builds `target: dev`) — never used for the deployed image. Runs
+# Vite's own dev server so `develop.watch`'s `action: sync` (compose.yml)
+# gives real HMR on save, same as running `npm run dev` natively. Branches
+# off `builder` BEFORE its production `npm run build` above would matter
+# for this stage — it never needs the built dist/, only node_modules — but
+# must stay declared after that RUN in this file so builder's own build
+# step isn't accidentally reassigned to this stage (Dockerfile instructions
+# after `FROM x AS y` belong to y until the next FROM).
+FROM builder AS dev
+EXPOSE 5173
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173"]
 
 # Stage 2: minimal HTTP server
 FROM node:24-alpine
