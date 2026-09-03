@@ -131,6 +131,17 @@ resource "google_project_iam_member" "deployer_compute_viewer" {
   member  = "serviceAccount:${google_service_account.deployer.email}"
 }
 
+# Deployer runs `terraform plan`/`apply` in CI, which refreshes the Cloud SQL
+# instance's state on every run (Phase 2, modules/cloud_sql) — cloudsql.viewer
+# covers the read; instance create/edit stays Terraform-state-owned via a
+# one-time local apply (Owner), same as every other first-created resource.
+resource "google_project_iam_member" "deployer_cloudsql_viewer" {
+  count   = var.enable_cloud_sql ? 1 : 0
+  project = var.project
+  role    = "roles/cloudsql.viewer"
+  member  = "serviceAccount:${google_service_account.deployer.email}"
+}
+
 # CI/CD deployer needs to assign runtime SAs to Cloud Run services.
 # Scoped to deployer SA only; acceptable trade-off for CI/CD automation.
 resource "google_project_iam_member" "deployer_actAs" {
