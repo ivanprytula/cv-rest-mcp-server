@@ -9,14 +9,13 @@ need to bring a fresh or existing database up to `head` before use.
 from __future__ import annotations
 
 import asyncio
-
-from alembic.config import Config
+from pathlib import Path
 
 from alembic import command
-from services.portfolio.constants import PROJECT_ROOT
+from alembic.config import Config
 
 
-_ALEMBIC_INI = PROJECT_ROOT / "alembic.ini"
+_ALEMBIC_INI = Path(__file__).resolve().parent / "alembic.ini"
 
 
 async def upgrade_head(sync_db_url: str) -> None:

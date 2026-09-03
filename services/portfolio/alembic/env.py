@@ -1,9 +1,13 @@
 from logging.config import fileConfig
 
+from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from alembic import context
-from services.portfolio.auth.user_store import Base
+# Import every ORM model module for its side effect of registering the table
+# on Base.metadata -- autogenerate only sees tables whose module has actually
+# been imported somewhere. Add future models (e.g. a Revision row) here too.
+import services.portfolio.auth.user_row  # noqa: F401,E402
+from services.portfolio.db import Base
 from services.portfolio.settings import settings
 
 

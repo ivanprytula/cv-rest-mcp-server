@@ -145,7 +145,7 @@ flowchart TB
 
     subgraph data["Data access"]
         cvsrc["<b>CvSource</b><br/>GCS or file,<br/>generation-checked reload"]:::comp
-        store["<b>user_store</b><br/>async SQLAlchemy"]:::comp
+        store["<b>user_service</b><br/>async SQLAlchemy"]:::comp
     end
 
     gcs[("GCS cv.json")]:::extstore

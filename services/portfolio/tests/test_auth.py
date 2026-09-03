@@ -200,12 +200,14 @@ async def test_authenticate_unknown_username(user_service):
 
 
 async def test_authenticate_unconfigured_returns_none(_fresh_postgres_url):
-    from services.portfolio.auth.user_store import Base, UserRepository, UserService
+    from services.portfolio.auth.user_repository import SqlAlchemyUserRepository
+    from services.portfolio.auth.user_service import UserService
+    from services.portfolio.db import Base
 
     # No users seeded -> authenticate returns None (fail-closed on login).
     # A narrow logic test, not a migration test, so plain create_all is fine
     # here (not everything needs to route through Alembic).
-    repo = UserRepository(_fresh_postgres_url)
+    repo = SqlAlchemyUserRepository(_fresh_postgres_url)
     svc = UserService(repo)
     async with repo.engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -359,7 +361,7 @@ async def test_login_wrong_username(auth_client):
 
 
 async def test_login_fail_closed_when_unconfigured(
-    auth_client, _make_fresh_postgres_url, monkeypatch
+    auth_client, _make_fresh_postgres_url
 ):
     # With an empty user store (no seeded admin), login must fail closed with a
     # generic 401 — never a 200, and no hint about the store's state.
@@ -367,15 +369,21 @@ async def test_login_fail_closed_when_unconfigured(
     # (already-seeded) one — the factory fixture guarantees a genuinely new
     # database rather than the same one `auth_client`'s `user_service` used.
     # Plain create_all is fine, this is a narrow logic test, not a migration test.
-    import services.portfolio.auth.user_store as user_store_module
-    from services.portfolio.auth.user_store import Base, UserRepository, UserService
+    from services.portfolio.auth.user_repository import SqlAlchemyUserRepository
+    from services.portfolio.auth.user_service import UserService
+    from services.portfolio.db import Base
+    from services.portfolio.dependencies import get_user_service
+    from services.portfolio.main import app
 
-    repo = UserRepository(_make_fresh_postgres_url())
+    repo = SqlAlchemyUserRepository(_make_fresh_postgres_url())
     empty = UserService(repo)
     async with repo.engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    monkeypatch.setattr(user_store_module, "user_service", empty)
-    resp = await login(auth_client)
+    app.dependency_overrides[get_user_service] = lambda: empty
+    try:
+        resp = await login(auth_client)
+    finally:
+        app.dependency_overrides.pop(get_user_service, None)
     assert resp.status_code == 401  # generic message, no reveal
     await repo.engine.dispose()
 

@@ -33,7 +33,7 @@ os.environ.pop("BLOCKED_IPS_FILE", None)
 
 from services.portfolio.constants import PDF_CACHE_MAX_ENTRIES, PDF_EXECUTOR_MAX_WORKERS
 from services.portfolio.cv_source import CvSource
-from services.portfolio.dependencies import get_pdf_service
+from services.portfolio.dependencies import get_pdf_service, get_user_service
 from services.portfolio.main import app
 from services.portfolio.pdf_generator import PdfService
 
@@ -315,16 +315,16 @@ async def user_service(auth_settings, _fresh_postgres_url, monkeypatch):
     testcontainers Postgres instance, migrates it to head via the same
     Alembic path the app lifespan uses, seeds the first admin
     (username=`operator`, password=`correct-password`, role=`admin`), and
-    swaps it into `app.auth.user_store.user_service` so the auth routes
-    (which look it up dynamically) hit this isolated store. Matches the
-    `login()` helper's defaults used across the auth tests.
+    overrides `dependencies.get_user_service` so the auth routes (which take
+    it via `Depends`) hit this isolated store. Matches the `login()` helper's
+    defaults used across the auth tests.
     """
-    from services.portfolio.auth import user_store as user_store_module
-    from services.portfolio.auth.user_store import UserRepository, UserService
+    from services.portfolio.auth.user_repository import SqlAlchemyUserRepository
+    from services.portfolio.auth.user_service import UserService
     from services.portfolio.db_migrations import upgrade_head
     from services.portfolio.settings import settings
 
-    repo = UserRepository(_fresh_postgres_url)
+    repo = SqlAlchemyUserRepository(_fresh_postgres_url)
     service = UserService(repo)
 
     await upgrade_head(_fresh_postgres_url.replace("+asyncpg", "+psycopg"))
@@ -337,8 +337,11 @@ async def user_service(auth_settings, _fresh_postgres_url, monkeypatch):
     )
 
     monkeypatch.setattr(settings, "database_url", _fresh_postgres_url)
-    monkeypatch.setattr(user_store_module, "user_service", service)
+    app.dependency_overrides[get_user_service] = lambda: service
+    app.state.user_service = service
     yield service
+    app.dependency_overrides.pop(get_user_service, None)
+    app.state.user_service = None
     await repo.engine.dispose()
 
 

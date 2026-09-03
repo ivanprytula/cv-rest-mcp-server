@@ -22,8 +22,8 @@ npm run css             # Rebuild Tailwind CSS (required after template changes)
 
 **Key files**:
 - `services/portfolio/main.py` — FastAPI app setup, middleware, lifespan
-- `services/portfolio/auth/user_store.py` — Async SQLAlchemy user repo (asyncpg, Alembic-migrated schema)
-- `alembic/` — migration scripts; `services/portfolio/db_migrations.py` runs them programmatically
+- `services/portfolio/auth/user_repository.py` — Async SQLAlchemy user repo (asyncpg, Alembic-migrated schema)
+- `services/portfolio/alembic/` — migration scripts; `services/portfolio/db_migrations.py` runs them programmatically
 - `services/portfolio/routes.py` — REST API endpoints (`/cv`, `/cv/html`, `/cv/pdf`)
 - `frontend/` — React operator SPA + TanStack Query
 - `services/portfolio/tests/conftest.py` — Shared fixtures (see `auth_settings`/`user_service`/`auth_client` for auth)
@@ -206,6 +206,8 @@ Local `.claude/settings.local.json` allows:
   `services/portfolio/db_migrations.py`); tests use a real, ephemeral
   Postgres via `testcontainers` (Docker required to run `just test`).
   `DATABASE_URL` has no default — required in `.env` and CI.
+  `alembic/`/`alembic.ini` live under `services/portfolio/` (not repo root)
+  so the Dockerfile's existing `COPY services/portfolio/` picks them up.
 - No external LLM calls in codebase (pure FastAPI + FastMCP)
 - All config via env/settings.py (12-factor)
 - PDF rendering uses WeasyPrint (CPU-bound, rate-limited)

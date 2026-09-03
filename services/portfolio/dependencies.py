@@ -1,6 +1,18 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from fastapi import HTTPException, Request, status
 
 from services.portfolio.pdf_generator import PdfService
+
+
+if TYPE_CHECKING:
+    # Import-time only: services.portfolio.auth eagerly imports auth.routes,
+    # which imports this module for get_user_service -- a real module-level
+    # import here would be circular. The type hint doesn't need the runtime
+    # class, only static analysis does.
+    from services.portfolio.auth.user_service import UserService
 
 
 async def get_pdf_service(request: Request) -> PdfService:
@@ -9,5 +21,15 @@ async def get_pdf_service(request: Request) -> PdfService:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="PDF service not initialized",
+        )
+    return service
+
+
+async def get_user_service(request: Request) -> UserService:
+    service = request.app.state.user_service
+    if service is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="User service not initialized",
         )
     return service

@@ -13,29 +13,27 @@ via `CredentialedCORSMiddleware`.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from fastapi.responses import JSONResponse
 
-from services.portfolio.auth import user_store as user_store_module
 from services.portfolio.auth.crypto import (
     AuthUnconfiguredError,
     generate_refresh_token,
     hash_refresh_token,
     sign_access_token,
 )
-from services.portfolio.auth.models import LoginRequest, MeResponse, TokenPair
 from services.portfolio.auth.token_store import token_store
+from services.portfolio.auth.user import ROLE_USER
+from services.portfolio.auth.user_service import UserService
 from services.portfolio.constants import API_V1_PREFIX
+from services.portfolio.dependencies import get_user_service
+from services.portfolio.schemas.auth import LoginRequest, MeResponse, TokenPair
 from services.portfolio.settings import settings
 
 
-# The user service is a module-level singleton; reference it through the module
-# (not a bound name) so the test fixture can swap in a per-test repo/service.
-def _user_service():
-    return user_store_module.user_service
-
-
 auth_router = APIRouter(prefix=f"{API_V1_PREFIX}/auth", tags=["auth"])
+
+get_user_service_dep = Depends(get_user_service)
 
 _REFRESH_COOKIE = "__Host-refresh_token"
 # The __Host- prefix REQUIRES Path=/ (plus Secure and no Domain); a narrower
@@ -89,7 +87,11 @@ def _get_auth_claims(request: Request) -> dict:
         503: {"description": "Signing key not configured (fail-closed)"},
     },
 )
-async def token(request: Request, body: LoginRequest) -> Response:
+async def token(
+    request: Request,
+    body: LoginRequest,
+    user_service: UserService = get_user_service_dep,
+) -> Response:
     """Classic login: resolve the user, verify bcrypt password, issue a token pair.
 
     On success sets the `__Host-refresh_token` httpOnly cookie and returns the
@@ -97,7 +99,7 @@ async def token(request: Request, body: LoginRequest) -> Response:
     return the same generic 401 (flat timing via the store's dummy-compare), so
     neither the username's existence nor a wrong password can be probed.
     """
-    user = await _user_service().authenticate(body.username, body.password)
+    user = await user_service.authenticate(body.username, body.password)
     if user is None:
         # Generic message; never reveal whether credentials or auth are valid.
         return JSONResponse({"detail": "Invalid credentials"}, status_code=401)
@@ -126,7 +128,9 @@ async def token(request: Request, body: LoginRequest) -> Response:
         401: {"description": "Missing, revoked, or replayed refresh token"},
     },
 )
-async def refresh(request: Request) -> Response:
+async def refresh(
+    request: Request, user_service: UserService = get_user_service_dep
+) -> Response:
     """Rotate the refresh token and issue a new access token.
 
     Reads the httpOnly cookie, rotates the family (replay detection revokes the
@@ -148,7 +152,7 @@ async def refresh(request: Request) -> Response:
             status_code=401,
         )
 
-    user = await _user_service().get_by_username(subject)
+    user = await user_service.get_by_username(subject)
     if user is None or not user.is_active:
         # Family owner no longer exists/active; refuse to keep it alive.
         return JSONResponse(
@@ -192,6 +196,6 @@ async def me(request: Request) -> MeResponse:
     scopes = claims.get("scope", "").split()
     return MeResponse(
         subject=claims.get("sub", ""),
-        role=claims.get("role", user_store_module.ROLE_USER),
+        role=claims.get("role", ROLE_USER),
         scopes=scopes,
     )

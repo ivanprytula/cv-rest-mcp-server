@@ -13,12 +13,12 @@ dev-spa:
 
 # Apply all pending Alembic migrations to DATABASE_URL (needs a running Postgres).
 db-migrate:
-    uv run alembic upgrade head
+    uv run alembic -c services/portfolio/alembic.ini upgrade head
 
 # Autogenerate a new migration from model changes in services/portfolio/*/store.py.
 # Usage: just db-revision "add revisions table"
 db-revision MESSAGE:
-    uv run alembic revision --autogenerate -m "{{MESSAGE}}"
+    uv run alembic -c services/portfolio/alembic.ini revision --autogenerate -m "{{MESSAGE}}"
 
 code-quality:
     uv run ruff check .

@@ -57,10 +57,10 @@ class Settings(BaseSettings):
     jwt_signing_key: str = ""
     refresh_token_pepper: str = ""
     # Postgres connection string, asyncpg driver (e.g.
-    # "postgresql+asyncpg://user:pass@host:5432/dbname"). No default: this
-    # must be set in every context that imports user_store.py (app, Alembic,
-    # tests, scripts) — an empty/unparseable value fails immediately (at
-    # import time, building the module-level engine), not silently.
+    # "postgresql+asyncpg://user:pass@host:5432/dbname"). No default: the
+    # app lifespan (main.py) and Alembic (db_migrations.py, alembic/env.py)
+    # both fail fast if this is unset rather than silently running against
+    # nothing.
     database_url: str = ""
     first_admin_username: str = "operator"
     first_admin_email: str = "operator@example.com"
