@@ -1,6 +1,10 @@
 name: App Deploy
 
 on:
+  # Manual: `gh workflow run deploy-app.yml` — force a rebuild+redeploy of
+  # current main with no code change needed (e.g. an infra-only PR, like a
+  # new secret, that current main's image predates).
+  workflow_dispatch: {}
   pull_request:
     branches: [main]
     paths:
@@ -89,7 +93,7 @@ jobs:
   build:
     needs: tests
     if: >-
-      github.event_name == 'push' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
       github.ref == 'refs/heads/main' &&
       !contains(github.event.head_commit.message, '[skip deploy]')
     runs-on: ubuntu-latest
@@ -166,7 +170,7 @@ jobs:
   deploy:
     needs: build
     if: >-
-      github.event_name == 'push' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
       github.ref == 'refs/heads/main' &&
       !contains(github.event.head_commit.message, '[skip deploy]')
     runs-on: ubuntu-latest
@@ -204,7 +208,7 @@ jobs:
   verify:
     needs: deploy
     if: >-
-      github.event_name == 'push' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
       github.ref == 'refs/heads/main' &&
       !contains(github.event.head_commit.message, '[skip deploy]')
     runs-on: ubuntu-latest
