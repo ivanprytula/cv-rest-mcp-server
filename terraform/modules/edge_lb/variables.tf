@@ -9,11 +9,6 @@ variable "name_prefix" {
   default     = "cv-edge"
 }
 
-variable "region" {
-  description = "Region for regional NEG/backend resources (serverless NEGs are regional)."
-  type        = string
-}
-
 variable "domains" {
   description = "Map of host label -> fully-qualified domain for Google-managed SSL certs, e.g. { api = \"api.example.com\" }."
   type        = map(string)

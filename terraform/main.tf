@@ -109,7 +109,6 @@ module "edge_lb" {
 
   project     = var.project_id
   name_prefix = "cv-edge"
-  region      = var.region
 
   # One managed cert per routed host (hostname is both label and FQDN).
   domains = {

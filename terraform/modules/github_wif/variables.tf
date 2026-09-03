@@ -8,12 +8,6 @@ variable "github_repo" {
   type        = string
 }
 
-variable "github_aud" {
-  description = "GitHub token audience (typically matches repository URL)"
-  type        = string
-  default     = "https://github.com"
-}
-
 variable "deployer_sa_email" {
   description = "Email of the GCP service account that GitHub will impersonate"
   type        = string
