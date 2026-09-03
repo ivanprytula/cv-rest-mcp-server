@@ -1,13 +1,15 @@
 # syntax=docker/dockerfile:1.4
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:17-alpine  # match Cloud SQL (terraform/modules/cloud_sql)
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=cv_portfolio
     ports:
       - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -31,6 +33,19 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+    # `docker compose watch`: syncs edited source straight into the running
+    # container, then restarts its process (no --reload in the prod image's
+    # CMD) — a rebuild only when deps or non-code files change.
+    develop:
+      watch:
+        - path: ./services/portfolio
+          target: /app/services/portfolio
+          action: sync+restart
+        - path: ./shared
+          target: /app/shared
+          action: sync+restart
+        - path: ./pyproject.toml
+          action: rebuild
 
   api-games:
     build:
@@ -41,7 +56,35 @@ services:
     environment:
       - PORT=8080
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8081/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
       interval: 30s
       timeout: 5s
       retries: 3
+    develop:
+      watch:
+        - path: ./services/games
+          target: /app/services/games
+          action: sync+restart
+        - path: ./shared
+          target: /app/shared
+          action: sync+restart
+        - path: ./pyproject.toml
+          action: rebuild
+
+  spa:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      target: dev
+    ports:
+      - "5173:5173"
+    develop:
+      watch:
+        - path: ./frontend/src
+          target: /app/frontend/src
+          action: sync
+        - path: ./frontend/package.json
+          action: rebuild
+
+volumes:
+  postgres-data:

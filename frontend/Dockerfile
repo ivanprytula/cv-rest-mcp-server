@@ -8,6 +8,14 @@ COPY frontend/package*.json ./
 RUN npm ci
 COPY frontend/ ./
 
+# Dev stage: local docker-compose-watch stack ONLY (compose.yml's `spa`
+# service builds `target: dev`) — never used for the deployed image. Runs
+# Vite's own dev server so `develop.watch`'s `action: sync` (compose.yml)
+# gives real HMR on save, same as running `npm run dev` natively.
+FROM builder AS dev
+EXPOSE 5173
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173"]
+
 # Vite bakes import.meta.env.VITE_* into the JS bundle at build time — there
 # is no runtime injection for a compiled SPA (unlike api-core's env_vars,
 # which the running container reads via os.environ). Build-arg is named for

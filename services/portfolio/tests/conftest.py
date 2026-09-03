@@ -264,7 +264,8 @@ def tailor_settings(synthetic_baseline_path, tmp_path, monkeypatch):
 def _postgres_container():
     from testcontainers.community.postgres import PostgresContainer
 
-    with PostgresContainer("postgres:16-alpine", driver=None) as container:
+    # Match Cloud SQL's Postgres version (terraform/modules/cloud_sql).
+    with PostgresContainer("postgres:17-alpine", driver=None) as container:
         yield container
 
 
