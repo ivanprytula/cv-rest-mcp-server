@@ -23,7 +23,6 @@ from services.portfolio.auth.crypto import (
     sign_access_token,
     verify_access_token,
 )
-from services.portfolio.auth.token_store import RefreshTokenStore
 from services.portfolio.settings import settings
 
 
@@ -239,78 +238,99 @@ async def test_seed_skipped_when_no_password(user_service):
 
 
 # ---------------------------------------------------------------------------
-# token store (family reuse detection)
+# refresh-token families (reuse detection)
 # ---------------------------------------------------------------------------
+#
+# These run against the same throwaway Postgres the rest of the auth suite
+# uses (the `user_service` fixture builds it), not a fake -- the rotation
+# logic leans on an atomic conditional UPDATE, which only a real database
+# actually exercises.
 
 
-def test_store_create_family(auth_settings):
-    store = RefreshTokenStore()
+@pytest.fixture
+async def refresh_tokens(user_service):
+    """The per-test Postgres-backed refresh-token service."""
+    from services.portfolio.main import app
+
+    return app.state.refresh_token_service
+
+
+async def test_store_create_family(refresh_tokens):
     h = "hash-a"
-    store.create_family(h, "operator")
-    family = store.lookup(h)
+    await refresh_tokens.create_family(h, "operator")
+    family = await refresh_tokens.lookup(h)
     assert family is not None
     assert family.subject == "operator"
     assert family.current_hash == h
     assert family.revoked is False
 
 
-def test_store_create_duplicate_raises(auth_settings):
-    store = RefreshTokenStore()
-    store.create_family("hash-a", "operator")
+async def test_store_create_duplicate_raises(refresh_tokens):
+    await refresh_tokens.create_family("hash-a", "operator")
     with pytest.raises(ValueError):
-        store.create_family("hash-a", "operator")
+        await refresh_tokens.create_family("hash-a", "operator")
 
 
-def test_store_rotate_success(auth_settings):
-    store = RefreshTokenStore()
-    store.create_family("h1", "operator")
-    assert store.rotate("h1", "h2") == "operator"
-    family = store.lookup("h1")
+async def test_store_rotate_success(refresh_tokens):
+    await refresh_tokens.create_family("h1", "operator")
+    assert await refresh_tokens.rotate("h1", "h2") == "operator"
+    family = await refresh_tokens.lookup("h1")
     assert family is not None
     assert family.current_hash == "h2"
 
 
-def test_store_rotate_replay_revokes_family(auth_settings):
-    store = RefreshTokenStore()
-    store.create_family("h1", "operator")
-    store.rotate("h1", "h2")
+async def test_store_rotate_replay_revokes_family(refresh_tokens):
+    await refresh_tokens.create_family("h1", "operator")
+    await refresh_tokens.rotate("h1", "h2")
     # Replaying the now-stale current token "h1" must revoke the whole family.
-    assert store.rotate("h1", "h3") is None
+    assert await refresh_tokens.rotate("h1", "h3") is None
     # Even the legitimately-rotated "h2" is now dead after the replay.
-    assert store.rotate("h2", "h4") is None
+    assert await refresh_tokens.rotate("h2", "h4") is None
 
 
-def test_store_rotate_unknown_hash(auth_settings):
-    store = RefreshTokenStore()
-    store.create_family("h1", "operator")
-    assert store.rotate("nope", "h2") is None
+async def test_store_rotate_unknown_hash(refresh_tokens):
+    await refresh_tokens.create_family("h1", "operator")
+    assert await refresh_tokens.rotate("nope", "h2") is None
 
 
-def test_store_rotate_after_revoke(auth_settings):
-    store = RefreshTokenStore()
-    store.create_family("h1", "operator")
-    store.rotate("h1", "h2")
-    store.revoke("h1")
-    assert store.rotate("h2", "h3") is None
+async def test_store_rotate_after_revoke(refresh_tokens):
+    await refresh_tokens.create_family("h1", "operator")
+    await refresh_tokens.rotate("h1", "h2")
+    await refresh_tokens.revoke("h1")
+    assert await refresh_tokens.rotate("h2", "h3") is None
 
 
-def test_store_revoke_by_token(auth_settings):
-    store = RefreshTokenStore()
-    store.create_family("h1", "operator")
-    store.rotate("h1", "h2")
-    store.revoke_by_token("h2")
-    family = store.lookup("h1")
+async def test_store_revoke_by_token(refresh_tokens):
+    await refresh_tokens.create_family("h1", "operator")
+    await refresh_tokens.rotate("h1", "h2")
+    await refresh_tokens.revoke_by_token("h2")
+    family = await refresh_tokens.lookup("h1")
     assert family is not None
     assert family.revoked is True
 
 
-def test_store_is_revoked(auth_settings):
-    store = RefreshTokenStore()
-    store.create_family("h1", "operator")
-    assert store.is_revoked("h1") is False
-    store.revoke("h1")
-    assert store.is_revoked("h1") is True
-    assert store.is_revoked("unknown") is True
+async def test_store_is_revoked(refresh_tokens):
+    await refresh_tokens.create_family("h1", "operator")
+    assert await refresh_tokens.is_revoked("h1") is False
+    await refresh_tokens.revoke("h1")
+    assert await refresh_tokens.is_revoked("h1") is True
+    assert await refresh_tokens.is_revoked("unknown") is True
+
+
+async def test_store_concurrent_rotation_revokes_family(refresh_tokens):
+    """Two refreshes racing on one token: one wins, and the loser is treated
+    as a replay -- the signature of a stolen refresh token."""
+    import asyncio
+
+    await refresh_tokens.create_family("h1", "operator")
+    results = await asyncio.gather(
+        refresh_tokens.rotate("h1", "h2"),
+        refresh_tokens.rotate("h1", "h3"),
+    )
+    assert sorted(r is None for r in results) == [False, True]
+    family = await refresh_tokens.lookup("h1")
+    assert family is not None
+    assert family.revoked is True
 
 
 # ---------------------------------------------------------------------------

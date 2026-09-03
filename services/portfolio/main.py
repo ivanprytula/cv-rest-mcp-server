@@ -23,6 +23,10 @@ from services.portfolio.auth import (
     JWTAuthMiddleware,
     auth_router,
 )
+from services.portfolio.auth.refresh_token_repository import (
+    SqlAlchemyRefreshTokenRepository,
+)
+from services.portfolio.auth.refresh_token_service import RefreshTokenService
 from services.portfolio.auth.user_repository import SqlAlchemyUserRepository
 from services.portfolio.auth.user_service import (
     UserService,
@@ -316,6 +320,11 @@ async def lifespan(app):
     # tailoring endpoint.
     revision_repo = SqlAlchemyRevisionRepository(session_factory)
     app.state.revision_service = RevisionService(revision_repo)
+
+    # Refresh-token families (ADR-023 PR5): replaces the in-memory store so
+    # rotation/replay-detection stays correct across restarts and instances.
+    refresh_token_repo = SqlAlchemyRefreshTokenRepository(session_factory)
+    app.state.refresh_token_service = RefreshTokenService(refresh_token_repo)
 
     async with mcp_app.lifespan(app):
         yield

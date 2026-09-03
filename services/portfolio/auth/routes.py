@@ -22,11 +22,14 @@ from services.portfolio.auth.crypto import (
     hash_refresh_token,
     sign_access_token,
 )
-from services.portfolio.auth.token_store import token_store
+from services.portfolio.auth.refresh_token_service import RefreshTokenService
 from services.portfolio.auth.user import ROLE_USER
 from services.portfolio.auth.user_service import UserService
 from services.portfolio.constants import API_V1_PREFIX
-from services.portfolio.dependencies import get_user_service
+from services.portfolio.dependencies import (
+    get_refresh_token_service,
+    get_user_service,
+)
 from services.portfolio.schemas.auth import LoginRequest, MeResponse, TokenPair
 from services.portfolio.settings import settings
 
@@ -34,6 +37,7 @@ from services.portfolio.settings import settings
 auth_router = APIRouter(prefix=f"{API_V1_PREFIX}/auth", tags=["auth"])
 
 get_user_service_dep = Depends(get_user_service)
+get_refresh_token_service_dep = Depends(get_refresh_token_service)
 
 _REFRESH_COOKIE = "__Host-refresh_token"
 # The __Host- prefix REQUIRES Path=/ (plus Secure and no Domain); a narrower
@@ -91,6 +95,7 @@ async def token(
     request: Request,
     body: LoginRequest,
     user_service: UserService = get_user_service_dep,
+    refresh_tokens: RefreshTokenService = get_refresh_token_service_dep,
 ) -> Response:
     """Classic login: resolve the user, verify bcrypt password, issue a token pair.
 
@@ -107,7 +112,7 @@ async def token(
     access_token = sign_access_token(user.username, user.scopes, role=user.role)
     refresh_token = generate_refresh_token()
     refresh_hash = hash_refresh_token(refresh_token)
-    token_store.create_family(refresh_hash, user.username)
+    await refresh_tokens.create_family(refresh_hash, user.username)
 
     response = JSONResponse(
         TokenPair(
@@ -129,7 +134,9 @@ async def token(
     },
 )
 async def refresh(
-    request: Request, user_service: UserService = get_user_service_dep
+    request: Request,
+    user_service: UserService = get_user_service_dep,
+    refresh_tokens: RefreshTokenService = get_refresh_token_service_dep,
 ) -> Response:
     """Rotate the refresh token and issue a new access token.
 
@@ -145,7 +152,7 @@ async def refresh(
     new_token = generate_refresh_token()
     new_hash = hash_refresh_token(new_token)
 
-    subject = token_store.rotate(presented_hash, new_hash)
+    subject = await refresh_tokens.rotate(presented_hash, new_hash)
     if subject is None:
         return JSONResponse(
             {"detail": "Refresh token invalid or replayed"},
@@ -173,11 +180,14 @@ async def refresh(
 
 
 @auth_router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-async def logout(request: Request) -> Response:
+async def logout(
+    request: Request,
+    refresh_tokens: RefreshTokenService = get_refresh_token_service_dep,
+) -> Response:
     """Revoke the refresh-token family and clear the cookie."""
     presented = _read_refresh_cookie(request)
     if presented:
-        token_store.revoke_by_token(hash_refresh_token(presented))
+        await refresh_tokens.revoke_by_token(hash_refresh_token(presented))
     response = Response(status_code=status.HTTP_204_NO_CONTENT)
     _clear_refresh_cookie(response)
     response.headers["Cache-Control"] = "no-store"

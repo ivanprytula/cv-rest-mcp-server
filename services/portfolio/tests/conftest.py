@@ -343,8 +343,9 @@ def auth_settings(synthetic_baseline_path, tmp_path, monkeypatch):
 
     User passwords are NOT configured here — they live in the SQLAlchemy-backed
     user store (see the `user_service` fixture below), per ADR-022 Phase 2.
+    Refresh-token families likewise live in Postgres (see `user_service`), so
+    there is no in-memory store to reset here — each test gets a fresh database.
     """
-    from services.portfolio.auth.token_store import token_store
     from services.portfolio.settings import settings
 
     signing_key = "test-hs256-secret-that-is-long-enough-for-signing"
@@ -358,7 +359,6 @@ def auth_settings(synthetic_baseline_path, tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "access_token_ttl_minutes", 10)
     monkeypatch.setattr(settings, "refresh_token_ttl_days", 30)
 
-    token_store.clear()
     yield {"jwt_signing_key": signing_key, "pepper": "test-pepper"}
 
 
@@ -381,11 +381,18 @@ async def user_service(auth_settings, _fresh_postgres_url, monkeypatch):
     store half — revision_service is a same-database sibling bundled in
     here rather than a second Postgres setup.
     """
+    from services.portfolio.auth.refresh_token_repository import (
+        SqlAlchemyRefreshTokenRepository,
+    )
+    from services.portfolio.auth.refresh_token_service import RefreshTokenService
     from services.portfolio.auth.user_repository import SqlAlchemyUserRepository
     from services.portfolio.auth.user_service import UserService
     from services.portfolio.db import build_engine, build_session_factory
     from services.portfolio.db_migrations import upgrade_head
-    from services.portfolio.dependencies import get_revision_service
+    from services.portfolio.dependencies import (
+        get_refresh_token_service,
+        get_revision_service,
+    )
     from services.portfolio.revisions.revision_repository import (
         SqlAlchemyRevisionRepository,
     )
@@ -407,17 +414,24 @@ async def user_service(auth_settings, _fresh_postgres_url, monkeypatch):
     )
 
     revision_service = RevisionService(SqlAlchemyRevisionRepository(session_factory))
+    refresh_token_service = RefreshTokenService(
+        SqlAlchemyRefreshTokenRepository(session_factory)
+    )
 
     monkeypatch.setattr(settings, "database_url", _fresh_postgres_url)
     app.dependency_overrides[get_user_service] = lambda: service
     app.dependency_overrides[get_revision_service] = lambda: revision_service
+    app.dependency_overrides[get_refresh_token_service] = lambda: refresh_token_service
     app.state.user_service = service
     app.state.revision_service = revision_service
+    app.state.refresh_token_service = refresh_token_service
     yield service
     app.dependency_overrides.pop(get_user_service, None)
     app.dependency_overrides.pop(get_revision_service, None)
+    app.dependency_overrides.pop(get_refresh_token_service, None)
     app.state.user_service = None
     app.state.revision_service = None
+    app.state.refresh_token_service = None
     await engine.dispose()
 
 
