@@ -1,14 +1,14 @@
-"""Async user store (ADR-022, Phase 2) — DDD-flavored + 12-factor config.
+"""Async user store (ADR-022, ADR-023, Phase 2) — DDD-flavored + 12-factor config.
 
 Boundaries:
 - **Domain**: `User` entity (identity + roles) and a `PasswordHasher` class.
-- **Persistence**: `UserRepository` async SQLAlchemy implementation on `aiosqlite`.
-  Exposes raw load/save of `UserRow` (which carries `hashed_password`); business
-  logic lives in `UserService`, so swapping DB (Phase-2 Postgres: one-line driver
-  change to `asyncpg`) only replaces the repo, not the service.
+- **Persistence**: `UserRepository` async SQLAlchemy implementation on Postgres
+  (`asyncpg`). Exposes raw load/save of `UserRow` (which carries
+  `hashed_password`); business logic lives in `UserService`, so swapping the
+  repo implementation never touches the service.
 - **Application service**: `UserService` orchestrates repo + hasher for auth and
-  seeding. Engine lifecycle (init_schema, close) is managed by the app lifespan
-  in main.py, not the repo.
+  seeding. Engine lifecycle (close) is managed by the app lifespan in main.py,
+  not the repo. Schema is Alembic-managed (`alembic/`), not `create_all`.
 
 Refresh-token families stay in-memory (`token_store.RefreshTokenStore`); the DB
 stores users, not sessions.
@@ -18,11 +18,10 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from pathlib import Path
 
 import bcrypt
 from pydantic import BaseModel, ConfigDict, EmailStr
-from sqlalchemy import String, select
+from sqlalchemy import DateTime, String, select
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -38,13 +37,6 @@ ROLE_ADMIN = "admin"
 ROLE_USER = "user"
 SCOPE_READ = "cv:read"
 SCOPE_MANAGE = "cv:manage"
-
-
-def sqlite_url_for(path: Path | str) -> str:
-    """Build an aiosqlite URL for a filesystem path (or `:memory:`)."""
-    if str(path) == ":memory:":
-        return "sqlite+aiosqlite://"
-    return f"sqlite+aiosqlite:///{path}"
 
 
 # ---------------------------------------------------------------------------
@@ -107,7 +99,9 @@ class UserRow(Base):
     hashed_password: Mapped[str] = mapped_column(String(255))
     is_active: Mapped[bool] = mapped_column(default=True)
     role: Mapped[str] = mapped_column(String(16), default=ROLE_USER)
-    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
 
     def to_domain(self) -> User:
         return User(
@@ -120,8 +114,9 @@ class UserRow(Base):
 
 
 class UserRepository:
-    """Async SQLAlchemy user repository (`aiosqlite`). Engine lifecycle
-    (init_schema, close) is managed by the app lifespan, not the repo."""
+    """Async SQLAlchemy user repository (Postgres, `asyncpg`). Engine
+    lifecycle (close) is managed by the app lifespan, not the repo; schema
+    is Alembic-migrated, not derived from the model via `create_all`."""
 
     def __init__(self, db_url: str) -> None:
         self._engine = create_async_engine(db_url, future=True)
@@ -216,9 +211,10 @@ class UserService:
 
 
 # Module singleton used by the auth routes. Bound at import from settings (the
-# engine is lazy — no disk touch until a login/seed actually runs). Tests
-# replace this with a per-test repo/service via the fixture (like token_store).
-user_service = UserService(UserRepository(sqlite_url_for(settings.user_db_path)))
+# engine is lazy — no connection attempt until a login/seed actually runs).
+# Tests replace this with a per-test repo/service via the fixture (like
+# token_store). settings.database_url uses the asyncpg driver at runtime.
+user_service = UserService(UserRepository(settings.database_url))
 
 
 async def seed_first_admin_from_settings(

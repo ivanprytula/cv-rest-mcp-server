@@ -11,6 +11,15 @@ dev-local:
 dev-spa:
     cd frontend && npm run dev -- --port 5173
 
+# Apply all pending Alembic migrations to DATABASE_URL (needs a running Postgres).
+db-migrate:
+    uv run alembic upgrade head
+
+# Autogenerate a new migration from model changes in services/portfolio/*/store.py.
+# Usage: just db-revision "add revisions table"
+db-revision MESSAGE:
+    uv run alembic revision --autogenerate -m "{{MESSAGE}}"
+
 code-quality:
     uv run ruff check .
     uv run ruff format .

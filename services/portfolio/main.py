@@ -24,7 +24,6 @@ from services.portfolio.auth import (
     auth_router,
 )
 from services.portfolio.auth.user_store import (
-    Base,
     seed_first_admin_from_settings,
     user_service,
 )
@@ -36,6 +35,7 @@ from services.portfolio.constants import (
     TEMPLATE_DIR,
 )
 from services.portfolio.cv_source import build_cv_source_from_settings
+from services.portfolio.db_migrations import upgrade_head
 from services.portfolio.failban import register_violation_from_request
 from services.portfolio.guard_middleware import GuardMiddleware
 from services.portfolio.mcp_limits import (
@@ -289,10 +289,11 @@ async def lifespan(app):
     )
     app.state.pdf_service = pdf_service
 
-    # Auth user store: initialize engine schema + idempotently seed the first admin.
-    # Routes reach the same singleton via app/auth/user_store.py.
-    async with user_service._repo.engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    # Auth user store: run Alembic migrations up to head, then idempotently
+    # seed the first admin. Routes reach the same singleton via
+    # app/auth/user_store.py. Schema is migration-managed (ADR-023), not
+    # derived from the current model state via create_all.
+    await upgrade_head(settings.sync_database_url)
     await seed_first_admin_from_settings(user_service)
 
     async with mcp_app.lifespan(app):

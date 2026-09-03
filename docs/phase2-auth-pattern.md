@@ -1,7 +1,8 @@
-# Phase 2 Auth Pattern — DB-backed users (async SQLAlchemy + aiosqlite)
+# Phase 2 Auth Pattern — DB-backed users (async SQLAlchemy + Postgres)
 
-> Status: **built** as Phase 1d (ADR-022) and live in `app/auth/user_store.py`.
-> The seam is unchanged from the ADR-022 forward path, and Patterns are adapted
+> Status: **built** as Phase 1d (ADR-022) and live in `app/auth/user_store.py`;
+> the Postgres + Alembic swap this doc anticipated has landed (ADR-023). The
+> seam is unchanged from the ADR-022 forward path, and patterns are adapted
 > from the [FastAPI full-stack template](https://github.com/fastapi/full-stack-fastapi-template)
 > (MIT).
 >
@@ -21,13 +22,13 @@ existing seams and `/me` already speak `sub = username`; email is additive.
 
 - **Domain** — `User` entity (identity + roles, `scopes` derived from roles).
 - **Persistence port** — `UserRepository` (ABC) with an async SQLAlchemy
-  implementation on `aiosqlite` for the interim. The repo returns a raw `UserRow`
+  implementation on Postgres (`asyncpg`). The repo returns a raw `UserRow`
   (which carries `hashed_password`); the domain `User` / `UserRow.to_domain()`
-  is what routes see. Phase-2 Postgres is a new `UserRepository` impl (asyncpg)
-  behind the same ABC — domain and service stay put.
+  is what routes see. Schema is Alembic-migrated (`alembic/`), not derived
+  from the model via `create_all`.
 - **Application service** — `UserService.authenticate()` / `seed_first_admin()`
   orchestrate repo + hasher (the template's `crud.authenticate`, async-native).
-- **12-factor** — all config via env in `settings`: `user_db_path`,
+- **12-factor** — all config via env in `settings`: `database_url`,
   `first_admin_username/email/password(_file)`.
 
 ```python

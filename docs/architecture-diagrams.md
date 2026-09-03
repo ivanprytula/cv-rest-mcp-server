@@ -84,7 +84,7 @@ flowchart TB
         cvbucket[("<b>cv-data bucket</b><br/>cv.json — versioned")]:::store
         static[("<b>static bucket</b><br/>Vite-hashed assets<br/>fronted by Cloud CDN")]:::store
         sm[("<b>Secret Manager</b><br/>cv-jwt-signing-key<br/>cv-refresh-token-pepper")]:::store
-        sqlite[("<b>SQLite</b><br/><i>in-container</i><br/>users, sessions")]:::store
+        pg[("<b>Cloud SQL Postgres</b><br/>users, tailored revisions<br/>Alembic-migrated")]:::store
     end
 
     visitor -->|"<APEX_DOMAIN><br/>www. / api."| lb
@@ -98,7 +98,7 @@ flowchart TB
 
     core -->|"reads (hot reload)"| cvbucket
     core -->|"env var injection"| sm
-    core --> sqlite
+    core --> pg
     spa -.->|"XHR: api.<APEX_DOMAIN><br/>credentialed CORS"| lb
 
     classDef person fill:#08427b,stroke:#052e56,color:#fff
@@ -149,7 +149,7 @@ flowchart TB
     end
 
     gcs[("GCS cv.json")]:::extstore
-    db[("SQLite")]:::extstore
+    db[("Postgres")]:::extstore
 
     req --> sec --> guard --> cors --> jwt
     jwt --> routes & mcp & authr
