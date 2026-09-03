@@ -85,3 +85,9 @@ variable "ingress" {
   type        = string
   default     = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
 }
+
+variable "cloud_sql_instances" {
+  description = "Cloud SQL instance connection names (PROJECT:REGION:INSTANCE) to mount via the native Cloud Run v2 Auth Proxy socket — no Serverless VPC Access connector needed. Empty = no Cloud SQL volume mounted."
+  type        = list(string)
+  default     = []
+}

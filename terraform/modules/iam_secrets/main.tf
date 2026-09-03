@@ -216,6 +216,19 @@ resource "google_artifact_registry_repository_iam_member" "api_games_cv_images_r
   member     = "serviceAccount:${google_service_account.api_games_runtime.email}"
 }
 
+# Cloud SQL Auth Proxy socket mount (Phase 2) requires the runtime SA to
+# hold cloudsql.client, which grants the API calls the proxy makes on the
+# service's behalf to establish the encrypted tunnel to the instance.
+# Gated on the bool (not a connection-name string) so `count` is known at
+# plan time even on a from-scratch apply, before the cloud_sql module's
+# instance (and its connection_name output) exists yet.
+resource "google_project_iam_member" "api_core_cloudsql_client" {
+  count   = var.enable_cloud_sql ? 1 : 0
+  project = var.project
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${google_service_account.api_core_runtime.email}"
+}
+
 # Secret Manager access for JWT signing key (Phase 1c+)
 resource "google_secret_manager_secret_iam_member" "api_core_jwt_key" {
   count     = var.jwt_signing_secret_id != "" ? 1 : 0
