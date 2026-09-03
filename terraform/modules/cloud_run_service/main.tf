@@ -2,6 +2,7 @@ resource "google_cloud_run_v2_service" "service" {
   name     = var.name
   location = var.region
   project  = var.project
+  labels   = var.labels
 
   ingress = var.ingress
 

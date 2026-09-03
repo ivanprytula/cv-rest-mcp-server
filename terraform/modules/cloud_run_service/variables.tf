@@ -91,3 +91,9 @@ variable "cloud_sql_instances" {
   type        = list(string)
   default     = []
 }
+
+variable "labels" {
+  description = "GCP resource labels for cost attribution (e.g. { service = \"api-core\", environment = \"production\" })."
+  type        = map(string)
+  default     = {}
+}

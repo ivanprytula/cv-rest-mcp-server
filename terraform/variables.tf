@@ -9,6 +9,12 @@ variable "region" {
   default     = "europe-west1"
 }
 
+variable "environment" {
+  description = "Deployment environment, applied as the 'environment' GCP label on every labelable resource for cost attribution (e.g. production, staging)."
+  type        = string
+  default     = "production"
+}
+
 variable "apex_domain" {
   description = "Apex domain, e.g. example.com. Placeholder must be overridden via terraform.tfvars."
   type        = string

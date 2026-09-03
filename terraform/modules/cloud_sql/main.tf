@@ -16,6 +16,7 @@ resource "google_sql_database_instance" "instance" {
     availability_type = "ZONAL"
     disk_autoresize   = true
     disk_size         = var.disk_size_gb
+    user_labels       = var.labels
 
     # GCP API-level delete guard — separate from the resource-level
     # deletion_protection below, which only blocks `terraform destroy`.

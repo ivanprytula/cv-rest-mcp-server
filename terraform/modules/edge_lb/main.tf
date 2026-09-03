@@ -18,6 +18,7 @@ locals {
 resource "google_compute_global_address" "default" {
   name    = "${var.name_prefix}-ipv4"
   project = var.project
+  labels  = var.labels
 }
 
 # Serverless backend services (one per host routed to a Cloud Run NEG).
@@ -125,4 +126,5 @@ resource "google_compute_global_forwarding_rule" "https" {
   ip_address            = google_compute_global_address.default.address
   port_range            = "443"
   load_balancing_scheme = "EXTERNAL_MANAGED"
+  labels                = var.labels
 }

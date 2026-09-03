@@ -4,6 +4,7 @@ resource "google_dns_managed_zone" "zone" {
   name        = replace(trimsuffix(var.dns_name, "."), ".", "-")
   dns_name    = var.dns_name
   description = "Public zone for the Phase 1a multi-subdomain edge (${var.apex_domain})."
+  labels      = var.labels
   dnssec_config {
     state         = "on"
     non_existence = "nsec3"

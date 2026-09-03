@@ -11,9 +11,33 @@ resource "google_storage_bucket" "uploads" {
   force_destroy               = false
   uniform_bucket_level_access = true
   public_access_prevention    = "enforced"
+  labels                      = var.labels
 
   versioning {
     enabled = true
+  }
+
+  # User content (avatars/photos) never expires from age, but a re-upload's
+  # superseded version has no lasting value — one prior version is enough
+  # margin to undo a bad re-upload.
+  lifecycle_rule {
+    condition {
+      num_newer_versions = 1
+    }
+    action {
+      type = "Delete"
+    }
+  }
+
+  # Failed multipart uploads leave billed-but-unusable data behind.
+  lifecycle_rule {
+    condition {
+      age        = 7
+      with_state = "ANY"
+    }
+    action {
+      type = "AbortIncompleteMultipartUpload"
+    }
   }
 }
 

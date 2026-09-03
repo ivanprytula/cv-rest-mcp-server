@@ -25,3 +25,9 @@ variable "cors_origins" {
   type        = list(string)
   default     = []
 }
+
+variable "labels" {
+  description = "GCP resource labels for cost attribution (e.g. { service = \"static-bucket\", environment = \"production\" })."
+  type        = map(string)
+  default     = {}
+}
