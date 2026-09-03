@@ -155,7 +155,7 @@ bootstrap_secrets() {
     log "STEP 3: Create Secret Manager secrets (empty containers)"
 
     log "  3a. Creating secrets"
-    for secret in cv-jwt-signing-key cv-refresh-token-pepper cv-first-admin-password; do
+    for secret in cv-jwt-signing-key cv-refresh-token-pepper cv-first-admin-password cv-db-password; do
         if gcloud secrets describe "$secret" --project "$GCP_PROJECT" >/dev/null 2>&1; then
             echo "    $secret exists, skipping create"
         else
@@ -178,6 +178,9 @@ bootstrap_secrets() {
       --project $GCP_PROJECT --data-file=-
 
     gcloud secrets versions add cv-first-admin-password \\
+      --project $GCP_PROJECT --data-file=-
+
+    gcloud secrets versions add cv-db-password \\
       --project $GCP_PROJECT --data-file=-
 
   Or generate a strong random value without it touching your shell history:

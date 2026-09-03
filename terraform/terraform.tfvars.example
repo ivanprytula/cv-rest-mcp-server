@@ -157,6 +157,14 @@ enable_cloud_armor                  = false
 cloud_armor_rate_limit_count        = 100
 cloud_armor_rate_limit_interval_sec = 60
 
+# --- Cloud SQL Postgres (ADR-023 Phase 2 — auth/user store) ---
+# Infra-only in this PR: no service reads DATABASE_URL yet (that's the next
+# PR). db-f1-micro/zonal/no-HA, ~$9/month per Infracost. Password secret
+# (cv-db-password) is script-owned — run `just deploy bootstrap-secrets`
+# before the first `terraform apply` with this set to true.
+enable_cloud_sql = false
+# cloud_sql_db_password_secret_id = "cv-db-password"  # default shown; override only if renamed
+
 # --- Bootstrap (one-time setup before terraform apply) ---
 # Use deploy-cloud-run.sh for first-time setup:
 #   just deploy bootstrap          # enable APIs (now also via Terraform gcp_apis module)

@@ -62,7 +62,14 @@ repos:
         # CKV_GCP_73: Cloud Armor module exists but is disabled (enable_cloud_armor = false in tfvars)
         # CKV_GCP_84: Google-managed encryption is sufficient for a single dev env; CSEK adds KMS
         # key management overhead with no corresponding threat model here.
-        entry: uvx --from 'checkov' checkov -d terraform --quiet --compact --skip-check CKV_GCP_62,CKV_GCP_114,CKV_GCP_28,CKV_GCP_125,CKV_GCP_49,CKV_GCP_41,CKV_GCP_73,CKV_GCP_84
+        # CKV_GCP_6: checks for the deprecated require_ssl attribute, removed in
+        # hashicorp/google ~> 6.0. cloud_sql module sets its replacement,
+        # ssl_mode = "ENCRYPTED_ONLY", which the static check doesn't recognize.
+        # CKV_GCP_79: checkov's known-versions list lags GCP's actual Cloud SQL
+        # offering; cloud_sql module already pins POSTGRES_17 (current latest).
+        # CKV_GCP_109: cloud_sql module already sets log_min_messages = "error"
+        # (the value the check's own guide recommends); false positive.
+        entry: uvx --from 'checkov' checkov -d terraform --quiet --compact --skip-check CKV_GCP_62,CKV_GCP_114,CKV_GCP_28,CKV_GCP_125,CKV_GCP_49,CKV_GCP_41,CKV_GCP_73,CKV_GCP_84,CKV_GCP_6,CKV_GCP_79,CKV_GCP_109
         files: ^terraform/
         language: system
         pass_filenames: false

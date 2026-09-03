@@ -79,6 +79,24 @@ variable "host_routing" {
   type        = map(string)
 }
 
+# Cloud SQL Postgres for the auth/user store (ADR-023 Phase 2, PR2). Defaults
+# to false so this module is opt-in until Infracost has confirmed the tier
+# fits the $100/month budget on a real plan against this repo's other costs.
+variable "enable_cloud_sql" {
+  description = "Provision the Cloud SQL Postgres instance (modules/cloud_sql) and its Cloud Run Auth Proxy wiring."
+  type        = bool
+  default     = false
+}
+
+# Secret container + version are script-owned (scripts/deploy-cloud-run.sh
+# bootstrap_secrets(), cv-db-password) — never in .tfvars or state. This var
+# only names the secret ID for modules/cloud_sql to read via data source.
+variable "cloud_sql_db_password_secret_id" {
+  description = "Secret Manager secret ID holding the Cloud SQL app user password."
+  type        = string
+  default     = "cv-db-password"
+}
+
 # Private upload bucket for user content (avatars/photos). Signed-URL only writes.
 # Kept commented with the module (main.tf) — uncomment both together to provision.
 # variable "uploads" {

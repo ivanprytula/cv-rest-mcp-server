@@ -10,6 +10,18 @@ module "gcp_apis" {
   project = var.project_id
 }
 
+# Cloud SQL Postgres for the auth/user store (ADR-023 Phase 2). Infra-only in
+# this PR — no service reads it yet; PR3 wires DATABASE_URL into api-core.
+module "cloud_sql" {
+  count      = var.enable_cloud_sql ? 1 : 0
+  depends_on = [module.gcp_apis]
+  source     = "./modules/cloud_sql"
+
+  project               = var.project_id
+  region                = var.region
+  db_password_secret_id = var.cloud_sql_db_password_secret_id
+}
+
 # IAM, service accounts, and secrets (centralized, away from shell scripts)
 module "iam_secrets" {
   depends_on = [module.gcp_apis]
@@ -19,6 +31,7 @@ module "iam_secrets" {
   region                = var.region
   jwt_signing_secret_id = var.jwt_signing_secret_id
   api_core_secret_ids   = var.api_core_secret_ids
+  enable_cloud_sql      = var.enable_cloud_sql
 }
 
 # GitHub Workload Identity Federation for CI/CD (optional)
@@ -78,6 +91,8 @@ module "run" {
   max_instances         = each.value.max_instances
   min_instances         = each.value.min_instances
   memory                = each.value.memory
+  # Only api-core talks to Postgres; games/spa-origin never mount the socket.
+  cloud_sql_instances = each.key == "api-core" && var.enable_cloud_sql ? [module.cloud_sql[0].connection_name] : []
 }
 
 # HTTPS edge: global IP, managed certs, URL-map host routing, Cloud CDN bucket.
