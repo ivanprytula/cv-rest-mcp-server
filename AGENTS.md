@@ -197,7 +197,8 @@ docs/
 ├── architecture.md      # System components, data flow, endpoints
 ├── api.md               # Explicit REST contract: paths, params, bodies, status codes
 ├── design.md            # Design principles, patterns, constraints
-└── decisions.md         # ADR-style decision log
+├── decisions.md         # ADR-style decision log
+└── refresh-token-families.md  # Refresh rotation, reuse detection, what revocation kills
 
 Dockerfile              # Production container image
 .editorconfig           # Editor defaults: Ruff mirror for Python, web-standard indents
