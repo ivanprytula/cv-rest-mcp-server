@@ -5,21 +5,21 @@ import { downloadTailoredPdf, getCv } from '../api/cv'
 import CvView from '../components/CvView'
 
 export default function RevisionPreview() {
-  const { name } = useParams<{ name: string }>()
+  const { id } = useParams<{ id: string }>()
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ['cv', name],
-    queryFn: () => getCv(name),
-    enabled: Boolean(name),
+    queryKey: ['cv', id],
+    queryFn: () => getCv(id),
+    enabled: Boolean(id),
   })
   const [pdfError, setPdfError] = useState<string | null>(null)
   const [downloadingPdf, setDownloadingPdf] = useState(false)
 
   async function handleDownloadPdf() {
-    if (!name) return
+    if (!id) return
     setPdfError(null)
     setDownloadingPdf(true)
     try {
-      await downloadTailoredPdf(name)
+      await downloadTailoredPdf(id)
     } catch (err) {
       setPdfError((err as Error).message)
     } finally {

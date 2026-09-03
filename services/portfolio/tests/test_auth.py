@@ -202,17 +202,18 @@ async def test_authenticate_unknown_username(user_service):
 async def test_authenticate_unconfigured_returns_none(_fresh_postgres_url):
     from services.portfolio.auth.user_repository import SqlAlchemyUserRepository
     from services.portfolio.auth.user_service import UserService
-    from services.portfolio.db import Base
+    from services.portfolio.db import Base, build_engine, build_session_factory
 
     # No users seeded -> authenticate returns None (fail-closed on login).
     # A narrow logic test, not a migration test, so plain create_all is fine
     # here (not everything needs to route through Alembic).
-    repo = SqlAlchemyUserRepository(_fresh_postgres_url)
+    engine = build_engine(_fresh_postgres_url)
+    repo = SqlAlchemyUserRepository(build_session_factory(engine))
     svc = UserService(repo)
-    async with repo.engine.begin() as conn:
+    async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     assert await svc.authenticate("anything", "anything") is None
-    await repo.engine.dispose()
+    await engine.dispose()
 
 
 async def test_seed_is_idempotent(user_service):
@@ -371,13 +372,14 @@ async def test_login_fail_closed_when_unconfigured(
     # Plain create_all is fine, this is a narrow logic test, not a migration test.
     from services.portfolio.auth.user_repository import SqlAlchemyUserRepository
     from services.portfolio.auth.user_service import UserService
-    from services.portfolio.db import Base
+    from services.portfolio.db import Base, build_engine, build_session_factory
     from services.portfolio.dependencies import get_user_service
     from services.portfolio.main import app
 
-    repo = SqlAlchemyUserRepository(_make_fresh_postgres_url())
+    engine = build_engine(_make_fresh_postgres_url())
+    repo = SqlAlchemyUserRepository(build_session_factory(engine))
     empty = UserService(repo)
-    async with repo.engine.begin() as conn:
+    async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     app.dependency_overrides[get_user_service] = lambda: empty
     try:
@@ -385,7 +387,7 @@ async def test_login_fail_closed_when_unconfigured(
     finally:
         app.dependency_overrides.pop(get_user_service, None)
     assert resp.status_code == 401  # generic message, no reveal
-    await repo.engine.dispose()
+    await engine.dispose()
 
 
 async def test_login_requires_username_and_password(auth_client):

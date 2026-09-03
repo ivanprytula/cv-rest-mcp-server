@@ -140,31 +140,35 @@ flowchart TB
         pdf["<b>PdfService</b><br/>LRU cache + bounded<br/>thread pool (WeasyPrint)"]:::comp
         renderer["<b>renderer</b><br/>Jinja2 + theme CSS"]:::comp
         tailor["<b>matching/tailor</b><br/>JD → tailored CV"]:::comp
-        users["<b>UserService</b><br/>auth, revisions"]:::comp
+        users["<b>UserService</b><br/>auth"]:::comp
+        revs["<b>RevisionService</b><br/>tailored CV persistence,<br/>degrade-don't-crash"]:::comp
     end
 
     subgraph data["Data access"]
         cvsrc["<b>CvSource</b><br/>GCS or file,<br/>generation-checked reload"]:::comp
-        store["<b>user_service</b><br/>async SQLAlchemy"]:::comp
+        userrepo["<b>SqlAlchemyUserRepository</b>"]:::comp
+        revrepo["<b>SqlAlchemyRevisionRepository</b>"]:::comp
     end
 
     gcs[("GCS cv.json")]:::extstore
-    db[("Postgres")]:::extstore
+    db[("Postgres<br/>one shared engine/pool")]:::extstore
 
     req --> sec --> guard --> cors --> jwt
     jwt --> routes & mcp & authr
 
-    routes --> pdf & renderer & tailor
+    routes --> pdf & renderer & tailor & revs
     mcp --> tailor & renderer
     authr --> users
 
     pdf --> renderer
     renderer --> cvsrc
     tailor --> cvsrc
-    users --> store
+    users --> userrepo
+    revs --> revrepo
+    userrepo --> db
+    revrepo --> db
 
     cvsrc --> gcs
-    store --> db
 
     classDef comp fill:#1168bd,stroke:#0b4884,color:#fff
     classDef ext fill:#08427b,stroke:#052e56,color:#fff

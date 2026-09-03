@@ -36,6 +36,7 @@ from services.portfolio.constants import (
     TEMPLATE_DIR,
 )
 from services.portfolio.cv_source import build_cv_source_from_settings
+from services.portfolio.db import build_engine, build_session_factory
 from services.portfolio.db_migrations import upgrade_head
 from services.portfolio.failban import register_violation_from_request
 from services.portfolio.guard_middleware import GuardMiddleware
@@ -46,6 +47,10 @@ from services.portfolio.mcp_limits import (
 from services.portfolio.pdf_generator import PdfService, ThemeNotFoundError
 from services.portfolio.proxy_scheme_middleware import TrustedProxySchemeMiddleware
 from services.portfolio.rate_limiter import limiter
+from services.portfolio.revisions.revision_repository import (
+    SqlAlchemyRevisionRepository,
+)
+from services.portfolio.revisions.revision_service import RevisionService
 from services.portfolio.routes import router
 from services.portfolio.settings import settings
 
@@ -290,21 +295,32 @@ async def lifespan(app):
     )
     app.state.pdf_service = pdf_service
 
-    # Auth user store: run Alembic migrations up to head, then idempotently
-    # seed the first admin. Routes reach this via FastAPI's Depends
-    # (dependencies.get_user_service), same pattern as pdf_service above.
-    # Schema is migration-managed (ADR-023), not derived from the current
-    # model state via create_all.
+    # One app-wide engine/pool (ADR-023), shared by every repository —
+    # NOT one engine per repository (see services.portfolio.db's docstring).
+    # Run Alembic migrations up to head, then idempotently seed the first
+    # admin. Routes reach services via FastAPI's Depends
+    # (dependencies.get_user_service/get_revision_service), same pattern as
+    # pdf_service above. Schema is migration-managed, not derived from the
+    # current model state via create_all.
     await upgrade_head(settings.sync_database_url)
-    user_repo = SqlAlchemyUserRepository(settings.database_url)
+    engine = build_engine(settings.database_url)
+    session_factory = build_session_factory(engine)
+
+    user_repo = SqlAlchemyUserRepository(session_factory)
     user_service = UserService(user_repo)
     app.state.user_service = user_service
     await seed_first_admin_from_settings(user_service)
 
+    # Revision store: additive (ADR-023 PR4). routes.py degrades to the
+    # file-glob path on any RevisionService error rather than 500ing the
+    # tailoring endpoint.
+    revision_repo = SqlAlchemyRevisionRepository(session_factory)
+    app.state.revision_service = RevisionService(revision_repo)
+
     async with mcp_app.lifespan(app):
         yield
 
-    await user_repo.engine.dispose()
+    await engine.dispose()
     pdf_service._executor.shutdown(wait=False)
 
 

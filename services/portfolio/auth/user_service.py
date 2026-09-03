@@ -30,11 +30,10 @@ class UserService[R: UserRepository]:
 
     Generic over the repository implementation (`R`, bound to the
     `UserRepository` Protocol): a caller holding a `UserService[
-    SqlAlchemyUserRepository]` gets `.repo` back as that concrete type (e.g.
-    for lifecycle calls like `.engine.dispose()`) with full static checking,
-    while `UserService[UserRepository]` (or a bare `UserService`) stays
-    correctly abstract wherever only the port matters — no behavior
-    difference, purely a type-checking improvement.
+    SqlAlchemyUserRepository]` gets `.repo` back as that concrete type with
+    full static checking, while `UserService[UserRepository]` (or a bare
+    `UserService`) stays correctly abstract wherever only the port matters —
+    no behavior difference, purely a type-checking improvement.
     """
 
     def __init__(self, repo: R, hasher: PasswordHasher | None = None) -> None:

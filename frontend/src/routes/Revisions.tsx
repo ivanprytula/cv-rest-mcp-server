@@ -23,9 +23,9 @@ export default function Revisions() {
       </thead>
       <tbody>
         {data.map((revision) => (
-          <tr key={revision.name}>
+          <tr key={revision.id}>
             <td>
-              <Link to={`/revisions/${encodeURIComponent(revision.name)}`}>{revision.name}</Link>
+              <Link to={`/revisions/${encodeURIComponent(revision.id)}`}>{revision.name}</Link>
             </td>
             <td>{new Date(revision.created_at).toLocaleString()}</td>
             <td>{(revision.size_bytes / 1024).toFixed(1)} KB</td>

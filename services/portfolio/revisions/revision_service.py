@@ -1,0 +1,91 @@
+"""Revision application service (ADR-023).
+
+Construction happens once in `main.py`'s lifespan (`app.state.revision_service`),
+matching `UserService`/`PdfService`. Routes reach it via FastAPI's `Depends`
+(`services.portfolio.dependencies.get_revision_service`).
+
+Degrade-don't-crash (mirrors `CvSource`): a Postgres error on any operation
+logs a warning and returns `None`/`[]` rather than raising, so a transient DB
+hiccup never 500s the tailoring endpoint — the caller (routes.py) falls back
+to the file-glob path on `None`/empty.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import logging
+import uuid
+from datetime import UTC, datetime
+
+from services.portfolio.revisions.revision import Revision
+from services.portfolio.revisions.revision_repository import RevisionRepository
+from services.portfolio.revisions.revision_row import RevisionRow
+
+
+logger = logging.getLogger(__name__)
+
+
+def jd_hash(jd_text: str) -> str:
+    """SHA-256 hex digest of the JD text, for dedup/audit (not a secret)."""
+    return hashlib.sha256(jd_text.encode("utf-8")).hexdigest()
+
+
+class RevisionService[R: RevisionRepository]:
+    """Application service orchestrating the revision repo.
+
+    Generic over the repository implementation (`R`, bound to the
+    `RevisionRepository` Protocol) — same rationale as `UserService[R]`.
+    """
+
+    def __init__(self, repo: R) -> None:
+        self._repo = repo
+
+    @property
+    def repo(self) -> R:
+        return self._repo
+
+    async def create(self, *, jd_text: str, tailored_cv: dict) -> Revision | None:
+        """Persist a tailored CV revision. Returns None on any DB error
+        (caller falls back to the file-glob path) rather than raising.
+
+        Every field is set explicitly (not left to the ORM column
+        `default=`): `SqlAlchemyRevisionRepository` uses `expire_on_commit
+        =False`, so the row `.create()` hands back is never reloaded from
+        the server after INSERT — relying on a server-computed default
+        would leave `.to_domain()` seeing `None` here.
+        """
+        stamp = datetime.now(UTC).strftime("%Y-%m-%d_%H-%M-%S")
+        row = RevisionRow(
+            id=str(uuid.uuid4()),
+            name=f"cv_tailored-{stamp}.json",
+            jd_hash=jd_hash(jd_text),
+            tailored_cv=tailored_cv,
+            promoted=False,
+            created_at=datetime.now(UTC),
+        )
+        try:
+            created = await self._repo.create(revision=row)
+        except Exception:
+            logger.warning(
+                "Failed to persist tailored revision to Postgres", exc_info=True
+            )
+            return None
+        return created.to_domain()
+
+    async def get_by_id(self, revision_id: str) -> Revision | None:
+        try:
+            row = await self._repo.get_by_id(revision_id)
+        except Exception:
+            logger.warning(
+                "Failed to read revision %s from Postgres", revision_id, exc_info=True
+            )
+            return None
+        return row.to_domain() if row else None
+
+    async def list_all(self) -> list[Revision]:
+        try:
+            rows = await self._repo.list_all()
+        except Exception:
+            logger.warning("Failed to list revisions from Postgres", exc_info=True)
+            return []
+        return [row.to_domain() for row in rows]

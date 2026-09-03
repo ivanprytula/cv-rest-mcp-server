@@ -25,7 +25,7 @@ export default function App() {
               }
             >
               <Route index element={<Revisions />} />
-              <Route path="revisions/:name" element={<RevisionPreview />} />
+              <Route path="revisions/:id" element={<RevisionPreview />} />
             </Route>
           </Routes>
         </BrowserRouter>

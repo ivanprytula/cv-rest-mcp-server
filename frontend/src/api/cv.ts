@@ -97,10 +97,10 @@ export function flattenSkills(categories: SkillCategory[]): { category: string; 
   return flat
 }
 
-// `tailored` is a bare cv_tailored-<ts>.json filename (from /api/v1/cv/tailor's
-// saved_to) or the literal 'latest'; omit to fetch the public, unauthenticated
-// live CV. A tailored fetch goes through the operator-only /api/v1/cv (never
-// the public /cv, which has no `tailored` support at all).
+// `tailored` is the revision id (from /api/v1/cv/tailor's saved_to) or the
+// literal 'latest'; omit to fetch the public, unauthenticated live CV. A
+// tailored fetch goes through the operator-only /api/v1/cv (never the
+// public /cv, which has no `tailored` support at all).
 export async function getCv(tailored?: string): Promise<CVData> {
   if (!tailored) return apiJson<CVData>('/cv')
   return apiJson<CVData>(`/api/v1/cv?tailored=${encodeURIComponent(tailored)}`)
