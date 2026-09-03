@@ -30,3 +30,9 @@ variable "app_sa" {
   type        = string
   default     = ""
 }
+
+variable "labels" {
+  description = "GCP resource labels for cost attribution (e.g. { service = \"uploads\", environment = \"production\" })."
+  type        = map(string)
+  default     = {}
+}

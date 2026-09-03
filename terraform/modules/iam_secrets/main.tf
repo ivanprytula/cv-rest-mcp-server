@@ -112,6 +112,7 @@ resource "google_artifact_registry_repository" "cv_images" {
   repository_id = "cv-images"
   format        = "DOCKER"
   description   = "Application images (api-core, api-games, spa-origin)"
+  labels        = var.labels
 }
 
 resource "google_artifact_registry_repository_iam_member" "deployer_cv_images_writer" {

@@ -63,3 +63,9 @@ variable "path_routes" {
   }))
   default = {}
 }
+
+variable "labels" {
+  description = "GCP resource labels for cost attribution (e.g. { service = \"edge-lb\", environment = \"production\" })."
+  type        = map(string)
+  default     = {}
+}

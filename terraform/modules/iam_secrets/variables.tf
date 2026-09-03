@@ -26,3 +26,9 @@ variable "enable_cloud_sql" {
   type        = bool
   default     = false
 }
+
+variable "labels" {
+  description = "GCP resource labels for cost attribution (e.g. { service = \"iam-secrets\", environment = \"production\" })."
+  type        = map(string)
+  default     = {}
+}

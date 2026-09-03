@@ -20,6 +20,7 @@ module "cloud_sql" {
   project               = var.project_id
   region                = var.region
   db_password_secret_id = var.cloud_sql_db_password_secret_id
+  labels                = merge(local.base_labels, { service = "cloud-sql" })
 }
 
 # IAM, service accounts, and secrets (centralized, away from shell scripts).
@@ -40,6 +41,7 @@ module "iam_secrets" {
   jwt_signing_secret_id = var.jwt_signing_secret_id
   api_core_secret_ids   = var.api_core_secret_ids
   enable_cloud_sql      = var.enable_cloud_sql
+  labels                = merge(local.base_labels, { service = "iam-secrets" })
 }
 
 # GitHub Workload Identity Federation for CI/CD (optional)
@@ -62,6 +64,11 @@ module "org_policies" {
 }
 
 locals {
+  # Cost-attribution labels: every module merges its own `service` on top.
+  base_labels = {
+    environment = var.environment
+  }
+
   dns_name = var.dns_name != "" ? var.dns_name : "${var.apex_domain}."
 
   # One NEG backend per routed hostname -> the workload's serverless NEG.
@@ -101,6 +108,7 @@ module "run" {
   memory                = each.value.memory
   # Only api-core talks to Postgres; games/spa-origin never mount the socket.
   cloud_sql_instances = each.key == "api-core" && var.enable_cloud_sql ? [module.cloud_sql[0].connection_name] : []
+  labels              = merge(local.base_labels, { service = each.key })
 }
 
 # HTTPS edge: global IP, managed certs, URL-map host routing, Cloud CDN bucket.
@@ -120,6 +128,8 @@ module "edge_lb" {
 
   # Prefix-route the SPA's static assets to the Cloud CDN bucket.
   path_routes = local.cdn_path_route
+
+  labels = merge(local.base_labels, { service = "edge-lb" })
 }
 
 # Cloud Armor: DDoS/abuse protection for CDN static assets
@@ -143,6 +153,7 @@ module "static_bucket" {
   project      = var.project_id
   location     = var.static_assets.location
   cors_origins = var.static_assets.cors_origins
+  labels       = merge(local.base_labels, { service = "static-bucket" })
 }
 
 # Private upload bucket for user content (avatars/photos) — deny-public, no CDN,
@@ -159,6 +170,7 @@ module "uploads" {
   location       = var.uploads.location
   app_sa         = var.uploads.app_sa
   write_prefixes = var.uploads.write_prefixes
+  labels         = merge(local.base_labels, { service = "uploads" })
 }
 
 # DNS records for apex + subdomains -> the LB IP.
@@ -171,4 +183,5 @@ module "dns" {
   load_balancer_ipv4 = module.edge_lb.ipv4_address
   subdomains         = var.subdomains
   create_zone        = var.create_dns_zone
+  labels             = merge(local.base_labels, { service = "dns" })
 }

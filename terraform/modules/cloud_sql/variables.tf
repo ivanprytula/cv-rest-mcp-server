@@ -54,3 +54,9 @@ variable "db_password_secret_id" {
   description = "Secret Manager secret ID holding the DB user password. Secret + version are created by scripts/deploy-cloud-run.sh bootstrap_secrets(), never in .tfvars/state."
   type        = string
 }
+
+variable "labels" {
+  description = "GCP resource labels for cost attribution (e.g. { service = \"cloud-sql\", environment = \"production\" }). Applied as settings.user_labels — google_sql_database_instance has no top-level labels argument."
+  type        = map(string)
+  default     = {}
+}

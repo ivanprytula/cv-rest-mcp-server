@@ -35,3 +35,9 @@ variable "ttl" {
   type        = number
   default     = 300
 }
+
+variable "labels" {
+  description = "GCP resource labels for cost attribution (e.g. { service = \"dns\", environment = \"production\" })."
+  type        = map(string)
+  default     = {}
+}

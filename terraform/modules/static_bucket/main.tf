@@ -18,6 +18,7 @@ resource "google_storage_bucket" "bucket" {
   location                    = var.location
   force_destroy               = false
   uniform_bucket_level_access = true
+  labels                      = var.labels
 
   versioning {
     enabled = true
@@ -28,6 +29,29 @@ resource "google_storage_bucket" "bucket" {
     method          = ["GET", "HEAD", "OPTIONS"]
     response_header = ["Content-Type", "Cache-Control"]
     max_age_seconds = 3600
+  }
+
+  # This bucket serves the live site via Cloud CDN — objects never fully
+  # expire, only superseded (non-current) versions are pruned, keeping just
+  # enough history for a quick rollback of a bad deploy.
+  lifecycle_rule {
+    condition {
+      num_newer_versions = 3
+    }
+    action {
+      type = "Delete"
+    }
+  }
+
+  # Failed multipart uploads leave billed-but-unusable data behind.
+  lifecycle_rule {
+    condition {
+      age        = 7
+      with_state = "ANY"
+    }
+    action {
+      type = "AbortIncompleteMultipartUpload"
+    }
   }
 }
 
