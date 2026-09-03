@@ -23,7 +23,7 @@ class Revision(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    id: str
+    id: int
     name: str
     created_at: datetime
     jd_hash: str

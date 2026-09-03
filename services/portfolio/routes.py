@@ -152,7 +152,7 @@ async def _load_tailored_revision(
 ) -> dict:
     """Resolve an optional ``?tailored=`` revision selector to a CV dict.
 
-    ``selector`` is the UUID ``id`` returned by ``/api/v1/cv/tailor`` in
+    ``selector`` is the numeric ``id`` returned by ``/api/v1/cv/tailor`` in
     ``saved_to`` (or the literal ``latest``), looked up in Postgres first.
     On any DB error (or a selector predating Postgres — a bare
     ``cv_tailored-<ts>.json`` filename), falls back to the file-glob path
@@ -180,9 +180,10 @@ async def _load_tailored_revision(
         # Legacy filename-shaped selector — never a Postgres id.
         return _load_tailored_revision_from_file(selector, default=default)
 
-    revision = await revision_service.get_by_id(selector)
-    if revision is not None:
-        return revision.tailored_cv
+    if selector.isdigit():
+        revision = await revision_service.get_by_id(int(selector))
+        if revision is not None:
+            return revision.tailored_cv
     return _load_tailored_revision_from_file(selector, default=default)
 
 
@@ -455,7 +456,7 @@ async def tailor_cv_endpoint(
 
     revision = await revision_service.create(jd_text=jd.jd_text, tailored_cv=tailored)
     if revision is not None:
-        return {**tailored, "saved_to": revision.id}
+        return {**tailored, "saved_to": str(revision.id)}
 
     stamp = datetime.now(UTC).strftime("%Y-%m-%d_%H-%M-%S")
     revision_path = settings.cv_tailored_dir / f"cv_tailored-{stamp}.json"
@@ -489,7 +490,7 @@ async def list_tailored_revisions(
         return {
             "revisions": [
                 RevisionSummary(
-                    id=r.id,
+                    id=str(r.id),
                     name=r.name,
                     created_at=r.created_at.isoformat(),
                     size_bytes=len(json.dumps(r.tailored_cv)),

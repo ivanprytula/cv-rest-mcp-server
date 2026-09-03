@@ -123,14 +123,17 @@ class FakeRevisionRepository:
     def __init__(self, *, fail: bool = False):
         self._rows: dict = {}
         self._fail = fail
+        self._next_id = 1
 
     async def create(self, *, revision):
         if self._fail:
             raise RuntimeError("simulated DB failure")
+        revision.id = self._next_id  # simulate Postgres autoincrement
+        self._next_id += 1
         self._rows[revision.id] = revision
         return revision
 
-    async def get_by_id(self, revision_id: str):
+    async def get_by_id(self, revision_id: int):
         if self._fail:
             raise RuntimeError("simulated DB failure")
         return self._rows.get(revision_id)

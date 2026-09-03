@@ -16,7 +16,7 @@ from services.portfolio.revisions.revision_row import RevisionRow
 
 class RevisionRepository(Protocol):
     async def create(self, *, revision: RevisionRow) -> RevisionRow: ...
-    async def get_by_id(self, revision_id: str) -> RevisionRow | None: ...
+    async def get_by_id(self, revision_id: int) -> RevisionRow | None: ...
     async def list_all(self) -> list[RevisionRow]: ...
 
 
@@ -38,7 +38,7 @@ class SqlAlchemyRevisionRepository:
             await session.commit()
         return revision
 
-    async def get_by_id(self, revision_id: str) -> RevisionRow | None:
+    async def get_by_id(self, revision_id: int) -> RevisionRow | None:
         async with self._session_factory() as session:
             return (
                 await session.execute(

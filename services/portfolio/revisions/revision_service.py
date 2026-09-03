@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import uuid
 from datetime import UTC, datetime
 
 from services.portfolio.revisions.revision import Revision
@@ -48,15 +47,17 @@ class RevisionService[R: RevisionRepository]:
         """Persist a tailored CV revision. Returns None on any DB error
         (caller falls back to the file-glob path) rather than raising.
 
-        Every field is set explicitly (not left to the ORM column
-        `default=`): `SqlAlchemyRevisionRepository` uses `expire_on_commit
-        =False`, so the row `.create()` hands back is never reloaded from
-        the server after INSERT — relying on a server-computed default
-        would leave `.to_domain()` seeing `None` here.
+        `promoted`/`created_at` are set explicitly (not left to the ORM
+        column `default=`): `SqlAlchemyRevisionRepository` uses
+        `expire_on_commit=False`, so the row `.create()` hands back is never
+        reloaded from the server after INSERT — relying on a client-side
+        `default=` would leave `.to_domain()` seeing `None` here. `id` is the
+        one exception: it's the autoincrement primary key, which Postgres
+        always returns via `RETURNING` on INSERT regardless of
+        `expire_on_commit`, so it's populated correctly without help.
         """
         stamp = datetime.now(UTC).strftime("%Y-%m-%d_%H-%M-%S")
         row = RevisionRow(
-            id=str(uuid.uuid7()),
             name=f"cv_tailored-{stamp}.json",
             jd_hash=jd_hash(jd_text),
             tailored_cv=tailored_cv,
@@ -72,7 +73,7 @@ class RevisionService[R: RevisionRepository]:
             return None
         return created.to_domain()
 
-    async def get_by_id(self, revision_id: str) -> Revision | None:
+    async def get_by_id(self, revision_id: int) -> Revision | None:
         try:
             row = await self._repo.get_by_id(revision_id)
         except Exception:

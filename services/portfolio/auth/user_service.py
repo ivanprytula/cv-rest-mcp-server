@@ -9,8 +9,6 @@ via `app.dependency_overrides`, no `monkeypatch.setattr`-on-a-module needed.
 
 from __future__ import annotations
 
-import uuid
-
 import bcrypt
 
 from services.portfolio.auth.user import ROLE_ADMIN, PasswordHasher, User
@@ -80,7 +78,6 @@ class UserService[R: UserRepository]:
             return existing.to_domain()
         created = await self._repo.create(
             user=UserRow(
-                id=str(uuid.uuid7()),
                 username=username,
                 email=email,
                 hashed_password=self._hasher.hash(password),
