@@ -162,17 +162,9 @@ class PdfService:
         cached = self._cache_get(key)
         if cached is not None:
             return cached
-
-        html = render_html(
-            cv_json,
-            self.themes[theme].CSS,
-            consent=consent,
-            consent_company=consent_company,
+        return self._render_pdf(
+            key, theme, cv_json, consent=consent, consent_company=consent_company
         )
-        pdf = _generate_pdf_sync(html)
-
-        self._cache_put(key, pdf)
-        return pdf
 
     def generate_cv_pdf(
         self,
