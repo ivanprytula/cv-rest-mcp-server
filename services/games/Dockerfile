@@ -20,6 +20,10 @@ RUN uv sync --no-dev --no-install-project
 
 FROM base AS runtime
 
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y --no-install-recommends \
+        wget \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=builder --chown=65532:65532 /app/.venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONPATH=/app \

@@ -107,8 +107,62 @@ def override_pdf_service(pdf_service):
     app.dependency_overrides[get_pdf_service] = lambda: pdf_service
     app.state.pdf_service = pdf_service
     yield pdf_service
-    app.dependency_overrides.clear()
+    app.dependency_overrides.pop(get_pdf_service, None)
     app.state.pdf_service = None
+
+
+class FakeRevisionRepository:
+    """In-memory `RevisionRepository` for tests that only exercise tailoring/
+    rendering logic, not real Postgres persistence — no testcontainers needed.
+
+    `fail=True` makes every method raise, for exercising `RevisionService`'s
+    degrade-don't-crash path (mirrors a real DB outage) without actually
+    breaking a Postgres connection.
+    """
+
+    def __init__(self, *, fail: bool = False):
+        self._rows: dict = {}
+        self._fail = fail
+        self._next_id = 1
+
+    async def create(self, *, revision):
+        if self._fail:
+            raise RuntimeError("simulated DB failure")
+        revision.id = self._next_id  # simulate Postgres autoincrement
+        self._next_id += 1
+        self._rows[revision.id] = revision
+        return revision
+
+    async def get_by_id(self, revision_id: int):
+        if self._fail:
+            raise RuntimeError("simulated DB failure")
+        return self._rows.get(revision_id)
+
+    async def list_all(self):
+        if self._fail:
+            raise RuntimeError("simulated DB failure")
+        return sorted(self._rows.values(), key=lambda r: r.created_at, reverse=True)
+
+
+@pytest.fixture
+def override_revision_service(request):
+    """A working (or, parametrized with `fail=True`, permanently-failing)
+    in-memory revision service, overriding `get_revision_service` the same
+    way `override_pdf_service` overrides `get_pdf_service`.
+
+    Usage: `@pytest.mark.parametrize("override_revision_service", [{"fail": True}], indirect=True)`
+    for a test that must exercise the file-fallback path.
+    """
+    from services.portfolio.dependencies import get_revision_service
+    from services.portfolio.revisions.revision_service import RevisionService
+
+    fail = getattr(request, "param", {}).get("fail", False)
+    service = RevisionService(FakeRevisionRepository(fail=fail))
+    app.dependency_overrides[get_revision_service] = lambda: service
+    app.state.revision_service = service
+    yield service
+    app.dependency_overrides.pop(get_revision_service, None)
+    app.state.revision_service = None
 
 
 @pytest.fixture
@@ -213,7 +267,8 @@ def tailor_settings(synthetic_baseline_path, tmp_path, monkeypatch):
 def _postgres_container():
     from testcontainers.community.postgres import PostgresContainer
 
-    with PostgresContainer("postgres:16-alpine", driver=None) as container:
+    # Match Cloud SQL's Postgres version (terraform/modules/cloud_sql).
+    with PostgresContainer("postgres:17-alpine", driver=None) as container:
         yield container
 
 
@@ -309,26 +364,41 @@ def auth_settings(synthetic_baseline_path, tmp_path, monkeypatch):
 
 @pytest.fixture
 async def user_service(auth_settings, _fresh_postgres_url, monkeypatch):
-    """A per-test SQLAlchemy-backed user service on an isolated Postgres database.
+    """A per-test SQLAlchemy-backed user + revision service on an isolated
+    Postgres database.
 
-    Builds a fresh repo/service against a throwaway database on the shared
-    testcontainers Postgres instance, migrates it to head via the same
-    Alembic path the app lifespan uses, seeds the first admin
-    (username=`operator`, password=`correct-password`, role=`admin`), and
-    overrides `dependencies.get_user_service` so the auth routes (which take
-    it via `Depends`) hit this isolated store. Matches the `login()` helper's
-    defaults used across the auth tests.
+    Builds one shared engine/session-factory against a throwaway database on
+    the shared testcontainers Postgres instance (mirrors main.py's lifespan —
+    one engine for every repository, not one per repository), migrates it to
+    head via the same Alembic path the app lifespan uses, seeds the first
+    admin (username=`operator`, password=`correct-password`, role=`admin`),
+    and overrides `dependencies.get_user_service`/`get_revision_service` so
+    the routes (which take them via `Depends`) hit these isolated stores.
+    Matches the `login()` helper's defaults used across the auth tests.
+
+    Named `user_service` (not `db_services` or similar) because every
+    existing test/fixture already depends on this exact name for the user
+    store half — revision_service is a same-database sibling bundled in
+    here rather than a second Postgres setup.
     """
     from services.portfolio.auth.user_repository import SqlAlchemyUserRepository
     from services.portfolio.auth.user_service import UserService
+    from services.portfolio.db import build_engine, build_session_factory
     from services.portfolio.db_migrations import upgrade_head
+    from services.portfolio.dependencies import get_revision_service
+    from services.portfolio.revisions.revision_repository import (
+        SqlAlchemyRevisionRepository,
+    )
+    from services.portfolio.revisions.revision_service import RevisionService
     from services.portfolio.settings import settings
-
-    repo = SqlAlchemyUserRepository(_fresh_postgres_url)
-    service = UserService(repo)
 
     await upgrade_head(_fresh_postgres_url.replace("+asyncpg", "+psycopg"))
 
+    engine = build_engine(_fresh_postgres_url)
+    session_factory = build_session_factory(engine)
+
+    repo = SqlAlchemyUserRepository(session_factory)
+    service = UserService(repo)
     await service.seed_first_admin(
         username="operator",
         email="operator@example.com",
@@ -336,13 +406,19 @@ async def user_service(auth_settings, _fresh_postgres_url, monkeypatch):
         role="admin",
     )
 
+    revision_service = RevisionService(SqlAlchemyRevisionRepository(session_factory))
+
     monkeypatch.setattr(settings, "database_url", _fresh_postgres_url)
     app.dependency_overrides[get_user_service] = lambda: service
+    app.dependency_overrides[get_revision_service] = lambda: revision_service
     app.state.user_service = service
+    app.state.revision_service = revision_service
     yield service
     app.dependency_overrides.pop(get_user_service, None)
+    app.dependency_overrides.pop(get_revision_service, None)
     app.state.user_service = None
-    await repo.engine.dispose()
+    app.state.revision_service = None
+    await engine.dispose()
 
 
 @pytest.fixture

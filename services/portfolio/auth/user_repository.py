@@ -11,12 +11,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from services.portfolio.auth.user_row import UserRow
 
@@ -27,19 +22,17 @@ class UserRepository(Protocol):
 
 
 class SqlAlchemyUserRepository:
-    """Async SQLAlchemy user repository (Postgres, `asyncpg`). Engine
-    lifecycle (close) is managed by the app lifespan, not the repo; schema
-    is Alembic-migrated, not derived from the model via `create_all`."""
+    """Async SQLAlchemy user repository (Postgres, `asyncpg`).
 
-    def __init__(self, db_url: str) -> None:
-        self._engine = create_async_engine(db_url, future=True)
-        self._session_factory: async_sessionmaker[AsyncSession] = async_sessionmaker(
-            self._engine, expire_on_commit=False, class_=AsyncSession
-        )
+    Takes a shared `async_sessionmaker` (built once in `main.py`'s lifespan
+    from one app-wide engine — see `services.portfolio.db`), not its own
+    `db_url`/engine: engine lifecycle (open, dispose) is owned by whoever
+    builds it, not by any one repository. Schema is Alembic-migrated, not
+    derived from the model via `create_all`.
+    """
 
-    @property
-    def engine(self) -> AsyncEngine:
-        return self._engine
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
+        self._session_factory = session_factory
 
     async def get_by_username(self, username: str) -> UserRow | None:
         async with self._session_factory() as session:

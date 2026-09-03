@@ -28,11 +28,3 @@ class MeResponse(BaseModel):
     subject: str
     role: str
     scopes: list[str]
-
-
-class RevisionSummary(BaseModel):
-    """One tailored CV revision as listed by GET /api/v1/revisions."""
-
-    name: str
-    created_at: str  # ISO 8601 UTC, derived from the filename timestamp
-    size_bytes: int

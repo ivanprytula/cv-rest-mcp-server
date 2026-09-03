@@ -9,8 +9,6 @@ via `app.dependency_overrides`, no `monkeypatch.setattr`-on-a-module needed.
 
 from __future__ import annotations
 
-import uuid
-
 import bcrypt
 
 from services.portfolio.auth.user import ROLE_ADMIN, PasswordHasher, User
@@ -30,11 +28,10 @@ class UserService[R: UserRepository]:
 
     Generic over the repository implementation (`R`, bound to the
     `UserRepository` Protocol): a caller holding a `UserService[
-    SqlAlchemyUserRepository]` gets `.repo` back as that concrete type (e.g.
-    for lifecycle calls like `.engine.dispose()`) with full static checking,
-    while `UserService[UserRepository]` (or a bare `UserService`) stays
-    correctly abstract wherever only the port matters — no behavior
-    difference, purely a type-checking improvement.
+    SqlAlchemyUserRepository]` gets `.repo` back as that concrete type with
+    full static checking, while `UserService[UserRepository]` (or a bare
+    `UserService`) stays correctly abstract wherever only the port matters —
+    no behavior difference, purely a type-checking improvement.
     """
 
     def __init__(self, repo: R, hasher: PasswordHasher | None = None) -> None:
@@ -81,7 +78,6 @@ class UserService[R: UserRepository]:
             return existing.to_domain()
         created = await self._repo.create(
             user=UserRow(
-                id=str(uuid.uuid4()),
                 username=username,
                 email=email,
                 hashed_password=self._hasher.hash(password),

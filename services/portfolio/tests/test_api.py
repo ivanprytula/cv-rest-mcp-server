@@ -1,8 +1,8 @@
 import json
 import re
-from pathlib import Path
 from unittest.mock import AsyncMock
 
+import pytest
 from fastapi import status
 
 from services.portfolio.main import app
@@ -266,7 +266,9 @@ async def test_cv_pdf_rate_limit_returns_429_on_sixth_request(
     assert statuses[5] == status.HTTP_429_TOO_MANY_REQUESTS
 
 
-async def test_tailor_cv_endpoint(client, override_pdf_service):
+async def test_tailor_cv_endpoint(
+    client, override_pdf_service, override_revision_service
+):
     resp = await client.post(
         "/api/v1/cv/tailor",
         json={"jd_text": "Required: Python, FastAPI"},
@@ -279,7 +281,9 @@ async def test_tailor_cv_endpoint(client, override_pdf_service):
     assert "saved_to" in data
 
 
-async def test_tailor_cv_skills_match_bank_atoms(client, override_pdf_service):
+async def test_tailor_cv_skills_match_bank_atoms(
+    client, override_pdf_service, override_revision_service
+):
     # The synthetic bank's only vouched atom on SYNTHETIC_CV is pytest, so a
     # JD naming it must produce exactly the bank atom under its category_hint.
     resp = await client.post(
@@ -298,7 +302,9 @@ async def test_tailor_cv_skills_match_bank_atoms(client, override_pdf_service):
     assert data["additional_skills"] == []
 
 
-async def test_tailor_cv_no_match_rebuilds_empty_skills(client, override_pdf_service):
+async def test_tailor_cv_no_match_rebuilds_empty_skills(
+    client, override_pdf_service, override_revision_service
+):
     resp = await client.post(
         "/api/v1/cv/tailor",
         content=b"Required: Cobol on a Mainframe",
@@ -311,9 +317,16 @@ async def test_tailor_cv_no_match_rebuilds_empty_skills(client, override_pdf_ser
     assert data["name"] == "Jane Doe"
 
 
-async def test_tailor_cv_writes_revision_file_and_roundtrips(
-    client, override_pdf_service, tmp_path
+@pytest.mark.parametrize("override_revision_service", [{"fail": True}], indirect=True)
+async def test_tailor_cv_falls_back_to_file_on_db_error(
+    client,
+    override_pdf_service,
+    tmp_path,
+    override_revision_service,
 ):
+    """Degrade-don't-crash (ADR-023): a Postgres failure during POST
+    /api/v1/cv/tailor must still write+return a usable revision via the
+    file-glob fallback, never 500 the tailoring endpoint."""
     import json as _json
 
     from services.portfolio.cv_data import validate_cv_payload
@@ -329,10 +342,11 @@ async def test_tailor_cv_writes_revision_file_and_roundtrips(
 
     assert settings.cv_tailored_dir == tmp_path / "tailored"
     saved = data["saved_to"]
-    assert saved.startswith(str(settings.cv_tailored_dir))
     assert "cv_tailored-" in saved and saved.endswith(".json")
+    assert "/" not in saved  # bare filename, matches ?tailored= expectations
 
-    revision = _json.loads(Path(saved).read_text(encoding="utf-8"))
+    revision_path = settings.cv_tailored_dir / saved
+    revision = _json.loads(revision_path.read_text(encoding="utf-8"))
     assert revision["name"] == "Jane Doe"
     assert "saved_to" not in revision
     assert revision["skills"][0]["sub_categories"][0]["items"] == ["pytest"]
@@ -341,7 +355,9 @@ async def test_tailor_cv_writes_revision_file_and_roundtrips(
     assert validated["name"] == "Jane Doe"
 
 
-async def test_tailor_cv_missing_jd_text(client, override_pdf_service):
+async def test_tailor_cv_missing_jd_text(
+    client, override_pdf_service, override_revision_service
+):
     resp = await client.post(
         "/api/v1/cv/tailor",
         content=b"{}",
@@ -352,12 +368,16 @@ async def test_tailor_cv_missing_jd_text(client, override_pdf_service):
     assert "jd_text" in resp.text
 
 
-async def test_tailor_cv_empty_body(client, override_pdf_service):
+async def test_tailor_cv_empty_body(
+    client, override_pdf_service, override_revision_service
+):
     resp = await client.post("/api/v1/cv/tailor", content=b"")
     assert resp.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
 
-async def test_tailor_cv_invalid_json(client, override_pdf_service):
+async def test_tailor_cv_invalid_json(
+    client, override_pdf_service, override_revision_service
+):
     resp = await client.post(
         "/api/v1/cv/tailor",
         content=b"not json",
@@ -366,7 +386,9 @@ async def test_tailor_cv_invalid_json(client, override_pdf_service):
     assert resp.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
 
-async def test_tailor_cv_raw_text_with_newlines(client, override_pdf_service):
+async def test_tailor_cv_raw_text_with_newlines(
+    client, override_pdf_service, override_revision_service
+):
     jd_with_linebreaks = "The Role\n\nYou will take ownership\n- Of the pipeline\n"
     resp = await client.post(
         "/api/v1/cv/tailor",
@@ -380,7 +402,9 @@ async def test_tailor_cv_raw_text_with_newlines(client, override_pdf_service):
 
 
 async def test_tailor_cv_raw_text_sends_invalid_json_as_jd(
-    client, override_pdf_service
+    client,
+    override_pdf_service,
+    override_revision_service,
 ):
     resp = await client.post(
         "/api/v1/cv/tailor",
@@ -391,7 +415,9 @@ async def test_tailor_cv_raw_text_sends_invalid_json_as_jd(
 
 
 async def test_tailor_cv_json_with_literal_newlines_is_422_not_500(
-    client, override_pdf_service
+    client,
+    override_pdf_service,
+    override_revision_service,
 ):
     # Raw LF inside a JSON string is invalid JSON (JSON spec); the endpoint
     # must reject cleanly (422) instead of crashing (500).
@@ -404,7 +430,9 @@ async def test_tailor_cv_json_with_literal_newlines_is_422_not_500(
     assert resp.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
 
-async def test_tailor_cv_pdf_upload(client, override_pdf_service):
+async def test_tailor_cv_pdf_upload(
+    client, override_pdf_service, override_revision_service
+):
     from weasyprint import HTML
 
     pdf_bytes = HTML(
@@ -420,7 +448,9 @@ async def test_tailor_cv_pdf_upload(client, override_pdf_service):
     assert data["name"] == "Jane Doe"
 
 
-async def test_tailor_cv_docx_upload(client, override_pdf_service):
+async def test_tailor_cv_docx_upload(
+    client, override_pdf_service, override_revision_service
+):
     from io import BytesIO
 
     from docx import Document
@@ -443,7 +473,9 @@ async def test_tailor_cv_docx_upload(client, override_pdf_service):
     assert data["name"] == "Jane Doe"
 
 
-async def test_tailor_cv_corrupt_pdf_is_422_not_500(client, override_pdf_service):
+async def test_tailor_cv_corrupt_pdf_is_422_not_500(
+    client, override_pdf_service, override_revision_service
+):
     resp = await client.post(
         "/api/v1/cv/tailor",
         content=b"%PDF not a real pdf",
@@ -453,7 +485,10 @@ async def test_tailor_cv_corrupt_pdf_is_422_not_500(client, override_pdf_service
 
 
 async def test_tailor_cv_oversize_body_is_413(
-    client, override_pdf_service, monkeypatch
+    client,
+    override_pdf_service,
+    monkeypatch,
+    override_revision_service,
 ):
     monkeypatch.setattr("services.portfolio.jd_input.MAX_JD_PAYLOAD_BYTES", 100)
     resp = await client.post(
@@ -466,7 +501,10 @@ async def test_tailor_cv_oversize_body_is_413(
 
 
 async def test_tailor_cv_internal_error_is_500_sanitized(
-    client, override_pdf_service, monkeypatch
+    client,
+    override_pdf_service,
+    monkeypatch,
+    override_revision_service,
 ):
     def boom(jd_text, baseline_atoms, live_cv, *, title=""):
         raise RuntimeError("secret internal detail")
@@ -483,7 +521,10 @@ async def test_tailor_cv_internal_error_is_500_sanitized(
 
 
 async def test_tailored_cv_json_returns_revision(
-    client, override_pdf_service, synthetic_cv
+    client,
+    override_pdf_service,
+    synthetic_cv,
+    override_revision_service,
 ):
     from services.portfolio.settings import settings
 
@@ -502,7 +543,10 @@ async def test_tailored_cv_json_returns_revision(
 
 
 async def test_tailored_html_renders_revision(
-    client, override_pdf_service, synthetic_cv
+    client,
+    override_pdf_service,
+    synthetic_cv,
+    override_revision_service,
 ):
     from services.portfolio.settings import settings
 
@@ -524,7 +568,9 @@ async def test_tailored_html_renders_revision(
     assert "Tailored Jane" not in live.text
 
 
-async def test_tailored_pdf_uses_revision(client, override_pdf_service, synthetic_cv):
+async def test_tailored_pdf_uses_revision(
+    client, override_pdf_service, synthetic_cv, override_revision_service
+):
     # The operator-only /api/v1/cv/pdf is the sole way to download a tailored PDF.
     from services.portfolio.settings import settings
 
@@ -547,7 +593,10 @@ async def test_tailored_pdf_uses_revision(client, override_pdf_service, syntheti
 
 
 async def test_tailored_revision_rejects_non_basename_paths(
-    client, override_pdf_service, tmp_path
+    client,
+    override_pdf_service,
+    tmp_path,
+    override_revision_service,
 ):
     for selector in ("../cv.json", "sub/cv_tailored-1.json", "/etc/passwd", "nope"):
         resp = await client.get(f"/cv/html?tailored={selector}")

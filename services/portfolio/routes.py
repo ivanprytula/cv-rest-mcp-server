@@ -9,13 +9,15 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 
 from services.portfolio.constants import API_V1_PREFIX, CONFIG_DIR
-from services.portfolio.dependencies import get_pdf_service
+from services.portfolio.dependencies import get_pdf_service, get_revision_service
 from services.portfolio.jd_input import PayloadTooLargeError, parse_jd_input
 from services.portfolio.matching.baseline import BaselineError, get_baseline
 from services.portfolio.matching.tailor import tailor_cv
 from services.portfolio.pdf_generator import ThemeNotFoundError
 from services.portfolio.rate_limiter import limiter, limits
 from services.portfolio.renderer import render_html, render_template
+from services.portfolio.revisions.revision_service import RevisionService
+from services.portfolio.schemas.tailor import RevisionSummary
 from services.portfolio.settings import settings
 
 
@@ -24,6 +26,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 get_pdf_service_dep = Depends(get_pdf_service)
+get_revision_service_dep = Depends(get_revision_service)
 
 MCP_CLIENTS_PATH = CONFIG_DIR / "mcp_clients.json"
 
@@ -110,20 +113,13 @@ def _consent_kwargs(company: str, consent: bool) -> dict:
     return {"consent": consent or bool(clean), "consent_company": clean}
 
 
-def _load_tailored_revision(name: str, *, default: dict) -> dict:
-    """Resolve an optional ``?tailored=`` revision selector to a CV dict.
+def _load_tailored_revision_from_file(name: str, *, default: dict) -> dict:
+    """File-glob fallback: resolve a bare ``cv_tailored-<ts>.json`` filename
+    (the pre-Postgres selector shape) or ``latest`` from ``settings.cv_tailored_dir``.
 
-    ``name`` is the bare ``cv_tailored-<UTC timestamp>.json`` filename
-    returned by ``/api/v1/cv/tailor`` in ``saved_to``, or the literal ``latest`` for
-    the most recently written revision (timestamps sort chronologically).
-    Only ``.json`` files directly inside ``settings.cv_tailored_dir`` are
-    accepted — path separators and everything else is rejected — and an empty
-    ``name`` falls back to the live CV.
+    Only ``.json`` files directly inside that directory are accepted — path
+    separators and everything else is rejected.
     """
-    if not name:
-        return default
-
-    name = name.strip().strip("/\\")
     if name == "latest":
         candidates = sorted(settings.cv_tailored_dir.glob("cv_tailored-*.json"))
         if not candidates:
@@ -151,13 +147,54 @@ def _load_tailored_revision(name: str, *, default: dict) -> dict:
     return revision
 
 
-def _revision_summary(path: Path) -> dict:
+async def _load_tailored_revision(
+    selector: str, *, default: dict, revision_service: RevisionService | None
+) -> dict:
+    """Resolve an optional ``?tailored=`` revision selector to a CV dict.
+
+    ``selector`` is the numeric ``id`` returned by ``/api/v1/cv/tailor`` in
+    ``saved_to`` (or the literal ``latest``), looked up in Postgres first.
+    On any DB error (or a selector predating Postgres — a bare
+    ``cv_tailored-<ts>.json`` filename), falls back to the file-glob path
+    (degrade-don't-crash, mirrors ``CvSource``). An empty ``selector`` falls
+    back to the live CV without ever touching ``revision_service`` — the
+    public, untailored surface (most traffic on ``/cv/html`` etc.) must stay
+    independent of whether the revision service initialized at all.
+    ``revision_service`` is only ``None`` if the app never wired it up
+    (503, matching every other uninitialized-service case in this app).
+    """
+    if not selector:
+        return default
+    if revision_service is None:
+        raise HTTPException(status_code=503, detail="Revision service not initialized")
+
+    selector = selector.strip().strip("/\\")
+
+    if selector == "latest":
+        revisions = await revision_service.list_all()
+        if revisions:
+            return revisions[0].tailored_cv
+        return _load_tailored_revision_from_file(selector, default=default)
+
+    if selector.endswith(".json"):
+        # Legacy filename-shaped selector — never a Postgres id.
+        return _load_tailored_revision_from_file(selector, default=default)
+
+    if selector.isdigit():
+        revision = await revision_service.get_by_id(int(selector))
+        if revision is not None:
+            return revision.tailored_cv
+    return _load_tailored_revision_from_file(selector, default=default)
+
+
+def _revision_summary_from_file(path: Path) -> RevisionSummary:
     stat = path.stat()
-    return {
-        "name": path.name,
-        "created_at": datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat(),
-        "size_bytes": stat.st_size,
-    }
+    return RevisionSummary(
+        id=path.name,
+        name=path.name,
+        created_at=datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat(),
+        size_bytes=stat.st_size,
+    )
 
 
 def _client_mcp_configs(mcp_url: str) -> list[dict]:
@@ -216,15 +253,20 @@ async def get_cv_json(request: Request, pdf_service=get_pdf_service_dep):
 @router.get(f"{API_V1_PREFIX}/cv", tags=["CV"], responses=_responses(404, 429, 503))
 @limits("30/minute", "600/hour")
 async def get_tailored_cv_json(
-    request: Request, tailored: str = "latest", pdf_service=get_pdf_service_dep
+    request: Request,
+    tailored: str = "latest",
+    pdf_service=get_pdf_service_dep,
+    revision_service=get_revision_service_dep,
 ):
     """Return a tailored revision's raw CV JSON (operator console only).
 
     Requires a JWT with the `cv:read` scope (see JWTAuthMiddleware). `tailored`
-    is a bare `cv_tailored-<ts>.json` filename from /api/v1/cv/tailor's
-    `saved_to`, or the literal `latest`. Powers the SPA's revision-preview page.
+    is the revision `id` from /api/v1/cv/tailor's `saved_to`, or the literal
+    `latest`. Powers the SPA's revision-preview page.
     """
-    return _load_tailored_revision(tailored, default=pdf_service.cv_data)
+    return await _load_tailored_revision(
+        tailored, default=pdf_service.cv_data, revision_service=revision_service
+    )
 
 
 @router.get("/cv/html", tags=["CV"], responses=_responses(404, 429, 503))
@@ -241,12 +283,20 @@ async def get_cv_html(
 
     With `consent` (or a non-empty `company`), appends the GDPR/RODO
     recruitment-consent clause, naming the company when provided. With
-    `tailored` (a bare `cv_tailored-<ts>.json` filename from /api/v1/cv/tailor's
-    `saved_to`, or `latest`), renders that revision instead of the live CV.
+    `tailored` (the revision `id` from /api/v1/cv/tailor's `saved_to`, or
+    `latest`), renders that revision instead of the live CV.
+
+    `tailored` is the only path that touches the revision service — most
+    traffic here is the public, untailored page, which must stay reachable
+    even if the revision service never initialized (no Depends() on it).
     """
     if theme not in pdf_service.themes:
         raise ThemeNotFoundError(theme)
-    cv = _load_tailored_revision(tailored, default=pdf_service.cv_data)
+    cv = await _load_tailored_revision(
+        tailored,
+        default=pdf_service.cv_data,
+        revision_service=getattr(request.app.state, "revision_service", None),
+    )
     html = render_html(
         cv,
         pdf_service.themes[theme].CSS,
@@ -328,15 +378,18 @@ async def get_tailored_cv_pdf(
     consent: bool = False,
     tailored: str = "latest",
     pdf_service=get_pdf_service_dep,
+    revision_service=get_revision_service_dep,
 ):
     """Generate a tailored CV revision as a themed PDF (operator console only).
 
     Requires a JWT with the `cv:read` scope (see JWTAuthMiddleware). `tailored`
-    is a bare `cv_tailored-<ts>.json` filename from /api/v1/cv/tailor's
-    `saved_to`, or the literal `latest`. Powers the SPA's revision-preview
-    download button; the public `/cv/pdf` never accepts a `tailored` selector.
+    is the revision `id` from /api/v1/cv/tailor's `saved_to`, or the literal
+    `latest`. Powers the SPA's revision-preview download button; the public
+    `/cv/pdf` never accepts a `tailored` selector.
     """
-    cv = _load_tailored_revision(tailored, default=pdf_service.cv_data)
+    cv = await _load_tailored_revision(
+        tailored, default=pdf_service.cv_data, revision_service=revision_service
+    )
     return await _render_cv_pdf_response(cv, theme, company, consent, pdf_service)
 
 
@@ -349,6 +402,7 @@ async def get_tailored_cv_pdf(
 async def tailor_cv_endpoint(
     request: Request,
     pdf_service=get_pdf_service_dep,
+    revision_service=get_revision_service_dep,
 ):
     """Match a job description against the skill bank and emit a tailored CV revision.
 
@@ -366,9 +420,9 @@ async def tailor_cv_endpoint(
     live CV: JD qualifiers ("Solid experience with X" → expert) filter bank
     atoms by level, and the trust policy drops any matched atom the operator
     has not vouched for on the live CV. The response is the tailored CV plus
-    ``saved_to`` pointing at the freshly written
-    ``cv_tailored-<UTC-timestamp>.json`` revision in ``settings.cv_tailored_dir``
-    (default ``data/tailored/``) the operator may promote.
+    ``saved_to`` — the new revision's `id` (Postgres-backed; degrades to a
+    ``cv_tailored-<UTC-timestamp>.json`` file path in ``settings.cv_tailored_dir``
+    on any DB error) the operator may promote.
 
     ``?title=`` overrides the CV title; a ``title`` inside the JSON payload
     wins for the JSON format.
@@ -400,6 +454,10 @@ async def tailor_cv_endpoint(
         logger.exception("CV tailoring failed")
         raise HTTPException(status_code=500, detail="CV tailoring failed") from None
 
+    revision = await revision_service.create(jd_text=jd.jd_text, tailored_cv=tailored)
+    if revision is not None:
+        return {**tailored, "saved_to": str(revision.id)}
+
     stamp = datetime.now(UTC).strftime("%Y-%m-%d_%H-%M-%S")
     revision_path = settings.cv_tailored_dir / f"cv_tailored-{stamp}.json"
     try:
@@ -412,19 +470,38 @@ async def tailor_cv_endpoint(
         logger.exception("Failed to write tailored CV revision")
         raise HTTPException(status_code=500, detail="CV tailoring failed") from exc
 
-    return {**tailored, "saved_to": str(revision_path)}
+    return {**tailored, "saved_to": revision_path.name}
 
 
 @router.get(f"{API_V1_PREFIX}/revisions", tags=["CV"], responses=_responses(429, 503))
 @limits("30/minute", "300/hour")
-async def list_tailored_revisions(request: Request):
+async def list_tailored_revisions(
+    request: Request, revision_service=get_revision_service_dep
+):
     """List tailored CV revisions written by ``/api/v1/cv/tailor``, newest first.
 
     Requires the `cv:read` scope (same as the `?tailored=` revision reads).
+    Reads Postgres first; falls back to the file-glob path (degrade-don't-
+    crash) only when Postgres has no rows yet — a DB error surfaces as an
+    empty list from `RevisionService.list_all()`, same as "no rows".
     """
-    revisions = sorted(
+    revisions = await revision_service.list_all()
+    if revisions:
+        return {
+            "revisions": [
+                RevisionSummary(
+                    id=str(r.id),
+                    name=r.name,
+                    created_at=r.created_at.isoformat(),
+                    size_bytes=len(json.dumps(r.tailored_cv)),
+                )
+                for r in revisions
+            ]
+        }
+
+    files = sorted(
         settings.cv_tailored_dir.glob("cv_tailored-*.json"),
         key=lambda p: p.stat().st_mtime,
         reverse=True,
     )
-    return {"revisions": [_revision_summary(p) for p in revisions]}
+    return {"revisions": [_revision_summary_from_file(p) for p in files]}

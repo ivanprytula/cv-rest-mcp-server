@@ -1,6 +1,7 @@
 import { apiJson } from './client'
 
 export interface RevisionSummary {
+  id: string
   name: string
   created_at: string
   size_bytes: number

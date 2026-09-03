@@ -11,6 +11,49 @@ dev-local:
 dev-spa:
     cd frontend && npm run dev -- --port 5173
 
+# One-shot: ensure a local Postgres (matching Cloud SQL's version) is up for
+# native uvicorn/debugpy runs — NOT part of `docker compose up` (that's the
+# all-in-containers watch setup, see `compose.yml`). Idempotent: no-op if
+# the container already exists and is running.
+dev-db:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ "$(docker inspect -f '{{{{.State.Running}}' cv-postgres-dev 2>/dev/null)" = "true" ]; then
+        echo "cv-postgres-dev already running"
+    elif docker inspect cv-postgres-dev >/dev/null 2>&1; then
+        docker start cv-postgres-dev
+    else
+        docker run -d --name cv-postgres-dev \
+            -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=cv_portfolio \
+            -p 5432:5432 postgres:17-alpine
+    fi
+    until docker exec cv-postgres-dev pg_isready -U postgres >/dev/null 2>&1; do sleep 0.5; done
+    just db-migrate
+
+# Cloud SQL Auth Proxy: tunnels the REAL Cloud SQL instance to localhost:5433
+# for pgAdmin/DBeaver/psql — authenticates via your `gcloud auth
+# application-default login` credentials, no service account key needed.
+# Own port (5433, not 5432) so it never conflicts with `just dev-db`'s local
+# Postgres — both can run at once.
+# --user matches your host UID: the proxy image's baked-in UID (65532) can't
+# read ~/.config/gcloud's 600-permission credentials file otherwise.
+# Foreground/blocking (Ctrl-C to stop) — run it in its own terminal.
+# Requires GCP_PROJECT set. Password: `gcloud secrets versions access latest
+# --secret=cv-db-password --project=$GCP_PROJECT`.
+db-proxy:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    : "${GCP_PROJECT:?Set GCP_PROJECT to your GCP project id}"
+    connection_name="$(gcloud sql instances describe cv-postgres \
+        --project "$GCP_PROJECT" --format 'value(connectionName)')"
+    docker run --rm -it \
+        --user "$(id -u):$(id -g)" \
+        -v "$HOME/.config/gcloud:/config/gcloud:ro" \
+        -e GOOGLE_APPLICATION_CREDENTIALS=/config/gcloud/application_default_credentials.json \
+        -p 5433:5432 \
+        gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.14.0 \
+        "$connection_name" --address 0.0.0.0
+
 # Apply all pending Alembic migrations to DATABASE_URL (needs a running Postgres).
 db-migrate:
     uv run alembic -c services/portfolio/alembic.ini upgrade head

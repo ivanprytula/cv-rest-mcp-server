@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     # import here would be circular. The type hint doesn't need the runtime
     # class, only static analysis does.
     from services.portfolio.auth.user_service import UserService
+    from services.portfolio.revisions.revision_service import RevisionService
 
 
 async def get_pdf_service(request: Request) -> PdfService:
@@ -31,5 +32,15 @@ async def get_user_service(request: Request) -> UserService:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="User service not initialized",
+        )
+    return service
+
+
+async def get_revision_service(request: Request) -> RevisionService:
+    service = request.app.state.revision_service
+    if service is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Revision service not initialized",
         )
     return service

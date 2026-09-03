@@ -89,7 +89,7 @@ Rendered CV page (HTML, no toolbar chrome).
 | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Content-Type | `text/html; charset=utf-8`                                                                                                                                                                                                                |
 | Query params | `theme` (default `classic`), `company`, `consent`, `tailored`                                                                                                                                                                             |
-| Params notes | `company` is whitespace-collapsed and **truncated to 120 chars**; non-empty `company` implies `consent=true`. `tailored` (requires auth) is a bare `cv_tailored-<ts>.json` revision name or `latest` — see "Reading a tailored revision". |
+| Params notes | `company` is whitespace-collapsed and **truncated to 120 chars**; non-empty `company` implies `consent=true`. `tailored` (requires auth) is a revision `id` (from `saved_to`) or `latest` — see "Reading a tailored revision". |
 | Success      | `200` — themed CV HTML                                                                                                                                                                                                                    |
 | Errors       | `401`, `404` (unknown theme / revision), `422` (bad query params), `429`, `503`                                                                                                                                                           |
 
@@ -158,9 +158,11 @@ the live CV: JD qualifiers ("Solid experience with X" → expert, "5+ years of X
 years-based) filter atoms by level; the **trust policy** drops any matched atom
 that is not already vouched for on the live CV; survivors are grouped by the
 atom's `category_hint` (priority-ordered within a group). A JD that matches
-nothing yields **empty** skill sections. Every success also writes a
-`cv_tailored-<UTC-ts>.json` revision into `CV_TAILORED_DIR` and returns its path
-as `saved_to`. Non-skill sections (experience, summary, education, …) pass
+nothing yields **empty** skill sections. Every success also persists a
+revision to Postgres and returns its `id` as `saved_to` — on any DB error,
+falls back to writing a `cv_tailored-<UTC-ts>.json` file into
+`CV_TAILORED_DIR` instead (degrade-don't-crash; `saved_to` is then that bare
+filename). Non-skill sections (experience, summary, education, …) pass
 through unchanged.
 
 **Request body** — raw bytes, max **10 MB** (`text/plain` in Swagger; any
@@ -188,7 +190,7 @@ payload wins for the JSON format).
 <!-- markdownlint-disable MD060 -->
 | Item    | Value                                                                                                                                                                 |
 | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Success | `200` — tailored CV object: same shape as `/cv` with `skills`/`additional_skills` rebuilt from matched bank atoms, plus `saved_to` (`cv_tailored-<UTC-ts>.json` path) |
+| Success | `200` — tailored CV object: same shape as `/cv` with `skills`/`additional_skills` rebuilt from matched bank atoms, plus `saved_to` (revision `id`, or a `cv_tailored-<UTC-ts>.json` filename on DB fallback) |
 | Errors  | `401`, `413`, `422`, `429`, `500`, `503` (see below)                                                                                                                  |
 <!-- markdownlint-enable MD060 -->
 
@@ -238,22 +240,29 @@ curl -s -X POST "https://<origin>/api/v1/cv/tailor" \
 Tailored revisions written by `POST /api/v1/cv/tailor` can be fetched by
 passing `tailored`:
 
-- `tailored=<name>` — the bare `cv_tailored-<UTC-ts>.json` filename returned in
-  `saved_to` (e.g. `cv_tailored-2026-08-29_10-00-00.json`), or
-- `tailored=latest` — the most recently written revision.
+- `tailored=<id>` — the revision `id` returned in `saved_to`, looked up in
+  Postgres, or
+- `tailored=latest` — the most recently written revision (Postgres first,
+  falling back to the newest `cv_tailored-*.json` file if Postgres has no
+  rows), or
+- `tailored=<name>.json` — a bare filename from a DB-fallback `saved_to`
+  (a legacy selector shape; never a Postgres id).
 
 Because revisions can contain JD-derived content, these calls are gated by the
 same JWT flow as the mutation route (`cv:read` scope, Authorization header
 only — there is no `?token=` fallback). This works on `GET /api/v1/cv` (JSON),
 `GET /cv/html` (rendered HTML), and `GET /api/v1/cv/pdf` (PDF download); the
 public `/cv`, `/cv/preview`, and `/cv/pdf` never accept `tailored` at all.
-Tailored previewing lives only in the operator SPA (`/revisions/:name`).
-`tailored` only names a `.json` file directly inside the revisions dir — path
-separators are rejected with `404`, so no traversal beyond that dir is
-possible.
+Tailored previewing lives only in the operator SPA (`/revisions/:id`).
+A `.json`-suffixed selector only names a file directly inside the revisions
+dir — path separators are rejected with `404`, so no traversal beyond that
+dir is possible.
 
 ```bash
 curl -s "https://<origin>/api/v1/cv?tailored=latest" \
+  -H "authorization: Bearer $TOKEN" | jq '.name, .title'
+
+curl -s "https://<origin>/api/v1/cv?tailored=<revision-id>" \
   -H "authorization: Bearer $TOKEN" | jq '.name, .title'
 
 curl -s "https://<origin>/api/v1/cv/pdf?theme=minimal&tailored=latest" \
@@ -363,13 +372,14 @@ Return the operator identity + scopes from a valid access token.
 
 ### `GET /api/v1/revisions`
 
-List tailored CV revisions written by `POST /api/v1/cv/tailor`, newest first. Backs
-the SPA's revisions screen.
+List tailored CV revisions written by `POST /api/v1/cv/tailor`, newest first
+(Postgres first, falling back to the file-glob path only when Postgres has
+no rows). Backs the SPA's revisions screen.
 
-| Item        | Value                                                                      |
+| Item        | Value                                                                     |
 | ----------- | -------------------------------------------------------------------------- |
 | Credentials | `Authorization: Bearer <access_token>` with the `cv:read` scope (required) |
-| Success     | `{"revisions": [{"name": ..., "created_at": ..., "size_bytes": ...}]}`     |
+| Success     | `{"revisions": [{"id": ..., "name": ..., "created_at": ..., "size_bytes": ...}]}` |
 | Errors      | `401` (missing/invalid token), `403` (token lacks `cv:read`), `429`, `503` |
 
 Each revision object is `{"name": "cv_tailored-<ts>.json", "created_at":
