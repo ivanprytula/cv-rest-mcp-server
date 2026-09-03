@@ -29,19 +29,16 @@ def jd_hash(jd_text: str) -> str:
     return hashlib.sha256(jd_text.encode("utf-8")).hexdigest()
 
 
-class RevisionService[R: RevisionRepository]:
+class RevisionService:
     """Application service orchestrating the revision repo.
 
-    Generic over the repository implementation (`R`, bound to the
-    `RevisionRepository` Protocol) — same rationale as `UserService[R]`.
+    Depends on the `RevisionRepository` Protocol, not a concrete
+    implementation — the seam for swapping in a different repo without
+    touching callers.
     """
 
-    def __init__(self, repo: R) -> None:
+    def __init__(self, repo: RevisionRepository) -> None:
         self._repo = repo
-
-    @property
-    def repo(self) -> R:
-        return self._repo
 
     async def create(self, *, jd_text: str, tailored_cv: dict) -> Revision | None:
         """Persist a tailored CV revision. Returns None on any DB error

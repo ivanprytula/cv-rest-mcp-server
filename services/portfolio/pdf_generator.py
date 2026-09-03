@@ -5,6 +5,7 @@ import json
 import threading
 from collections import OrderedDict
 from concurrent.futures import Future, ThreadPoolExecutor
+from types import ModuleType
 from typing import NoReturn
 
 from fastapi import HTTPException
@@ -17,7 +18,6 @@ from services.portfolio.constants import (
 )
 from services.portfolio.cv_source import CvSource
 from services.portfolio.renderer import render_html
-from services.portfolio.themes import Theme
 
 
 class _URLFetchDeniedError(Exception):
@@ -28,13 +28,14 @@ def _deny_all_url_fetcher(url: str) -> NoReturn:
     raise _URLFetchDeniedError(f"URL fetching is disabled: {url}")
 
 
-def load_themes() -> dict[str, Theme]:
+def load_themes() -> dict[str, ModuleType]:
     """Load all theme modules from the themes directory.
 
-    "original" is the flagship look and is always listed first;
-    remaining themes are ordered alphabetically for determinism.
+    Each module must export a `CSS: str` stylesheet string. "original" is
+    the flagship look and is always listed first; remaining themes are
+    ordered alphabetically for determinism.
     """
-    discovered: dict[str, Theme] = {}
+    discovered: dict[str, ModuleType] = {}
     for path in THEMES_DIR.iterdir():
         if path.suffix == ".py" and path.name != "__init__.py":
             module_name = path.stem
@@ -42,10 +43,9 @@ def load_themes() -> dict[str, Theme]:
                 module = importlib.import_module(
                     f"services.portfolio.themes.{module_name}"
                 )
-                if not isinstance(module, Theme):
+                if not hasattr(module, "CSS"):
                     raise TypeError(
-                        f"Theme '{module_name}' does not satisfy the Theme protocol: "
-                        f"missing required 'CSS: str' attribute"
+                        f"Theme '{module_name}' is missing required 'CSS: str' attribute"
                     )
                 discovered[module_name] = module
             except Exception as exc:
@@ -88,7 +88,7 @@ class PdfService:
         self._max_entries = max_entries
         self._lock = threading.Lock()
         self._executor = ThreadPoolExecutor(max_workers=max_workers)
-        self.themes: dict[str, Theme] = load_themes()
+        self.themes: dict[str, ModuleType] = load_themes()
         self._cache: OrderedDict[tuple[str, str], bytes] = OrderedDict()
         self._inflight: dict[tuple[str, str], Future[bytes]] = {}
 
@@ -162,17 +162,9 @@ class PdfService:
         cached = self._cache_get(key)
         if cached is not None:
             return cached
-
-        html = render_html(
-            cv_json,
-            self.themes[theme].CSS,
-            consent=consent,
-            consent_company=consent_company,
+        return self._render_pdf(
+            key, theme, cv_json, consent=consent, consent_company=consent_company
         )
-        pdf = _generate_pdf_sync(html)
-
-        self._cache_put(key, pdf)
-        return pdf
 
     def generate_cv_pdf(
         self,

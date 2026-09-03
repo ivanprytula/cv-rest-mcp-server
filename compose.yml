@@ -78,8 +78,7 @@ services:
   spa:
     build:
       context: .
-      dockerfile: frontend/Dockerfile
-      target: dev
+      dockerfile: frontend/Dockerfile.spa
     ports:
       - "5173:5173"
     develop:
