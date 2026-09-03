@@ -23,24 +23,18 @@ from services.portfolio.settings import settings
 _DUMMY_HASH: str = bcrypt.hashpw(b"timing-sentinel", bcrypt.gensalt()).decode("utf-8")
 
 
-class UserService[R: UserRepository]:
+class UserService:
     """Application service orchestrating repo + hasher.
 
-    Generic over the repository implementation (`R`, bound to the
-    `UserRepository` Protocol): a caller holding a `UserService[
-    SqlAlchemyUserRepository]` gets `.repo` back as that concrete type with
-    full static checking, while `UserService[UserRepository]` (or a bare
-    `UserService`) stays correctly abstract wherever only the port matters —
-    no behavior difference, purely a type-checking improvement.
+    Depends on the `UserRepository` Protocol, not a concrete implementation
+    — the seam for swapping in a different repo without touching callers.
     """
 
-    def __init__(self, repo: R, hasher: PasswordHasher | None = None) -> None:
+    def __init__(
+        self, repo: UserRepository, hasher: PasswordHasher | None = None
+    ) -> None:
         self._repo = repo
         self._hasher = hasher or PasswordHasher()
-
-    @property
-    def repo(self) -> R:
-        return self._repo
 
     async def get_by_username(self, username: str) -> User | None:
         row = await self._repo.get_by_username(username)
