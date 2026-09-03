@@ -80,7 +80,15 @@ class SecurityHeadersMiddleware:
             await self.app(scope, receive, send)
             return
 
-        await self.app(scope, receive, send)
+        async def send_with_headers(message) -> None:
+            if message["type"] == "http.response.start":
+                existing = {k.lower() for k, _ in message.get("headers", [])}
+                message.setdefault("headers", []).extend(
+                    h for h in self._HEADERS if h[0] not in existing
+                )
+            await send(message)
+
+        await self.app(scope, receive, send_with_headers)
 
 
 # ── FastAPI app ────────────────────────────────────────────────────────────────

@@ -46,3 +46,11 @@ async def test_culture_bingo_page_randomizes_cell_order(client):
     order1 = ids_pattern.findall(resp1.text)
     order2 = ids_pattern.findall(resp2.text)
     assert order1 != order2
+
+
+async def test_security_headers_present(client):
+    resp = await client.get("/health")
+    assert resp.headers["x-content-type-options"] == "nosniff"
+    assert resp.headers["x-frame-options"] == "SAMEORIGIN"
+    assert resp.headers["referrer-policy"] == "strict-origin-when-cross-origin"
+    assert "content-security-policy" in resp.headers
