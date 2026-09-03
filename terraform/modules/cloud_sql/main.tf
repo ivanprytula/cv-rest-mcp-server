@@ -12,20 +12,30 @@ resource "google_sql_database_instance" "instance" {
 
   settings {
     tier              = var.tier
+    edition           = "ENTERPRISE"
     availability_type = "ZONAL"
     disk_autoresize   = true
     disk_size         = var.disk_size_gb
+
+    # GCP API-level delete guard — separate from the resource-level
+    # deletion_protection below, which only blocks `terraform destroy`.
+    # This one blocks the delete button/API call itself, from any tool.
+    deletion_protection_enabled = var.deletion_protection
 
     backup_configuration {
       enabled = var.backups_enabled
     }
 
-    # No public IP: the only connection path is the Cloud Run Auth Proxy
-    # socket mount (modules/cloud_run_service), which reaches the instance
-    # over Google's private backbone regardless of ipv4_enabled. ssl_mode
-    # is belt-and-suspenders — the proxy already encrypts the tunnel.
+    # Cloud SQL requires at least one of public IP / private IP / PSC
+    # enabled — there's no VPC peering or PSC config in this project (that's
+    # the whole point of using the Auth Proxy over a VPC connector), so
+    # public IP is the only option here. The Cloud Run Auth Proxy socket
+    # mount (modules/cloud_run_service) still authenticates via the Cloud
+    # SQL Admin API + mutual TLS rather than a raw open port; no inbound
+    # rule exposes 5432 to the open internet. ssl_mode enforces encryption
+    # on any connection regardless of transport.
     ip_configuration {
-      ipv4_enabled = false
+      ipv4_enabled = true
       # ssl_mode superseded require_ssl in provider hashicorp/google ~> 6.0;
       # ENCRYPTED_ONLY is the current equivalent of require_ssl = true.
       ssl_mode = "ENCRYPTED_ONLY"
