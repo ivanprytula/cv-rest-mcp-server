@@ -65,6 +65,12 @@ module "org_policies" {
 
 locals {
   # Cost-attribution labels: every module merges its own `service` on top.
+  #
+  # Changing this needs a LOCAL `terraform apply` as Owner. It fans out to
+  # cloud_sql, edge_lb's global address and iam_secrets' Artifact Registry
+  # repo, and the CI deployer SA has read-only access to all three (see
+  # modules/iam_secrets) — CI would 403. Label writes are set-once, so a
+  # steady-state plan stays clean and CI never needs the permission.
   base_labels = {
     environment = var.environment
   }
