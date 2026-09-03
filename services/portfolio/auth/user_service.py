@@ -80,7 +80,7 @@ class UserService[R: UserRepository]:
             return existing.to_domain()
         created = await self._repo.create(
             user=UserRow(
-                id=str(uuid.uuid4()),
+                id=str(uuid.uuid7()),
                 username=username,
                 email=email,
                 hashed_password=self._hasher.hash(password),

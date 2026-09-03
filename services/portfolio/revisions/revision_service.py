@@ -56,7 +56,7 @@ class RevisionService[R: RevisionRepository]:
         """
         stamp = datetime.now(UTC).strftime("%Y-%m-%d_%H-%M-%S")
         row = RevisionRow(
-            id=str(uuid.uuid4()),
+            id=str(uuid.uuid7()),
             name=f"cv_tailored-{stamp}.json",
             jd_hash=jd_hash(jd_text),
             tailored_cv=tailored_cv,
