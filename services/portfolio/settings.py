@@ -56,7 +56,12 @@ class Settings(BaseSettings):
     cors_origin: str = "https://app.example.com"
     jwt_signing_key: str = ""
     refresh_token_pepper: str = ""
-    user_db_path: Path = Path("data/cv_auth.db")
+    # Postgres connection string, asyncpg driver (e.g.
+    # "postgresql+asyncpg://user:pass@host:5432/dbname"). No default: the
+    # app lifespan (main.py) and Alembic (db_migrations.py, alembic/env.py)
+    # both fail fast if this is unset rather than silently running against
+    # nothing.
+    database_url: str = ""
     first_admin_username: str = "operator"
     first_admin_email: str = "operator@example.com"
     first_admin_password: str = ""
@@ -67,6 +72,20 @@ class Settings(BaseSettings):
     # Skill bank (CV tailor + MCP match_jd)
     cv_baseline_path: Path = Path("data/cv_baseline.json")
     cv_tailored_dir: Path = Path("data/tailored")
+
+    @property
+    def sync_database_url(self) -> str:
+        """`database_url` with the async driver swapped for a sync one.
+
+        Alembic runs migrations synchronously, so it (and anything else that
+        needs a blocking connection, e.g. a throwaway per-test database setup)
+        uses this instead of the asyncpg URL the running app connects with.
+        Single place this swap happens — nothing else should string-replace
+        `database_url` by hand.
+        """
+        return self.database_url.replace(
+            "postgresql+asyncpg://", "postgresql+psycopg://"
+        )
 
 
 settings = Settings()

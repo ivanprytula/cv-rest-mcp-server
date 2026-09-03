@@ -19,6 +19,13 @@ os.environ.update(
         "CLIENT_IP_HEADER": "",
         "CV_DATA_PATH": "data/cv.example.json",
         "CV_DATA_GCS_URI": "",
+        # Placeholder only: settings.database_url has no default (fail-fast
+        # by design, ADR-023), so importing services.portfolio.main below
+        # would crash at collection time without SOME value here. The
+        # `user_service` fixture always swaps in a real per-test database
+        # before any test actually touches the store; nothing ever connects
+        # to this placeholder.
+        "DATABASE_URL": "postgresql+asyncpg://unconfigured/unconfigured",
     }
 )
 os.environ.pop("ALLOWED_IPS_FILE", None)
@@ -26,7 +33,7 @@ os.environ.pop("BLOCKED_IPS_FILE", None)
 
 from services.portfolio.constants import PDF_CACHE_MAX_ENTRIES, PDF_EXECUTOR_MAX_WORKERS
 from services.portfolio.cv_source import CvSource
-from services.portfolio.dependencies import get_pdf_service
+from services.portfolio.dependencies import get_pdf_service, get_user_service
 from services.portfolio.main import app
 from services.portfolio.pdf_generator import PdfService
 
@@ -195,7 +202,78 @@ def tailor_settings(synthetic_baseline_path, tmp_path, monkeypatch):
     yield
 
 
-# --- Phase 1c auth fixtures -------------------------------------------------
+# --- Phase 1c/2 auth fixtures ------------------------------------------------
+
+
+# One Postgres container for the whole test session (starting a container per
+# test would be far too slow); each test gets its own throwaway database on
+# it via `_fresh_postgres_url` below, mirroring the old "fresh tmp SQLite file
+# per test" isolation model with "fresh database" instead of "fresh file".
+@pytest.fixture(scope="session")
+def _postgres_container():
+    from testcontainers.community.postgres import PostgresContainer
+
+    with PostgresContainer("postgres:16-alpine", driver=None) as container:
+        yield container
+
+
+@pytest.fixture
+def _make_fresh_postgres_url(_postgres_container):
+    """Factory fixture: each call creates a NEW throwaway database on the
+    session's container and returns its asyncpg URL. A plain (non-factory)
+    fixture would be cached per test and hand back the SAME database to
+    every fixture/test-body reference within one test — some tests
+    deliberately need two independent databases (e.g. one seeded via the
+    `user_service` fixture, one empty built directly in the test body), so
+    this must be callable more than once per test.
+
+    Connects to the container's default admin database only to issue
+    CREATE/DROP DATABASE; each returned URL points at its own new database.
+    """
+    import uuid
+
+    import psycopg
+    from psycopg import sql
+    from sqlalchemy.engine import make_url
+
+    admin_url = make_url(_postgres_container.get_connection_url())
+    created: list[str] = []
+
+    def _make() -> str:
+        db_name = f"test_{uuid.uuid4().hex}"
+        with psycopg.connect(
+            host=admin_url.host,
+            port=admin_url.port,
+            user=admin_url.username,
+            password=admin_url.password,
+            dbname=admin_url.database,
+            autocommit=True,
+        ) as conn:
+            conn.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(db_name)))
+        created.append(db_name)
+        fresh_url = admin_url.set(database=db_name, drivername="postgresql+asyncpg")
+        return fresh_url.render_as_string(hide_password=False)
+
+    yield _make
+
+    with psycopg.connect(
+        host=admin_url.host,
+        port=admin_url.port,
+        user=admin_url.username,
+        password=admin_url.password,
+        dbname=admin_url.database,
+        autocommit=True,
+    ) as conn:
+        for db_name in created:
+            conn.execute(
+                sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(db_name))
+            )
+
+
+@pytest.fixture
+def _fresh_postgres_url(_make_fresh_postgres_url):
+    """Convenience: a single fresh database URL for tests that only need one."""
+    return _make_fresh_postgres_url()
 
 
 @pytest.fixture
@@ -230,31 +308,26 @@ def auth_settings(synthetic_baseline_path, tmp_path, monkeypatch):
 
 
 @pytest.fixture
-async def user_service(auth_settings, tmp_path, monkeypatch):
-    """A per-test SQLAlchemy-backed user service on an isolated temp DB.
+async def user_service(auth_settings, _fresh_postgres_url, monkeypatch):
+    """A per-test SQLAlchemy-backed user service on an isolated Postgres database.
 
-    Builds a fresh repo/service, creates the schema, seeds the first admin
-    (username=`operator`, password=`correct-password`, role=`admin`), and swaps
-    it into `app.auth.user_store.user_service` so the auth routes (which look it
-    up dynamically) hit this isolated store. Matches the `login()` helper's
+    Builds a fresh repo/service against a throwaway database on the shared
+    testcontainers Postgres instance, migrates it to head via the same
+    Alembic path the app lifespan uses, seeds the first admin
+    (username=`operator`, password=`correct-password`, role=`admin`), and
+    overrides `dependencies.get_user_service` so the auth routes (which take
+    it via `Depends`) hit this isolated store. Matches the `login()` helper's
     defaults used across the auth tests.
     """
-    from services.portfolio.auth import user_store as user_store_module
-    from services.portfolio.auth.user_store import (
-        Base,
-        UserRepository,
-        UserService,
-        sqlite_url_for,
-    )
+    from services.portfolio.auth.user_repository import SqlAlchemyUserRepository
+    from services.portfolio.auth.user_service import UserService
+    from services.portfolio.db_migrations import upgrade_head
     from services.portfolio.settings import settings
 
-    db_path = tmp_path / "auth_test.db"
-    repo = UserRepository(sqlite_url_for(db_path))
+    repo = SqlAlchemyUserRepository(_fresh_postgres_url)
     service = UserService(repo)
 
-    # Initialize schema (moved from service to lifecycle in main.py).
-    async with repo.engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    await upgrade_head(_fresh_postgres_url.replace("+asyncpg", "+psycopg"))
 
     await service.seed_first_admin(
         username="operator",
@@ -263,9 +336,12 @@ async def user_service(auth_settings, tmp_path, monkeypatch):
         role="admin",
     )
 
-    monkeypatch.setattr(settings, "user_db_path", db_path)
-    monkeypatch.setattr(user_store_module, "user_service", service)
+    monkeypatch.setattr(settings, "database_url", _fresh_postgres_url)
+    app.dependency_overrides[get_user_service] = lambda: service
+    app.state.user_service = service
     yield service
+    app.dependency_overrides.pop(get_user_service, None)
+    app.state.user_service = None
     await repo.engine.dispose()
 
 

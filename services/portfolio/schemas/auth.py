@@ -4,11 +4,10 @@ from pydantic import BaseModel
 
 
 class LoginRequest(BaseModel):
-    """Classic login body: username + password.
+    """Classic login body: username + password (ADR-022, ADR-023).
 
-    Interim slice (ADR-022): a single user (`operator`) is accepted; the
-    username is validated against the same constant used as the token subject.
-    Phase 2 replaces this with a user-lookup against the DB-backed user store.
+    Looked up against the Postgres-backed user store
+    (`services.portfolio.auth.user_service.UserService`).
     """
 
     username: str

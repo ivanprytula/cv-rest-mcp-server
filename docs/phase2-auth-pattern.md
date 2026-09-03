@@ -1,8 +1,11 @@
-# Phase 2 Auth Pattern — DB-backed users (async SQLAlchemy + aiosqlite)
+# Phase 2 Auth Pattern — DB-backed users (async SQLAlchemy + Postgres)
 
-> Status: **built** as Phase 1d (ADR-022) and live in `app/auth/user_store.py`.
-> The seam is unchanged from the ADR-022 forward path, and Patterns are adapted
-> from the [FastAPI full-stack template](https://github.com/fastapi/full-stack-fastapi-template)
+> Status: **built** as Phase 1d (ADR-022), now split by layer across
+> `app/auth/user.py` (domain), `user_row.py` (ORM), `user_repository.py`
+> (port + adapter), and `user_service.py` (application); the Postgres +
+> Alembic swap this doc anticipated has landed (ADR-023). The seam is
+> unchanged from the ADR-022 forward path, and patterns are adapted from the
+> [FastAPI full-stack template](https://github.com/fastapi/full-stack-fastapi-template)
 > (MIT).
 >
 > The goal, restated from ADR-022: keep the swap **local and reversible** — token
@@ -21,17 +24,17 @@ existing seams and `/me` already speak `sub = username`; email is additive.
 
 - **Domain** — `User` entity (identity + roles, `scopes` derived from roles).
 - **Persistence port** — `UserRepository` (ABC) with an async SQLAlchemy
-  implementation on `aiosqlite` for the interim. The repo returns a raw `UserRow`
+  implementation on Postgres (`asyncpg`). The repo returns a raw `UserRow`
   (which carries `hashed_password`); the domain `User` / `UserRow.to_domain()`
-  is what routes see. Phase-2 Postgres is a new `UserRepository` impl (asyncpg)
-  behind the same ABC — domain and service stay put.
+  is what routes see. Schema is Alembic-migrated (`alembic/`), not derived
+  from the model via `create_all`.
 - **Application service** — `UserService.authenticate()` / `seed_first_admin()`
   orchestrate repo + hasher (the template's `crud.authenticate`, async-native).
-- **12-factor** — all config via env in `settings`: `user_db_path`,
+- **12-factor** — all config via env in `settings`: `database_url`,
   `first_admin_username/email/password(_file)`.
 
 ```python
-# app/auth/user_store.py (abridged, real code)
+# app/auth/user.py + user_service.py (abridged, illustrative)
 import uuid
 from datetime import UTC, datetime
 
@@ -104,11 +107,12 @@ async def seed_first_admin(self, *, username, email, password, roles) -> User | 
 
 ## Wiring into the seams (no token/middleware change)
 
-1. **Login gate** (`app/auth/routes.py` `token`): `user = await _user_service()
-   .authenticate(body.username, body.password)`; `None` → `401 Invalid
-   credentials` (same generic message + timing hygiene). The service is looked up
-   through the module (`from app.auth import user_store as m; m.user_service`)
-   so tests can swap it.
+1. **Login gate** (`app/auth/routes.py` `token`): `user = await
+   user_service.authenticate(body.username, body.password)`; `None` → `401
+   Invalid credentials` (same generic message + timing hygiene).
+   `user_service` arrives via FastAPI `Depends(get_user_service)`
+   (`app.state.user_service`, set once in the app lifespan) so tests swap it
+   with `app.dependency_overrides`, not module-patching.
 2. **Subject + scopes**: `sign_access_token(user.username, user.scopes)` (roles
    `admin` → `cv:read cv:manage` via `User.scopes`).
 3. **Refresh**: unchanged — the family already records its owning subject, so
@@ -119,10 +123,12 @@ async def seed_first_admin(self, *, username, email, password, roles) -> User | 
 ## Tests
 
 Tests get an isolated store per test: the `user_service` fixture builds a
-`SqlAlchemyUserRepository` on a `tmp_path` DB, seeds the first admin
-(`operator` / `correct-password` / role `admin`), and monkeypatches
-`app.auth.user_store.user_service`. Login/refresh/me tests then flow through the
-seeded store; `:memory:` engines cover the unconfigured (fail-closed) path.
+`SqlAlchemyUserRepository` on a throwaway Postgres database (testcontainers),
+seeds the first admin (`operator` / `correct-password` / role `admin`), and
+overrides `dependencies.get_user_service` via `app.dependency_overrides`.
+Login/refresh/me tests then flow through the seeded store; a handful of
+inline tests cover the unconfigured (fail-closed) path against their own
+throwaway database.
 
 ## What is deliberately NOT copied from the template
 

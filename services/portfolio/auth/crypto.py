@@ -9,7 +9,7 @@ validate a token is given the same shared secret — no PEM key management. The
 cost (any validator could also forge) is acceptable because the fleet is
 operator-owned and trusted. Refresh tokens are random opaque strings hashed at
 rest (SHA-256 + pepper); login password verification lives in
-`app/auth/user_store.py` (bcrypt, constant-time per compare).
+`app/auth/user_service.py` (bcrypt, constant-time per compare).
 
 Everything here is fail-closed: an empty signing secret raises rather than
 silently weakening auth.

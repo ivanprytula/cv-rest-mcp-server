@@ -23,10 +23,10 @@ from services.portfolio.auth import (
     JWTAuthMiddleware,
     auth_router,
 )
-from services.portfolio.auth.user_store import (
-    Base,
+from services.portfolio.auth.user_repository import SqlAlchemyUserRepository
+from services.portfolio.auth.user_service import (
+    UserService,
     seed_first_admin_from_settings,
-    user_service,
 )
 from services.portfolio.constants import (
     API_V1_PREFIX,
@@ -36,6 +36,7 @@ from services.portfolio.constants import (
     TEMPLATE_DIR,
 )
 from services.portfolio.cv_source import build_cv_source_from_settings
+from services.portfolio.db_migrations import upgrade_head
 from services.portfolio.failban import register_violation_from_request
 from services.portfolio.guard_middleware import GuardMiddleware
 from services.portfolio.mcp_limits import (
@@ -289,16 +290,21 @@ async def lifespan(app):
     )
     app.state.pdf_service = pdf_service
 
-    # Auth user store: initialize engine schema + idempotently seed the first admin.
-    # Routes reach the same singleton via app/auth/user_store.py.
-    async with user_service._repo.engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    # Auth user store: run Alembic migrations up to head, then idempotently
+    # seed the first admin. Routes reach this via FastAPI's Depends
+    # (dependencies.get_user_service), same pattern as pdf_service above.
+    # Schema is migration-managed (ADR-023), not derived from the current
+    # model state via create_all.
+    await upgrade_head(settings.sync_database_url)
+    user_repo = SqlAlchemyUserRepository(settings.database_url)
+    user_service = UserService(user_repo)
+    app.state.user_service = user_service
     await seed_first_admin_from_settings(user_service)
 
     async with mcp_app.lifespan(app):
         yield
 
-    await user_service._repo.engine.dispose()
+    await user_repo.engine.dispose()
     pdf_service._executor.shutdown(wait=False)
 
 
