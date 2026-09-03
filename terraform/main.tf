@@ -22,10 +22,18 @@ module "cloud_sql" {
   db_password_secret_id = var.cloud_sql_db_password_secret_id
 }
 
-# IAM, service accounts, and secrets (centralized, away from shell scripts)
+# IAM, service accounts, and secrets (centralized, away from shell scripts).
+# No module-level depends_on on gcp_apis: the APIs this module's resources
+# actually need (iam, secretmanager, artifactregistry, cloudresourcemanager)
+# are already enabled from prior applies, and a blanket module-wide
+# depends_on forces even unrelated reads (data.google_project.current) to
+# wait on every resource gcp_apis manages — including ones with nothing to
+# do with IAM — which spuriously forces replacement of resources whose
+# member/value is computed from that data source whenever gcp_apis gains a
+# new resource (e.g. sqladmin in this PR triggered a false "must be
+# replaced" on the cloud_build_* bindings).
 module "iam_secrets" {
-  depends_on = [module.gcp_apis]
-  source     = "./modules/iam_secrets"
+  source = "./modules/iam_secrets"
 
   project               = var.project_id
   region                = var.region
