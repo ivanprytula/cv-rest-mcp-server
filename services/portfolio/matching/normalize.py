@@ -48,6 +48,11 @@ def normalize_jd_text(raw: str) -> str:
         once.
     """
     text = unicodedata.normalize("NFKC", raw)
+    # Unify line endings first: `splitlines()` below breaks on \r, \v, \f and
+    # U+2028 too, but the bullet regex's `^` only follows \n. Without this the
+    # first pass converts those separators and a second pass would strip
+    # bullets the first one missed — i.e. not idempotent.
+    text = "\n".join(text.splitlines())
     text = _HYPHEN_LINEBREAK.sub(r"\1\2", text)
     text = _ZERO_WIDTH.sub("", text)
     # NFKC leaves NBSP (U+00A0) alone; it must become a real space.

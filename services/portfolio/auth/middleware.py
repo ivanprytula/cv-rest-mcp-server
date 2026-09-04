@@ -56,7 +56,7 @@ _LOGOUT_PATH = f"{API_V1_PREFIX}/auth/logout"
 # header-only Bearer auth now — nothing embeds a tailored view in an iframe,
 # so there is no `?token=` fallback anywhere. The mutation route lives under
 # API_V1_PREFIX, so _is_protected's `/api/v1/*` branch already covers it — this
-# constant is only needed by _is_tailor_mutation for the admin-role check.
+# constant is only needed by _ADMIN_ROUTES for the admin-role check.
 _TAILOR_MUTATION_METHOD = "POST"
 _TAILOR_MUTATION_PATH = f"{API_V1_PREFIX}/cv/tailor"
 
@@ -69,6 +69,21 @@ _REVISIONS_LIST_PATH = f"{API_V1_PREFIX}/revisions"
 # branch already gates them).
 _READ_SCOPED_PATH = "/cv/html"
 _READ_SCOPED_API_PATHS = {f"{API_V1_PREFIX}/cv", f"{API_V1_PREFIX}/cv/pdf"}
+
+# Read-scoped GET *subtrees*. Exact-path matching cannot express a route with
+# a path parameter (`/gaps/postings/{id}`), so these are prefix-matched.
+_READ_SCOPED_API_PREFIXES = (f"{API_V1_PREFIX}/gaps",)
+
+# (method, path) pairs requiring the admin role. Mutations of operator content
+# live here; a set so adding the next one is data, not a code change.
+_ADMIN_ROUTES = {
+    (_TAILOR_MUTATION_METHOD, _TAILOR_MUTATION_PATH),
+    ("POST", f"{API_V1_PREFIX}/gaps"),
+}
+
+# Admin-gated POST subtrees, for mutations whose route carries a path
+# parameter (`/gaps/postings/{id}/analyze`) and so cannot be matched exactly.
+_ADMIN_POST_PREFIXES = (f"{API_V1_PREFIX}/gaps/postings",)
 
 _SCOPE_READ = "cv:read"
 
@@ -201,21 +216,25 @@ class JWTAuthMiddleware:
         await self.app(scope, receive, send)
 
     @staticmethod
-    def _is_tailor_mutation(scope: Scope) -> bool:
-        return (
-            scope.get("method") == _TAILOR_MUTATION_METHOD
-            and scope.get("path") == _TAILOR_MUTATION_PATH
+    def _requires_admin(scope: Scope) -> bool:
+        method, path = scope.get("method"), scope.get("path", "")
+        if (method, path) in _ADMIN_ROUTES:
+            return True
+        return method == "POST" and any(
+            path.startswith(f"{prefix}/") for prefix in _ADMIN_POST_PREFIXES
         )
 
     @staticmethod
-    def _requires_admin(scope: Scope) -> bool:
-        return JWTAuthMiddleware._is_tailor_mutation(scope)
-
-    @staticmethod
     def _is_read_scoped_api_path(scope: Scope) -> bool:
-        return scope.get("method") == "GET" and scope.get("path") in (
-            _REVISIONS_LIST_PATH,
-            *_READ_SCOPED_API_PATHS,
+        if scope.get("method") != "GET":
+            return False
+        path = scope.get("path", "")
+        if path in (_REVISIONS_LIST_PATH, *_READ_SCOPED_API_PATHS):
+            return True
+        # Prefix match for subtrees whose routes carry path parameters.
+        return any(
+            path == prefix or path.startswith(f"{prefix}/")
+            for prefix in _READ_SCOPED_API_PREFIXES
         )
 
     @staticmethod

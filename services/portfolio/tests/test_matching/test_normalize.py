@@ -17,6 +17,10 @@ class TestSplitWordRepair:
     def test_preserves_genuine_hyphenated_terms(self):
         assert "end-to-end" in normalize_jd_text("end-to-end testing")
 
+    def test_rejoins_across_windows_line_endings(self):
+        # PDFs exported on Windows split with \r\n.
+        assert normalize_jd_text("Kuber-\r\nnetes") == "Kubernetes"
+
 
 class TestInvisibleCharacters:
     def test_non_breaking_space_becomes_plain_space(self):

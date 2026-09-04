@@ -81,7 +81,8 @@ def load_baseline(path: Path, key: str = "skills") -> list[dict[str, Any]]:
         path: The skill bank file.
         key: Which top-level list to read — ``"skills"`` (the active atoms) or
             ``"deferred"`` (the operator's parking lot). Both share the atom
-            schema, so both validate identically.
+            schema, so both validate identically. ``"skills"`` must be present
+            and non-empty; any other list may be absent, yielding ``[]``.
 
     Raises :class:`BaselineError` on any schema violation — a broken bank
     aborts a /api/v1/cv/tailor call loudly rather than silently emitting an empty
@@ -99,7 +100,11 @@ def load_baseline(path: Path, key: str = "skills") -> list[dict[str, Any]]:
             f"Skill bank must be a JSON object, got {type(raw).__name__}"
         )
     entries = raw.get(key)
-    if not isinstance(entries, list) or not entries:
+    # `skills` is the matching source and must exist; `deferred` is the
+    # operator's parking lot, and an empty or absent one is a valid bank.
+    if entries is None and key != "skills":
+        return []
+    if not isinstance(entries, list) or (not entries and key == "skills"):
         raise BaselineError(f"Skill bank {path} must have a non-empty {key!r} list")
 
     atoms = [_validate_atom(atom) for atom in entries]
