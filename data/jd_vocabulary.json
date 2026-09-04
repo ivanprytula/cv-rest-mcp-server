@@ -1,0 +1,1662 @@
+{
+  "_schema_version": 1,
+  "_design_notes": [
+    "JD-side vocabulary: terms a job description may demand, independent of",
+    "whether the operator has the skill. Seeded from the skill bank's atoms",
+    "(skills + deferred); grow it by promoting terms from the unrecognised-",
+    "token report, a few per JD, by hand.",
+    "group_id reuses the bank's vocabulary so roadmap grouping is consistent."
+  ],
+  "terms": [
+    {
+      "term": "ADRs",
+      "group_id": "collab-docs",
+      "aliases": [
+        "architecture decision records",
+        "decision record"
+      ]
+    },
+    {
+      "term": "aiogram",
+      "group_id": "python-frameworks",
+      "aliases": [
+        "aiogram bot"
+      ]
+    },
+    {
+      "term": "Alembic",
+      "group_id": "python-frameworks",
+      "aliases": [
+        "alembic migrations",
+        "alembic"
+      ]
+    },
+    {
+      "term": "algorithms",
+      "group_id": "python-core",
+      "aliases": [
+        "algorithmic problem solving",
+        "data structures and algorithms"
+      ]
+    },
+    {
+      "term": "Angular",
+      "group_id": "frontend-basics",
+      "aliases": [
+        "angular js",
+        "angular.js"
+      ]
+    },
+    {
+      "term": "Ansible",
+      "group_id": "containers",
+      "aliases": [
+        "ansible automation"
+      ]
+    },
+    {
+      "term": "Apache Spark",
+      "group_id": "data-engineering",
+      "aliases": [
+        "PySpark",
+        "pyspark",
+        "spark"
+      ]
+    },
+    {
+      "term": "API security",
+      "group_id": "api-rest",
+      "aliases": [
+        "OAuth2",
+        "JWT",
+        "RBAC",
+        "Casbin",
+        "IP allowlists",
+        "rate limiting"
+      ]
+    },
+    {
+      "term": "API versioning",
+      "group_id": "api-rest",
+      "aliases": [
+        "api version",
+        "versioning API"
+      ]
+    },
+    {
+      "term": "API/setup docs",
+      "group_id": "collab-docs",
+      "aliases": [
+        "api docs",
+        "setup docs",
+        "documentation"
+      ]
+    },
+    {
+      "term": "Artifact Registry",
+      "group_id": "cloud-gcp",
+      "aliases": [
+        "gcp artifact registry",
+        "gar"
+      ]
+    },
+    {
+      "term": "async SQLAlchemy",
+      "group_id": "python-async",
+      "aliases": [
+        "sqlalchemy async",
+        "sqlalchemy 2.0 async"
+      ]
+    },
+    {
+      "term": "asyncio",
+      "group_id": "python-async",
+      "aliases": [
+        "async/await",
+        "asyncio python"
+      ]
+    },
+    {
+      "term": "AWS",
+      "group_id": "cloud-aws",
+      "aliases": [
+        "aws cloud",
+        "amazon web services"
+      ]
+    },
+    {
+      "term": "AWS autoscaling",
+      "group_id": "cloud-aws",
+      "aliases": [
+        "aws autoscaling groups",
+        "asg"
+      ]
+    },
+    {
+      "term": "AWS CLI",
+      "group_id": "cloud-aws",
+      "aliases": [
+        "awscli",
+        "aws command line"
+      ]
+    },
+    {
+      "term": "Azure",
+      "group_id": "cloud-gcp",
+      "aliases": [
+        "microsoft azure",
+        "azure cloud"
+      ]
+    },
+    {
+      "term": "bandit",
+      "group_id": "python-quality",
+      "aliases": [
+        "bandit security"
+      ]
+    },
+    {
+      "term": "bash",
+      "group_id": "os-linux",
+      "aliases": [
+        "bash scripting",
+        "shell scripting",
+        "bash script"
+      ]
+    },
+    {
+      "term": "BeautifulSoup",
+      "group_id": "web-scraping",
+      "aliases": [
+        "bs4",
+        "beautifulsoup4",
+        "beautiful soup"
+      ]
+    },
+    {
+      "term": "behave",
+      "group_id": "testing",
+      "aliases": [
+        "behave bdd"
+      ]
+    },
+    {
+      "term": "BigQuery",
+      "group_id": "datastores-cache",
+      "aliases": [
+        "GCP BigQuery",
+        "gcp bigquery",
+        "google bigquery"
+      ]
+    },
+    {
+      "term": "Bitbucket",
+      "group_id": "collab-docs",
+      "aliases": [
+        "bitbucket pipelines",
+        "atlassian bitbucket"
+      ]
+    },
+    {
+      "term": "Bootstrap",
+      "group_id": "frontend-basics",
+      "aliases": [
+        "bootstrap css",
+        "bootstrap 5"
+      ]
+    },
+    {
+      "term": "boto3",
+      "group_id": "cloud-aws",
+      "aliases": [
+        "boto3 python",
+        "aws sdk python"
+      ]
+    },
+    {
+      "term": "Burp Suite",
+      "group_id": "auth-security",
+      "aliases": [
+        "burp"
+      ]
+    },
+    {
+      "term": "Casbin",
+      "group_id": "auth-security",
+      "aliases": [
+        "ABAC",
+        "ACL",
+        "casbin authz"
+      ]
+    },
+    {
+      "term": "Cassandra",
+      "group_id": "databases-nosql",
+      "aliases": [
+        "apache cassandra"
+      ]
+    },
+    {
+      "term": "Celery",
+      "group_id": "python-frameworks",
+      "aliases": [
+        "celery beat",
+        "celery worker"
+      ]
+    },
+    {
+      "term": "Celery Beat",
+      "group_id": "messaging",
+      "aliases": [
+        "celery beat scheduler"
+      ]
+    },
+    {
+      "term": "Chef",
+      "group_id": "containers",
+      "aliases": [
+        "chef infra"
+      ]
+    },
+    {
+      "term": "CI/CD pipelines",
+      "group_id": "devops-ci",
+      "aliases": [
+        "ci/cd",
+        "continuous integration",
+        "continuous delivery",
+        "ci cd"
+      ]
+    },
+    {
+      "term": "CircleCI",
+      "group_id": "devops-ci",
+      "aliases": [
+        "circle ci",
+        "circleci.com"
+      ]
+    },
+    {
+      "term": "Claude Code",
+      "group_id": "ai-coding",
+      "aliases": [
+        "claude-code",
+        "claude code cli"
+      ]
+    },
+    {
+      "term": "Cloud Build",
+      "group_id": "cloud-gcp",
+      "aliases": [
+        "gcp cloud build"
+      ]
+    },
+    {
+      "term": "Cloud Run",
+      "group_id": "cloud-gcp",
+      "aliases": [
+        "gcp cloud run",
+        "google cloud run"
+      ]
+    },
+    {
+      "term": "code reviews",
+      "group_id": "collab-docs",
+      "aliases": [
+        "code review",
+        "PR review"
+      ]
+    },
+    {
+      "term": "Codex",
+      "group_id": "ai-coding",
+      "aliases": [
+        "openai codex",
+        "codex cli"
+      ]
+    },
+    {
+      "term": "Confluence",
+      "group_id": "collab-docs",
+      "aliases": [
+        "atlassian confluence"
+      ]
+    },
+    {
+      "term": "connection pooling",
+      "group_id": "databases-sql",
+      "aliases": [
+        "SQLAlchemy pool",
+        "pgbouncer",
+        "pool tuning"
+      ]
+    },
+    {
+      "term": "coverage",
+      "group_id": "testing",
+      "aliases": [
+        "pytest-cov",
+        "code coverage",
+        "coverage.py"
+      ]
+    },
+    {
+      "term": "cross-cultural teams",
+      "group_id": "collab-docs",
+      "aliases": [
+        "international teams",
+        "distributed teams"
+      ]
+    },
+    {
+      "term": "cross-functional collaboration",
+      "group_id": "collab-docs",
+      "aliases": [
+        "cross-functional work",
+        "XFN"
+      ]
+    },
+    {
+      "term": "cryptography",
+      "group_id": "auth-security",
+      "aliases": [
+        "pyca cryptography",
+        "pyca"
+      ]
+    },
+    {
+      "term": "CSS/XPath selectors",
+      "group_id": "web-scraping",
+      "aliases": [
+        "xpath",
+        "css selectors",
+        "xpath selectors"
+      ]
+    },
+    {
+      "term": "CSS3",
+      "group_id": "frontend-basics",
+      "aliases": [
+        "CSS",
+        "cascading style sheets"
+      ]
+    },
+    {
+      "term": "CSV/XLSX validation",
+      "group_id": "data-engineering",
+      "aliases": [
+        "csv validation",
+        "xlsx validation",
+        "data validation"
+      ]
+    },
+    {
+      "term": "Cursor",
+      "group_id": "ai-coding",
+      "aliases": [
+        "cursor ide",
+        "cursor editor"
+      ]
+    },
+    {
+      "term": "D2",
+      "group_id": "collab-docs",
+      "aliases": [
+        "d2 diagram",
+        "d2lang"
+      ]
+    },
+    {
+      "term": "Dask",
+      "group_id": "data-engineering",
+      "aliases": [
+        "dask python"
+      ]
+    },
+    {
+      "term": "Datadog",
+      "group_id": "observability",
+      "aliases": [
+        "datadog apm",
+        "datadog monitoring"
+      ]
+    },
+    {
+      "term": "design patterns",
+      "group_id": "python-core",
+      "aliases": [
+        "GoF patterns",
+        "SOLID"
+      ]
+    },
+    {
+      "term": "Discord",
+      "group_id": "collab-docs",
+      "aliases": [
+        "discord chat"
+      ]
+    },
+    {
+      "term": "Django",
+      "group_id": "python-frameworks",
+      "aliases": [
+        "django"
+      ]
+    },
+    {
+      "term": "Django REST Framework",
+      "group_id": "python-frameworks",
+      "aliases": [
+        "DRF",
+        "django-rest-framework"
+      ]
+    },
+    {
+      "term": "Docker",
+      "group_id": "containers",
+      "aliases": [
+        "docker container",
+        "dockerfile",
+        "docker image"
+      ]
+    },
+    {
+      "term": "Docker Compose",
+      "group_id": "containers",
+      "aliases": [
+        "docker-compose",
+        "compose file",
+        "docker compose v2"
+      ]
+    },
+    {
+      "term": "Docker Swarm",
+      "group_id": "containers",
+      "aliases": [
+        "swarm mode"
+      ]
+    },
+    {
+      "term": "dynamic bans",
+      "group_id": "auth-security",
+      "aliases": [
+        "failban",
+        "fail2ban-lite",
+        "rate-limit ban"
+      ]
+    },
+    {
+      "term": "EBS",
+      "group_id": "cloud-aws",
+      "aliases": [
+        "aws ebs",
+        "elastic block store"
+      ]
+    },
+    {
+      "term": "EC2",
+      "group_id": "cloud-aws",
+      "aliases": [
+        "aws ec2",
+        "elastic compute cloud"
+      ]
+    },
+    {
+      "term": "ELK",
+      "group_id": "observability",
+      "aliases": [
+        "elasticsearch",
+        "logstash",
+        "kibana"
+      ]
+    },
+    {
+      "term": "ethical scraping",
+      "group_id": "web-scraping",
+      "aliases": [
+        "scraping ethics",
+        "robots.txt"
+      ]
+    },
+    {
+      "term": "EXPLAIN ANALYZE",
+      "group_id": "databases-sql",
+      "aliases": [
+        "explain analyze postgres",
+        "query plan analysis"
+      ]
+    },
+    {
+      "term": "FastAPI",
+      "group_id": "python-frameworks",
+      "aliases": [
+        "fast-api",
+        "fast api",
+        "fastapi"
+      ]
+    },
+    {
+      "term": "FastMCP",
+      "group_id": "fastapi-mcp",
+      "aliases": [
+        "MCP",
+        "Model Context Protocol",
+        "fastmcp python"
+      ]
+    },
+    {
+      "term": "Figma",
+      "group_id": "frontend-basics",
+      "aliases": [
+        "figma design"
+      ]
+    },
+    {
+      "term": "Flask",
+      "group_id": "python-frameworks",
+      "aliases": [
+        "flask python",
+        "flask web framework"
+      ]
+    },
+    {
+      "term": "GCP",
+      "group_id": "cloud-gcp",
+      "aliases": [
+        "google cloud",
+        "google cloud platform",
+        "gcp cloud"
+      ]
+    },
+    {
+      "term": "GCP CLI",
+      "group_id": "cloud-gcp",
+      "aliases": [
+        "gcloud",
+        "gcloud cli"
+      ]
+    },
+    {
+      "term": "GCS",
+      "group_id": "cloud-gcp",
+      "aliases": [
+        "google cloud storage",
+        "gcs bucket"
+      ]
+    },
+    {
+      "term": "Git",
+      "group_id": "collab-docs",
+      "aliases": [
+        "git version control"
+      ]
+    },
+    {
+      "term": "GitHub",
+      "group_id": "collab-docs",
+      "aliases": [
+        "github.com",
+        "git hub"
+      ]
+    },
+    {
+      "term": "GitHub Actions",
+      "group_id": "devops-ci",
+      "aliases": [
+        "GHA",
+        "gh actions",
+        "github actions workflow"
+      ]
+    },
+    {
+      "term": "GitHub Copilot",
+      "group_id": "ai-coding",
+      "aliases": [
+        "copilot",
+        "gh copilot",
+        "github copilot chat"
+      ]
+    },
+    {
+      "term": "GitLab",
+      "group_id": "collab-docs",
+      "aliases": [
+        "gitlab.com",
+        "git lab"
+      ]
+    },
+    {
+      "term": "GitLab CI/CD",
+      "group_id": "devops-ci",
+      "aliases": [
+        "gitlab ci",
+        "gitlab-ci",
+        "gitlab pipeline"
+      ]
+    },
+    {
+      "term": "Grafana",
+      "group_id": "observability",
+      "aliases": [
+        "grafana dashboards"
+      ]
+    },
+    {
+      "term": "GraphQL",
+      "group_id": "api-rest",
+      "aliases": [
+        "graphql api",
+        "apollo graphql"
+      ]
+    },
+    {
+      "term": "grep/sed/awk",
+      "group_id": "os-linux",
+      "aliases": [
+        "grep",
+        "sed",
+        "awk",
+        "text processing"
+      ]
+    },
+    {
+      "term": "gRPC",
+      "group_id": "api-rest",
+      "aliases": [
+        "grpc python",
+        "protocol buffers"
+      ]
+    },
+    {
+      "term": "Hadoop",
+      "group_id": "data-engineering",
+      "aliases": [
+        "apache hadoop",
+        "hdfs"
+      ]
+    },
+    {
+      "term": "Helm",
+      "group_id": "containers",
+      "aliases": [
+        "helm charts",
+        "kubernetes helm"
+      ]
+    },
+    {
+      "term": "HTML5",
+      "group_id": "frontend-basics",
+      "aliases": [
+        "HTML",
+        "html"
+      ]
+    },
+    {
+      "term": "htop",
+      "group_id": "os-linux",
+      "aliases": [
+        "htop process monitor"
+      ]
+    },
+    {
+      "term": "idempotency",
+      "group_id": "api-rest",
+      "aliases": [
+        "idempotent API",
+        "idempotency key"
+      ]
+    },
+    {
+      "term": "idempotent processing",
+      "group_id": "messaging",
+      "aliases": [
+        "idempotency",
+        "idempotent task"
+      ]
+    },
+    {
+      "term": "introspection",
+      "group_id": "python-core",
+      "aliases": [
+        "python introspection",
+        "dir()",
+        "getattr"
+      ]
+    },
+    {
+      "term": "IP/CIDR allowlists",
+      "group_id": "auth-security",
+      "aliases": [
+        "ip_lists",
+        "ip allowlist",
+        "cidr allowlist"
+      ]
+    },
+    {
+      "term": "JavaScript",
+      "group_id": "frontend-basics",
+      "aliases": [
+        "JS",
+        "javascript"
+      ]
+    },
+    {
+      "term": "Jenkins",
+      "group_id": "devops-ci",
+      "aliases": [
+        "jenkins ci",
+        "jenkins pipeline"
+      ]
+    },
+    {
+      "term": "Jinja2",
+      "group_id": "fastapi-mcp",
+      "aliases": [
+        "jinja",
+        "jinja2 templates"
+      ]
+    },
+    {
+      "term": "Jira",
+      "group_id": "collab-docs",
+      "aliases": [
+        "atlassian jira",
+        "jira board"
+      ]
+    },
+    {
+      "term": "jQuery",
+      "group_id": "frontend-basics",
+      "aliases": [
+        "jquery"
+      ]
+    },
+    {
+      "term": "Jupyter",
+      "group_id": "ml",
+      "aliases": [
+        "jupyter notebooks",
+        "jupyterlab",
+        "jupyter lab"
+      ]
+    },
+    {
+      "term": "JWT",
+      "group_id": "auth-security",
+      "aliases": [
+        "JSON Web Tokens",
+        "jwt token"
+      ]
+    },
+    {
+      "term": "Kafka",
+      "group_id": "data-engineering",
+      "aliases": [
+        "apache kafka",
+        "kafka broker"
+      ]
+    },
+    {
+      "term": "Keras",
+      "group_id": "ml",
+      "aliases": [
+        "keras"
+      ]
+    },
+    {
+      "term": "keyset pagination",
+      "group_id": "api-rest",
+      "aliases": [
+        "cursor pagination",
+        "keyset paging"
+      ]
+    },
+    {
+      "term": "Kubernetes",
+      "group_id": "containers",
+      "aliases": [
+        "K8s",
+        "k8s",
+        "kubectl",
+        "MicroK8s"
+      ]
+    },
+    {
+      "term": "Linux",
+      "group_id": "os-linux",
+      "aliases": [
+        "linux",
+        "gnu/linux"
+      ]
+    },
+    {
+      "term": "locust",
+      "group_id": "testing",
+      "aliases": [
+        "locust load testing",
+        "locustio"
+      ]
+    },
+    {
+      "term": "Mattermost",
+      "group_id": "collab-docs",
+      "aliases": [
+        "mattermost chat"
+      ]
+    },
+    {
+      "term": "MCP clients",
+      "group_id": "fastapi-mcp",
+      "aliases": [
+        "mcp client",
+        "mcp client integration"
+      ]
+    },
+    {
+      "term": "MCP tools",
+      "group_id": "fastapi-mcp",
+      "aliases": [
+        "mcp tool",
+        "mcp tools framework"
+      ]
+    },
+    {
+      "term": "Mermaid",
+      "group_id": "collab-docs",
+      "aliases": [
+        "mermaid diagrams",
+        "mermaid.js"
+      ]
+    },
+    {
+      "term": "Metasploit",
+      "group_id": "auth-security",
+      "aliases": [
+        "metasploit framework"
+      ]
+    },
+    {
+      "term": "mocking/patching",
+      "group_id": "testing",
+      "aliases": [
+        "unittest.mock",
+        "mock library",
+        "pytest mock",
+        "monkeypatch"
+      ]
+    },
+    {
+      "term": "MongoDB",
+      "group_id": "databases-nosql",
+      "aliases": [
+        "mongo",
+        "mongodb atlas"
+      ]
+    },
+    {
+      "term": "MS Teams",
+      "group_id": "collab-docs",
+      "aliases": [
+        "microsoft teams",
+        "teams"
+      ]
+    },
+    {
+      "term": "mutation testing",
+      "group_id": "testing",
+      "aliases": [
+        "mutmut",
+        "cosmic-ray"
+      ]
+    },
+    {
+      "term": "mypy",
+      "group_id": "python-quality",
+      "aliases": [
+        "mypy check"
+      ]
+    },
+    {
+      "term": "MySQL",
+      "group_id": "databases-sql",
+      "aliases": [
+        "mysql server",
+        "mysql database"
+      ]
+    },
+    {
+      "term": "network diagnostics",
+      "group_id": "networking",
+      "aliases": [
+        "ping",
+        "traceroute",
+        "telnet",
+        "netstat"
+      ]
+    },
+    {
+      "term": "network fundamentals",
+      "group_id": "networking",
+      "aliases": [
+        "TCP/IP",
+        "OSI model",
+        "DNS",
+        "DHCP",
+        "HTTP",
+        "FTP",
+        "SSH"
+      ]
+    },
+    {
+      "term": "Nmap",
+      "group_id": "auth-security",
+      "aliases": [
+        "nmap scanning"
+      ]
+    },
+    {
+      "term": "Nomad",
+      "group_id": "containers",
+      "aliases": [
+        "hashicorp nomad"
+      ]
+    },
+    {
+      "term": "nose",
+      "group_id": "testing",
+      "aliases": [
+        "nosetests"
+      ]
+    },
+    {
+      "term": "notifications",
+      "group_id": "messaging",
+      "aliases": [
+        "notification system",
+        "email notifications",
+        "push notifications"
+      ]
+    },
+    {
+      "term": "OAuth2",
+      "group_id": "auth-security",
+      "aliases": [
+        "OAuth 2",
+        "oauth"
+      ]
+    },
+    {
+      "term": "Obsidian",
+      "group_id": "collab-docs",
+      "aliases": [
+        "obsidian notes",
+        "obsidian md"
+      ]
+    },
+    {
+      "term": "OpenAPI",
+      "group_id": "api-rest",
+      "aliases": [
+        "Swagger",
+        "OpenAPI 3",
+        "openapi spec"
+      ]
+    },
+    {
+      "term": "OpenSearch",
+      "group_id": "observability",
+      "aliases": [
+        "opensearch dashboards",
+        "opensearch cluster"
+      ]
+    },
+    {
+      "term": "OpenStack",
+      "group_id": "cloud-aws",
+      "aliases": [
+        "openstack cloud"
+      ]
+    },
+    {
+      "term": "OWASP",
+      "group_id": "auth-security",
+      "aliases": [
+        "owasp top 10",
+        "owasp security"
+      ]
+    },
+    {
+      "term": "pandas",
+      "group_id": "data-engineering",
+      "aliases": [
+        "pandas python",
+        "pd"
+      ]
+    },
+    {
+      "term": "pgAdmin",
+      "group_id": "databases-sql",
+      "aliases": [
+        "pgadmin4"
+      ]
+    },
+    {
+      "term": "pip-tools",
+      "group_id": "python-quality",
+      "aliases": [
+        "pip-compile",
+        "piptools"
+      ]
+    },
+    {
+      "term": "Playwright",
+      "group_id": "web-scraping",
+      "aliases": [
+        "playwright python",
+        "playwright-python",
+        "playwright e2e"
+      ]
+    },
+    {
+      "term": "Podman",
+      "group_id": "containers",
+      "aliases": [
+        "podman containers"
+      ]
+    },
+    {
+      "term": "Poetry",
+      "group_id": "python-quality",
+      "aliases": [
+        "poetry python",
+        "poetry dependency manager"
+      ]
+    },
+    {
+      "term": "PostgreSQL",
+      "group_id": "databases-sql",
+      "aliases": [
+        "postgres",
+        "psql",
+        "postgresql"
+      ]
+    },
+    {
+      "term": "Postman",
+      "group_id": "api-rest",
+      "aliases": [
+        "postman client",
+        "postman api"
+      ]
+    },
+    {
+      "term": "PowerShell",
+      "group_id": "os-linux",
+      "aliases": [
+        "powershell",
+        "pwsh"
+      ]
+    },
+    {
+      "term": "pre-commit",
+      "group_id": "python-quality",
+      "aliases": [
+        "git hooks",
+        "pre-commit hooks"
+      ]
+    },
+    {
+      "term": "profiling",
+      "group_id": "python-core",
+      "aliases": [
+        "cProfile",
+        "py-spy",
+        "profiling tools"
+      ]
+    },
+    {
+      "term": "Prometheus",
+      "group_id": "observability",
+      "aliases": [
+        "prometheus monitoring",
+        "prom"
+      ]
+    },
+    {
+      "term": "ps/top/kill/nice/bg/fg",
+      "group_id": "os-linux",
+      "aliases": [
+        "process management",
+        "ps",
+        "top",
+        "kill",
+        "nice",
+        "bg",
+        "fg"
+      ]
+    },
+    {
+      "term": "Puppet",
+      "group_id": "containers",
+      "aliases": [
+        "puppet config management"
+      ]
+    },
+    {
+      "term": "Pydantic",
+      "group_id": "python-frameworks",
+      "aliases": [
+        "pydantic v2",
+        "pydantic 2"
+      ]
+    },
+    {
+      "term": "Pydoop",
+      "group_id": "data-engineering",
+      "aliases": [
+        "pydoop hadoop"
+      ]
+    },
+    {
+      "term": "pyjwt",
+      "group_id": "auth-security",
+      "aliases": [
+        "pyjwt library",
+        "jwt python"
+      ]
+    },
+    {
+      "term": "pyOpenSSL",
+      "group_id": "auth-security",
+      "aliases": [
+        "pyopenssl"
+      ]
+    },
+    {
+      "term": "PyQt6",
+      "group_id": "python-frameworks",
+      "aliases": [
+        "pyqt",
+        "pyqt6 python"
+      ]
+    },
+    {
+      "term": "Pyramid",
+      "group_id": "python-frameworks",
+      "aliases": [
+        "pyramid web framework"
+      ]
+    },
+    {
+      "term": "pyright",
+      "group_id": "python-quality",
+      "aliases": [
+        "pyright check",
+        "pylance"
+      ]
+    },
+    {
+      "term": "pytest",
+      "group_id": "testing",
+      "aliases": [
+        "pytest framework",
+        "py.test"
+      ]
+    },
+    {
+      "term": "Python",
+      "group_id": "python-core",
+      "aliases": [
+        "python3",
+        "cpython"
+      ]
+    },
+    {
+      "term": "PyTorch",
+      "group_id": "ml",
+      "aliases": [
+        "pytorch"
+      ]
+    },
+    {
+      "term": "query optimization",
+      "group_id": "databases-sql",
+      "aliases": [
+        "EXPLAIN ANALYZE",
+        "query tuning",
+        "query optimisation",
+        "sql optimization"
+      ]
+    },
+    {
+      "term": "RabbitMQ",
+      "group_id": "messaging",
+      "aliases": [
+        "rabbitmq broker"
+      ]
+    },
+    {
+      "term": "rate limiting",
+      "group_id": "auth-security",
+      "aliases": [
+        "slowapi",
+        "throttling",
+        "rate limit"
+      ]
+    },
+    {
+      "term": "RBAC",
+      "group_id": "auth-security",
+      "aliases": [
+        "role-based access control"
+      ]
+    },
+    {
+      "term": "React",
+      "group_id": "frontend-basics",
+      "aliases": [
+        "ReactJS",
+        "reactjs",
+        "react.js"
+      ]
+    },
+    {
+      "term": "Redis",
+      "group_id": "datastores-cache",
+      "aliases": [
+        "redis pub/sub",
+        "redis cache"
+      ]
+    },
+    {
+      "term": "Redis pub/sub",
+      "group_id": "messaging",
+      "aliases": [
+        "redis pubsub",
+        "pubsub redis",
+        "redis publish subscribe"
+      ]
+    },
+    {
+      "term": "RegExp",
+      "group_id": "web-scraping",
+      "aliases": [
+        "regex",
+        "regular expressions",
+        "re module"
+      ]
+    },
+    {
+      "term": "reporting",
+      "group_id": "messaging",
+      "aliases": [
+        "report generation",
+        "automated reports"
+      ]
+    },
+    {
+      "term": "requests",
+      "group_id": "networking",
+      "aliases": [
+        "httpx",
+        "aiohttp",
+        "urllib3",
+        "http client"
+      ]
+    },
+    {
+      "term": "REST API",
+      "group_id": "api-rest",
+      "aliases": [
+        "RESTful",
+        "REST",
+        "RESTful API"
+      ]
+    },
+    {
+      "term": "retries",
+      "group_id": "messaging",
+      "aliases": [
+        "retry logic",
+        "exponential backoff",
+        "tenacity"
+      ]
+    },
+    {
+      "term": "ruff",
+      "group_id": "python-quality",
+      "aliases": [
+        "ruff check",
+        "ruff format"
+      ]
+    },
+    {
+      "term": "S3",
+      "group_id": "cloud-aws",
+      "aliases": [
+        "aws s3",
+        "simple storage service"
+      ]
+    },
+    {
+      "term": "SaltStack",
+      "group_id": "containers",
+      "aliases": [
+        "salt",
+        "saltstack config"
+      ]
+    },
+    {
+      "term": "schema validation",
+      "group_id": "web-scraping",
+      "aliases": [
+        "pydantic validation",
+        "jsonschema",
+        "schema validate"
+      ]
+    },
+    {
+      "term": "scikit-learn",
+      "group_id": "ml",
+      "aliases": [
+        "sklearn"
+      ]
+    },
+    {
+      "term": "Scrapy",
+      "group_id": "web-scraping",
+      "aliases": [
+        "scrapy framework"
+      ]
+    },
+    {
+      "term": "Scrum/Kanban",
+      "group_id": "collab-docs",
+      "aliases": [
+        "scrum",
+        "kanban",
+        "agile",
+        "agile methodologies"
+      ]
+    },
+    {
+      "term": "security headers",
+      "group_id": "auth-security",
+      "aliases": [
+        "CSP",
+        "HSTS",
+        "X-Frame-Options"
+      ]
+    },
+    {
+      "term": "Selenium",
+      "group_id": "web-scraping",
+      "aliases": [
+        "selenium webdriver",
+        "selenium python"
+      ]
+    },
+    {
+      "term": "Sentry",
+      "group_id": "observability",
+      "aliases": [
+        "sentry error tracking",
+        "sentry.io"
+      ]
+    },
+    {
+      "term": "Slack",
+      "group_id": "collab-docs",
+      "aliases": [
+        "slack chat"
+      ]
+    },
+    {
+      "term": "SOAP",
+      "group_id": "api-rest",
+      "aliases": [
+        "soap api",
+        "wsdl"
+      ]
+    },
+    {
+      "term": "socket",
+      "group_id": "networking",
+      "aliases": [
+        "python socket",
+        "socket module"
+      ]
+    },
+    {
+      "term": "Sphinx",
+      "group_id": "collab-docs",
+      "aliases": [
+        "sphinx docs",
+        "sphinx-doc"
+      ]
+    },
+    {
+      "term": "SQLAlchemy",
+      "group_id": "python-frameworks",
+      "aliases": [
+        "sqlalchemy 2.0",
+        "sqlalchemy"
+      ]
+    },
+    {
+      "term": "SQLite",
+      "group_id": "databases-sql",
+      "aliases": [
+        "sqlite3"
+      ]
+    },
+    {
+      "term": "SSLyze",
+      "group_id": "auth-security",
+      "aliases": [
+        "sslyze"
+      ]
+    },
+    {
+      "term": "Streamable HTTP transport",
+      "group_id": "fastapi-mcp",
+      "aliases": [
+        "mcp streamable http",
+        "streamable-http"
+      ]
+    },
+    {
+      "term": "structured logging",
+      "group_id": "observability",
+      "aliases": [
+        "logging",
+        "loguru",
+        "structlog",
+        "json logging"
+      ]
+    },
+    {
+      "term": "sync/async HTTP clients",
+      "group_id": "web-scraping",
+      "aliases": [
+        "requests",
+        "httpx",
+        "aiohttp",
+        "urllib3"
+      ]
+    },
+    {
+      "term": "TeamCity",
+      "group_id": "devops-ci",
+      "aliases": [
+        "jetbrains teamcity"
+      ]
+    },
+    {
+      "term": "TensorFlow",
+      "group_id": "ml",
+      "aliases": [
+        "tf",
+        "tensorflow"
+      ]
+    },
+    {
+      "term": "Terraform",
+      "group_id": "containers",
+      "aliases": [
+        "terraform iac",
+        "tf files"
+      ]
+    },
+    {
+      "term": "Testcontainers",
+      "group_id": "testing",
+      "aliases": [
+        "testcontainers python",
+        "testcontainers-python"
+      ]
+    },
+    {
+      "term": "third-party API integrations",
+      "group_id": "api-rest",
+      "aliases": [
+        "Google API",
+        "Microsoft Graph",
+        "Zoom",
+        "3rd-party APIs"
+      ]
+    },
+    {
+      "term": "threat modeling",
+      "group_id": "auth-security",
+      "aliases": [
+        "threat model"
+      ]
+    },
+    {
+      "term": "tmux",
+      "group_id": "os-linux",
+      "aliases": [
+        "tmux terminal multiplexer"
+      ]
+    },
+    {
+      "term": "Tornado",
+      "group_id": "python-frameworks",
+      "aliases": [
+        "tornado web server"
+      ]
+    },
+    {
+      "term": "tox",
+      "group_id": "testing",
+      "aliases": [
+        "tox python"
+      ]
+    },
+    {
+      "term": "TravisCI",
+      "group_id": "devops-ci",
+      "aliases": [
+        "travis ci",
+        "travis-ci.org"
+      ]
+    },
+    {
+      "term": "ty",
+      "group_id": "python-quality",
+      "aliases": [
+        "ty check"
+      ]
+    },
+    {
+      "term": "type hints",
+      "group_id": "python-quality",
+      "aliases": [
+        "typing",
+        "PEP 484",
+        "type hinting",
+        "type annotations"
+      ]
+    },
+    {
+      "term": "unittest",
+      "group_id": "testing",
+      "aliases": [
+        "python unittest",
+        "unittest framework"
+      ]
+    },
+    {
+      "term": "user management",
+      "group_id": "os-linux",
+      "aliases": [
+        "useradd",
+        "usermod",
+        "linux users"
+      ]
+    },
+    {
+      "term": "Vagrant",
+      "group_id": "containers",
+      "aliases": [
+        "hashicorp vagrant"
+      ]
+    },
+    {
+      "term": "VictoriaLogs",
+      "group_id": "observability",
+      "aliases": [
+        "victoria logs",
+        "vlogs"
+      ]
+    },
+    {
+      "term": "VictoriaMetrics",
+      "group_id": "observability",
+      "aliases": [
+        "victoria metrics",
+        "vmagent"
+      ]
+    },
+    {
+      "term": "WeasyPrint",
+      "group_id": "fastapi-mcp",
+      "aliases": [
+        "weasyprint",
+        "weasy print"
+      ]
+    },
+    {
+      "term": "webhooks",
+      "group_id": "api-rest",
+      "aliases": [
+        "webhook",
+        "webhook processing"
+      ]
+    },
+    {
+      "term": "WIF",
+      "group_id": "cloud-gcp",
+      "aliases": [
+        "workload identity federation",
+        "gcp wif"
+      ]
+    },
+    {
+      "term": "Zabbix",
+      "group_id": "observability",
+      "aliases": [
+        "zabbix monitoring"
+      ]
+    },
+    {
+      "term": "zsh",
+      "group_id": "os-linux",
+      "aliases": [
+        "oh-my-zsh",
+        "zsh shell"
+      ]
+    }
+  ]
+}

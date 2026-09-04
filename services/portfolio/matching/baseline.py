@@ -1,8 +1,10 @@
 """Skill bank loader: validation, atom index, lazy mtime-cached retrieval.
 
 The bank (``data/cv_baseline.json``) is a SEPARATE matching source from the
-live CV — see plan in docs/decisions.md. Only the top-level ``skills`` list
-is read; ``deferred`` is the operator's parking lot and is never matched.
+live CV — see plan in docs/decisions.md. Tailoring reads only the top-level
+``skills`` list; ``deferred`` is the operator's parking lot, never offered to
+a recruiter, but gap analysis reads it to answer "you parked this and N jobs
+want it".
 """
 
 from __future__ import annotations
@@ -29,7 +31,10 @@ ATOM_REQUIRED_KEYS = {"atom", "group_id", "level", "priority", "category_hint"}
 _HINT_SPLIT = " > "
 
 # Extra metadata carried through from the bank (unused by matching today).
-ATOM_OPTIONAL_KEYS = ("aliases", "presentation")
+# `_note` is the operator's reason for parking a deferred skill ("Last
+# professional use unclear…") — gap analysis surfaces it, so it must survive
+# the projection in _validate_atom. Present on only some atoms.
+ATOM_OPTIONAL_KEYS = ("aliases", "presentation", "_note")
 
 
 class BaselineError(ValueError):
@@ -69,8 +74,14 @@ def _validate_atom(atom: dict[Any, Any]) -> dict[str, Any]:
     }
 
 
-def load_baseline(path: Path) -> list[dict[str, Any]]:
-    """Parse and validate the bank, returning the active atoms (top-level ``skills``).
+def load_baseline(path: Path, key: str = "skills") -> list[dict[str, Any]]:
+    """Parse and validate one atom list from the bank.
+
+    Args:
+        path: The skill bank file.
+        key: Which top-level list to read — ``"skills"`` (the active atoms) or
+            ``"deferred"`` (the operator's parking lot). Both share the atom
+            schema, so both validate identically.
 
     Raises :class:`BaselineError` on any schema violation — a broken bank
     aborts a /api/v1/cv/tailor call loudly rather than silently emitting an empty
@@ -87,11 +98,11 @@ def load_baseline(path: Path) -> list[dict[str, Any]]:
         raise BaselineError(
             f"Skill bank must be a JSON object, got {type(raw).__name__}"
         )
-    skills = raw.get("skills")
-    if not isinstance(skills, list) or not skills:
-        raise BaselineError(f"Skill bank {path} must have a non-empty 'skills' list")
+    entries = raw.get(key)
+    if not isinstance(entries, list) or not entries:
+        raise BaselineError(f"Skill bank {path} must have a non-empty {key!r} list")
 
-    atoms = [_validate_atom(atom) for atom in skills]
+    atoms = [_validate_atom(atom) for atom in entries]
     names = [atom["atom"] for atom in atoms]
     if len(names) != len(set(names)):
         dupes = sorted({n for n in names if names.count(n) > 1})
@@ -125,16 +136,17 @@ def build_atom_index(atoms: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     return index
 
 
-_cache: dict[tuple[str, int, int], list[dict[str, Any]]] = {}
+_cache: dict[tuple[str, str, int, int], list[dict[str, Any]]] = {}
 
 
-def get_baseline(path: Path | None = None) -> list[dict[str, Any]]:
-    """Lazy, mtime-cached access to the active bank atoms.
+def get_baseline(path: Path | None = None, key: str = "skills") -> list[dict[str, Any]]:
+    """Lazy, mtime-cached access to one bank atom list.
 
     The resolved path follows ``settings.cv_baseline_path``. Memoization is
-    keyed by (path, size, mtime_ns), so editing the bank file is picked up
-    on the next tailoring call without a server restart — the same
-    generation-checked hot-reload spirit as CvSource.
+    keyed by (path, key, size, mtime_ns), so editing the bank file is picked
+    up on the next tailoring call without a server restart — the same
+    generation-checked hot-reload spirit as CvSource. ``key`` is part of the
+    cache key so ``"skills"`` and ``"deferred"`` never alias each other.
     """
     if path is None:
         from services.portfolio.settings import settings
@@ -145,9 +157,9 @@ def get_baseline(path: Path | None = None) -> list[dict[str, Any]]:
     except FileNotFoundError:
         raise BaselineError(f"Skill bank file not found: {path}") from None
 
-    key = (str(path), stat.st_size, stat.st_mtime_ns)
-    cached = _cache.get(key)
+    cache_key = (str(path), key, stat.st_size, stat.st_mtime_ns)
+    cached = _cache.get(cache_key)
     if cached is None:
-        cached = load_baseline(path)
-        _cache[key] = cached
+        cached = load_baseline(path, key)
+        _cache[cache_key] = cached
     return cached
