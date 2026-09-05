@@ -132,6 +132,17 @@ resource "google_artifact_registry_repository_iam_member" "deployer_cv_images_wr
   member     = "serviceAccount:${google_service_account.deployer.email}"
 }
 
+# reader/writer above cover pulling/pushing images, but granting a runtime SA
+# (e.g. ats_refresh_trigger_cv_images_reader below) access to this repo is a
+# setIamPolicy call on the repo resource itself, which writer doesn't include.
+resource "google_artifact_registry_repository_iam_member" "deployer_cv_images_admin" {
+  project    = var.project
+  location   = google_artifact_registry_repository.cv_images.location
+  repository = google_artifact_registry_repository.cv_images.name
+  role       = "roles/artifactregistry.repoAdmin"
+  member     = "serviceAccount:${google_service_account.deployer.email}"
+}
+
 # Deployer runs `terraform apply` in CI, which reads the serverless NEGs
 # (created alongside each Cloud Run service) as part of refreshing state.
 # compute.networkViewer lacks networkEndpointGroups.get; compute.viewer covers it.
@@ -158,6 +169,17 @@ resource "google_project_iam_member" "deployer_cloudsql_viewer" {
 resource "google_project_iam_member" "deployer_service_account_admin" {
   project = var.project
   role    = "roles/iam.serviceAccountAdmin"
+  member  = "serviceAccount:${google_service_account.deployer.email}"
+}
+
+# serviceAccountAdmin only covers create/delete of the SA itself — granting
+# that new SA any project-level role (e.g. ats_refresh_trigger_* below) is a
+# separate setIamPolicy call on the *project* resource, which needs
+# projectIamAdmin. Discovered when the ats-refresh-trigger runtime SA's own
+# role grants 403'd right after its creation succeeded.
+resource "google_project_iam_member" "deployer_project_iam_admin" {
+  project = var.project
+  role    = "roles/resourcemanager.projectIamAdmin"
   member  = "serviceAccount:${google_service_account.deployer.email}"
 }
 
