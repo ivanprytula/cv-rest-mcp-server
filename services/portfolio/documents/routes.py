@@ -14,7 +14,12 @@ from fastapi import APIRouter, Depends, HTTPException, Path
 from services.portfolio.constants import API_V1_PREFIX
 from services.portfolio.cv_data import validate_cv_payload
 from services.portfolio.dependencies import get_document_service
-from services.portfolio.documents.document_row import DOCUMENT_KINDS, KIND_CV
+from services.portfolio.documents.document_row import (
+    DOCUMENT_KINDS,
+    KIND_CV,
+    KIND_JD_VOCABULARY,
+    KIND_SKILL_BANK,
+)
 from services.portfolio.documents.document_service import (
     DocumentService,
     document_sources,
@@ -29,7 +34,24 @@ router = APIRouter(prefix=f"{API_V1_PREFIX}/documents", tags=["documents"])
 
 get_document_service_dep = Depends(get_document_service)
 
-kind_path = Path(description="Document kind", pattern="^(cv|skill_bank|jd_vocabulary)$")
+# Derived from DOCUMENT_KINDS, never duplicated: a hand-written pattern here
+# would silently reject a kind added to that tuple.
+kind_path = Path(
+    description="Document kind",
+    pattern=f"^({'|'.join(DOCUMENT_KINDS)})$",
+)
+
+
+# Per-kind validators. A kind absent here is stored as-is — adding a new
+# document kind should not require inventing a schema for it, and an
+# unvalidated document is only a risk to whatever chooses to read it.
+_VALIDATORS = {
+    KIND_CV: lambda payload: validate_cv_payload(payload),
+    KIND_SKILL_BANK: lambda payload: validate_bank_payload(KIND_SKILL_BANK, payload),
+    KIND_JD_VOCABULARY: lambda payload: validate_bank_payload(
+        KIND_JD_VOCABULARY, payload
+    ),
+}
 
 
 def _validate(kind: str, payload: dict[str, Any]) -> None:
@@ -38,11 +60,11 @@ def _validate(kind: str, payload: dict[str, Any]) -> None:
     Validation happens on write, not on read: a bad document stored is a
     bad document served to every later request.
     """
+    validator = _VALIDATORS.get(kind)
+    if validator is None:
+        return
     try:
-        if kind == KIND_CV:
-            validate_cv_payload(payload)
-        else:
-            validate_bank_payload(kind, payload)
+        validator(payload)
     except (ValueError, BaselineError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
 
@@ -86,3 +108,17 @@ async def write_document(
             status_code=503, detail=f"Could not store the {kind} document"
         )
     return {"kind": kind, "version": version}
+
+
+@router.delete("/{kind}")
+async def revert_document(
+    kind: str = kind_path,
+    service: DocumentService = get_document_service_dep,
+) -> dict[str, Any]:
+    """Drop the stored document, reverting reads to the shipped JSON file.
+
+    Not a destructive delete: the document still resolves, from its file
+    fallback. This is the undo for a bad edit.
+    """
+    reverted = await service.revert_to_file(kind)
+    return {"kind": kind, "reverted": reverted}

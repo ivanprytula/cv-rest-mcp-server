@@ -9,6 +9,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
+from sqlalchemy import delete as sa_delete
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -20,6 +21,7 @@ class DocumentRepository(Protocol):
     async def get(self, kind: str) -> DocumentRow | None: ...
     async def put(self, *, kind: str, payload: dict[str, Any]) -> DocumentRow: ...
     async def list_all(self) -> list[DocumentRow]: ...
+    async def delete(self, kind: str) -> bool: ...
 
 
 class SqlAlchemyDocumentRepository:
@@ -70,3 +72,15 @@ class SqlAlchemyDocumentRepository:
                 select(DocumentRow).order_by(DocumentRow.kind)
             )
             return list(result.scalars().all())
+
+    async def delete(self, kind: str) -> bool:
+        """Drop a document's row. True when one was removed."""
+        async with self._session_factory() as session:
+            result = await session.execute(
+                sa_delete(DocumentRow)
+                .where(DocumentRow.kind == kind)
+                .returning(DocumentRow.id)
+            )
+            deleted = result.scalars().first() is not None
+            await session.commit()
+            return deleted

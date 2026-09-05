@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import json
 import logging
+import re
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -34,11 +36,57 @@ _HINT_SPLIT = " > "
 # `_note` is the operator's reason for parking a deferred skill ("Last
 # professional use unclear…") — gap analysis surfaces it, so it must survive
 # the projection in _validate_atom. Present on only some atoms.
-ATOM_OPTIONAL_KEYS = ("aliases", "presentation", "_note")
+#
+# `last_used` and `confidence` model interview-readiness, which `level` cannot:
+# `level` is depth-at-peak ("I was middle at this"), not readiness today. A
+# skill used for one month a year ago is `basic` and sits in `skills[]`, so
+# tailoring would put it in front of a recruiter — while refreshing it costs
+# nearly as much as learning something new. Both fields are optional; an atom
+# with neither is treated as current.
+ATOM_OPTIONAL_KEYS = ("aliases", "presentation", "_note", "last_used", "confidence")
+
+# `confidence` overrides any `last_used` inference, because decay is not
+# uniform: six months off SQL costs nothing, six months off Kubernetes is real.
+CONFIDENCE_CURRENT = "current"  # interviewable today
+CONFIDENCE_REFRESH = "needs_refresh"  # listed, but would need study first
+CONFIDENCE_LEVELS = {CONFIDENCE_CURRENT, CONFIDENCE_REFRESH}
+
+# Atoms unused for longer than this are stale unless `confidence` says otherwise.
+STALE_AFTER_MONTHS = 18
+
+
+# "2024" or "2024-06". Day precision would imply a certainty nobody has about
+# when they last touched a tool.
+_LAST_USED_RE = re.compile(r"\d{4}(-\d{2})?")
 
 
 class BaselineError(ValueError):
     """The skill bank file is missing, malformed, or violates the schema."""
+
+
+def is_stale(atom: dict[str, Any], *, today: date | None = None) -> bool:
+    """True when *atom* is on the CV but would need study before an interview.
+
+    `confidence` is authoritative when set, because decay is not uniform —
+    six months away from SQL costs nothing, six months away from Kubernetes
+    is real. Otherwise `last_used` older than ``STALE_AFTER_MONTHS`` marks it
+    stale. An atom with neither field is treated as current: the operator has
+    not said otherwise, and guessing would flag the whole bank.
+    """
+    confidence = atom.get("confidence")
+    if confidence == CONFIDENCE_REFRESH:
+        return True
+    if confidence == CONFIDENCE_CURRENT:
+        return False
+
+    last_used = atom.get("last_used")
+    if not last_used:
+        return False
+    parts = str(last_used).split("-")
+    year, month = int(parts[0]), int(parts[1]) if len(parts) > 1 else 12
+    now = today or date.today()
+    months_since = (now.year - year) * 12 + (now.month - month)
+    return months_since > STALE_AFTER_MONTHS
 
 
 def _validate_atom(atom: dict[Any, Any]) -> dict[str, Any]:
@@ -66,6 +114,18 @@ def _validate_atom(atom: dict[Any, Any]) -> dict[str, Any]:
     if _HINT_SPLIT not in hint:
         raise BaselineError(
             f"bank atom {name!r} category_hint {hint!r} must be 'Group > Sub'"
+        )
+    confidence = atom.get("confidence")
+    if confidence is not None and confidence not in CONFIDENCE_LEVELS:
+        raise BaselineError(
+            f"bank atom {name!r} has invalid confidence {confidence!r}; "
+            f"expected one of {sorted(CONFIDENCE_LEVELS)}"
+        )
+    last_used = atom.get("last_used")
+    if last_used is not None and not _LAST_USED_RE.fullmatch(str(last_used)):
+        raise BaselineError(
+            f"bank atom {name!r} has invalid last_used {last_used!r}; "
+            "expected 'YYYY' or 'YYYY-MM'"
         )
     return {
         key: atom[key]

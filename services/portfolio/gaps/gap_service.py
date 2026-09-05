@@ -30,11 +30,14 @@ logger = logging.getLogger(__name__)
 
 # Bump when the vocabulary or extraction logic changes, so the roadmap never
 # mixes extractor generations. Re-analysis: bump, re-run, query the new value.
-ANALYZER_VERSION = "1"
+ANALYZER_VERSION = "2"
 
 # Tiers the roadmap ranks. "covered" is excluded: it is what the operator
-# already has, and the page answers "what should I learn next?".
-ROADMAP_TIERS = ["unvouched", "deferred", "unknown"]
+# already has, and the page answers "what should I learn next?". "stale" IS
+# ranked — a skill on the CV that needs refreshing is real work, and it is
+# more urgent than an unknown one because a recruiter is already being shown
+# it. Bumping ANALYZER_VERSION because the tier set changed.
+ROADMAP_TIERS = ["stale", "unvouched", "deferred", "unknown"]
 
 
 def content_hash(jd_text: str) -> str:

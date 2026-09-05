@@ -82,6 +82,7 @@
       "level": "middle",
       "priority": "medium",
       "presentation": "both",
+      "confidence": "current",
       "aliases": [
         "api version",
         "versioning API"

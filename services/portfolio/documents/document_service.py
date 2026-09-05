@@ -75,6 +75,19 @@ class DocumentService:
             return None
         return row.version
 
+    async def revert_to_file(self, kind: str) -> bool:
+        """Drop the stored document so reads fall back to the shipped file.
+
+        Named for the effect, not the mechanism: the document does not
+        disappear — the next read serves the JSON file instead. That is the
+        undo for a bad edit, without hand-restoring the previous payload.
+        """
+        try:
+            return await self._repo.delete(kind)
+        except Exception:
+            logger.warning("Failed to revert document %s", kind, exc_info=True)
+            return False
+
     async def versions(self) -> dict[str, int]:
         """Current version per stored document kind."""
         try:

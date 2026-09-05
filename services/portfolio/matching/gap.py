@@ -4,7 +4,11 @@ Every term a JD demands lands in exactly one of four tiers, ordered by how
 much work it would take to claim the skill:
 
 ===========  ==========================================================
-covered      On the live CV. Nothing to do.
+covered      On the live CV and interviewable today. Nothing to do.
+stale        On the live CV, but unused long enough (or flagged
+             `needs_refresh`) that it would need study before an
+             interview. Not a gap — a risk: a recruiter is being shown a
+             skill that cannot yet be defended.
 unvouched    In the skill bank, but the live CV does not claim it —
              the trust policy drops these, so a recruiter never sees
              them. Cheapest gap to close: update the CV.
@@ -25,17 +29,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-from services.portfolio.matching.baseline import BaselineError
+from services.portfolio.matching.baseline import BaselineError, is_stale
 from services.portfolio.matching.matcher import LEVEL_STRENGTH
 from services.portfolio.matching.normalize import normalize_jd_text
 from services.portfolio.matching.parser import extract_mentions
 from services.portfolio.matching.taxonomy import build_skill_index, normalize_skill
 
 
-Tier = Literal["covered", "unvouched", "deferred", "unknown"]
+Tier = Literal["covered", "stale", "unvouched", "deferred", "unknown"]
 
 # Ordered cheapest-to-close first; also the display order on the report.
-TIERS: tuple[Tier, ...] = ("covered", "unvouched", "deferred", "unknown")
+TIERS: tuple[Tier, ...] = ("covered", "stale", "unvouched", "deferred", "unknown")
 
 
 @dataclass(frozen=True)
@@ -69,10 +73,19 @@ class GapReport:
 
     @property
     def coverage(self) -> float:
-        """Share of requirements already on the live CV (0.0-1.0)."""
+        """Share of requirements defensible in an interview today (0.0-1.0).
+
+        Stale skills are excluded deliberately: they are on the CV, but
+        counting them would report a readiness the operator does not have.
+        """
         if not self.gaps:
             return 1.0
         return len(self.by_tier("covered")) / len(self.gaps)
+
+    @property
+    def interview_risks(self) -> tuple[SkillGap, ...]:
+        """Skills this JD asks for that the CV claims but cannot yet defend."""
+        return self.by_tier("stale")
 
 
 def load_vocabulary(path: Path) -> list[dict[str, Any]]:
@@ -144,7 +157,13 @@ def _tier_index(
             merged[key] = {**atom, "_tier": "deferred"}
 
     for atom in bank_atoms:
-        tier = "covered" if normalize_skill(atom["atom"]) in live_index else "unvouched"
+        if normalize_skill(atom["atom"]) not in live_index:
+            tier = "unvouched"
+        else:
+            # On the CV — but claiming it and defending it are different
+            # things. A skill unused for years is shown to a recruiter while
+            # needing nearly as much study as one never learned.
+            tier = "stale" if is_stale(atom) else "covered"
         for key in _atom_keys(atom):
             merged[key] = {**atom, "_tier": tier}
 

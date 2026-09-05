@@ -172,3 +172,58 @@ class TestAuth:
     async def test_unauthenticated_is_401(self, client, method, path):
         resp = await client.request(method, path, headers={"Authorization": ""})
         assert resp.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+class TestRevert:
+    """DELETE drops the stored row; the document still resolves from file."""
+
+    async def test_revert_restores_the_file_content(self, admin_client):
+        await admin_client.put(f"{DOCS}/skill_bank", json=_bank("OnlyInDb"))
+        assert (await admin_client.get(f"{DOCS}/skill_bank")).json()["skills"][0][
+            "atom"
+        ] == "OnlyInDb"
+
+        resp = await admin_client.delete(f"{DOCS}/skill_bank")
+        assert resp.status_code == status.HTTP_200_OK
+        assert resp.json()["reverted"] is True
+
+        # Still readable — now from the file, not the DB.
+        after = await admin_client.get(f"{DOCS}/skill_bank")
+        assert after.status_code == status.HTTP_200_OK
+        assert [a["atom"] for a in after.json()["skills"]] != ["OnlyInDb"]
+
+    async def test_reverting_an_unstored_document_is_not_an_error(self, admin_client):
+        resp = await admin_client.delete(f"{DOCS}/jd_vocabulary")
+        assert resp.status_code == status.HTTP_200_OK
+        assert resp.json()["reverted"] is False
+
+    async def test_revert_clears_the_reported_version(self, admin_client):
+        await admin_client.put(f"{DOCS}/skill_bank", json=_bank())
+        await admin_client.delete(f"{DOCS}/skill_bank")
+        assert "skill_bank" not in (await admin_client.get(DOCS)).json()["versions"]
+
+    async def test_revert_requires_authentication(self, client):
+        resp = await client.delete(f"{DOCS}/cv", headers={"Authorization": ""})
+        assert resp.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+class TestKindsAreDataDriven:
+    """Adding a document kind is a one-line change, not a code change."""
+
+    async def test_route_pattern_matches_declared_kinds(self):
+        from services.portfolio.documents.document_row import DOCUMENT_KINDS
+        from services.portfolio.documents.routes import kind_path
+
+        # The path pattern is derived, so it cannot drift from the tuple.
+        for kind in DOCUMENT_KINDS:
+            assert kind_path.metadata[0].pattern.strip("^$").split("|").count(kind) >= 0
+            assert kind in kind_path.metadata[0].pattern
+
+    async def test_kind_without_a_validator_is_stored_as_is(self, admin_client):
+        """A new kind needs no schema — only kinds with one are checked."""
+        from services.portfolio.documents.document_service import DocumentService
+        from services.portfolio.main import app
+
+        service: DocumentService = app.state.document_service
+        assert await service.write("custom_notes", {"anything": [1, 2, 3]}) == 1
+        assert await service.read("custom_notes") == {"anything": [1, 2, 3]}

@@ -87,6 +87,7 @@ _ADMIN_ROUTES = {
 _ADMIN_PREFIXES = (
     ("POST", f"{API_V1_PREFIX}/gaps/postings"),
     ("PUT", f"{API_V1_PREFIX}/documents"),
+    ("DELETE", f"{API_V1_PREFIX}/documents"),
 )
 
 _SCOPE_READ = "cv:read"
