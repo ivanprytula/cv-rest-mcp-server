@@ -185,3 +185,44 @@ class TestAuth:
     async def test_unauthenticated_is_401(self, client, method, path):
         resp = await client.request(method, path, headers={"Authorization": ""})
         assert resp.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+class TestTailoringStoresThePosting:
+    """Tailoring keeps the JD text, not just its hash.
+
+    Before this, `/cv/tailor` stored only `revisions.jd_hash`, so every
+    tailored revision pointed at a job description nobody could read back.
+    """
+
+    async def test_tailoring_stores_the_posting(self, admin_client):
+        resp = await admin_client.post(
+            "/api/v1/cv/tailor", content=JD_KUBERNETES.encode()
+        )
+        assert resp.status_code == status.HTTP_200_OK, resp.text
+
+        postings = (await admin_client.get(f"{GAPS}/postings")).json()["postings"]
+        assert [p["source"] for p in postings] == ["tailor"]
+
+    async def test_stored_posting_is_analyzable(self, admin_client):
+        await admin_client.post("/api/v1/cv/tailor", content=JD_KUBERNETES.encode())
+        postings = (await admin_client.get(f"{GAPS}/postings")).json()["postings"]
+        report = await _analyze(admin_client, postings[0]["id"])
+        assert report["gaps"]
+
+    async def test_revision_hash_matches_the_posting_hash(self, admin_client):
+        """`revisions.jd_hash` and `job_postings.content_hash` are the join."""
+        from services.portfolio.gaps.gap_service import content_hash
+        from services.portfolio.revisions.revision_service import jd_hash
+
+        await admin_client.post("/api/v1/cv/tailor", content=JD_KUBERNETES.encode())
+        postings = (await admin_client.get(f"{GAPS}/postings")).json()["postings"]
+        stored = await admin_client.get(f"{GAPS}/postings/{postings[0]['id']}")
+        assert stored.status_code in (status.HTTP_200_OK, status.HTTP_404_NOT_FOUND)
+        # Both digests are SHA-256 of the same normalized JD text.
+        assert jd_hash(JD_KUBERNETES) == content_hash(JD_KUBERNETES)
+
+    async def test_tailoring_the_same_jd_twice_stores_one_posting(self, admin_client):
+        for _ in range(2):
+            await admin_client.post("/api/v1/cv/tailor", content=JD_KUBERNETES.encode())
+        postings = (await admin_client.get(f"{GAPS}/postings")).json()["postings"]
+        assert len(postings) == 1

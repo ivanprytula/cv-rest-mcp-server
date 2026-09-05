@@ -59,6 +59,16 @@ async def get_document_service(request: Request) -> DocumentService:
     return service
 
 
+async def get_optional_gap_service(request: Request) -> GapService | None:
+    """The gap service if wired, else None.
+
+    For callers that store a posting as a *side effect* (the tailoring
+    endpoint): the feature must keep working when gap storage is
+    unavailable, so an absent service is a skipped write, not a 503.
+    """
+    return getattr(request.app.state, "gap_service", None)
+
+
 async def get_gap_service(request: Request) -> GapService:
     # getattr, not attribute access: Starlette's State raises AttributeError
     # for anything the lifespan never set, which would 500 instead of 503.
