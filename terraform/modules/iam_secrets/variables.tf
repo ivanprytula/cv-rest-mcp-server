@@ -22,9 +22,15 @@ variable "jwt_signing_secret_id" {
 }
 
 variable "enable_cloud_sql" {
-  description = "Bind roles/cloudsql.client to the api-core runtime SA. Mirrors the root module's enable_cloud_sql flag; a plain bool (not a connection-name string) so `count` is known at plan time even before the cloud_sql module's instance exists."
+  description = "Bind roles/cloudsql.client to the api-core and ats-refresh-trigger runtime SAs. Mirrors the root module's enable_cloud_sql flag; a plain bool (not a connection-name string) so `count` is known at plan time even before the cloud_sql module's instance exists."
   type        = bool
   default     = false
+}
+
+variable "database_url_secret_id" {
+  description = "Secret Manager secret ID for the Postgres connection string (empty = skip IAM binding). Granted to the ATS refresh trigger's runtime SA — it needs DATABASE_URL directly, unlike api_core_secret_ids which is a list keyed for api-core."
+  type        = string
+  default     = ""
 }
 
 variable "labels" {

@@ -16,7 +16,8 @@ resource "google_cloud_run_v2_service" "service" {
     }
 
     containers {
-      image = var.image
+      image   = var.image
+      command = length(var.command) > 0 ? var.command : null
 
       dynamic "env" {
         for_each = var.env_vars

@@ -33,6 +33,7 @@ variable "env_vars" {
   description = "Environment variables set on the service (--set-env-vars style)."
   type        = map(string)
   default     = {}
+  sensitive   = true
 }
 
 variable "secrets" {
@@ -41,7 +42,8 @@ variable "secrets" {
     secret_id = string
     version   = string
   }))
-  default = {}
+  default   = {}
+  sensitive = true
 }
 
 variable "cpu" {
@@ -84,6 +86,12 @@ variable "ingress" {
   description = "Ingress setting: INGRESS_TRAFFIC_ALL/INGRESS_TRAFFIC_INTERNAL_ONLY/INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER."
   type        = string
   default     = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+}
+
+variable "command" {
+  description = "Container command override (Cloud Run's `containers[].command`). Empty = use the image's own CMD/ENTRYPOINT. Lets a second service run a different entrypoint from the same image (e.g. the ATS refresh trigger sharing api-core's image)."
+  type        = list(string)
+  default     = []
 }
 
 variable "cloud_sql_instances" {

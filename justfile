@@ -11,6 +11,30 @@ dev-local:
 dev-spa:
     cd frontend && npm run dev -- --port 5173
 
+# Standalone ATS refresh trigger app (services/portfolio/refresh_trigger.py),
+# on its own port so it can run alongside `dev-local`'s main app. In prod
+# this same module runs as a second, private Cloud Run service invoked by
+# Cloud Scheduler's OIDC token (Terraform for that service is not written
+# yet — see the Phase 2b plan's PR4 section). Nothing guards this locally;
+# it's a dev convenience only.
+dev-refresh-trigger PORT="8090":
+    uv run uvicorn services.portfolio.refresh_trigger:app --host 0.0.0.0 --port {{PORT}} --reload
+
+# Foreground loop calling the trigger's /trigger endpoint every INTERVAL
+# seconds — local stand-in for Cloud Scheduler. Requires `just
+# dev-refresh-trigger` running in another terminal. Ctrl-C to stop.
+# Usage: just dev-ats-refresh              # every 300s
+#        just dev-ats-refresh 60           # every 60s
+dev-ats-refresh INTERVAL="300" PORT="8090":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Polling http://localhost:{{PORT}}/trigger every {{INTERVAL}}s (Ctrl-C to stop)"
+    while true; do
+        echo "--- $(date -u +%H:%M:%S) ---"
+        curl -sf -X POST "http://localhost:{{PORT}}/trigger" | python3 -m json.tool || echo "trigger call failed"
+        sleep {{INTERVAL}}
+    done
+
 # One-shot: ensure a local Postgres (matching Cloud SQL's version) is up for
 # native uvicorn/debugpy runs — NOT part of `docker compose up` (that's the
 # all-in-containers watch setup, see `compose.yml`). Idempotent: no-op if

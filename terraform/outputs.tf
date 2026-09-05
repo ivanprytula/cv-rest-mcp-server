@@ -46,6 +46,7 @@ output "cv_images_repo_url" {
 output "github_wif_provider" {
   description = "GitHub WIF provider URI (use in GitHub WIF_PROVIDER secret, only when setup_github_wif=true)."
   value       = var.setup_github_wif ? module.github_wif[0].workload_identity_provider : ""
+  sensitive   = true
 }
 
 output "org_policies_enforced" {

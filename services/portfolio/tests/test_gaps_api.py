@@ -77,6 +77,56 @@ class TestStorePosting:
         assert "jd_text" not in postings[0]
 
 
+class TestListingFilteredByTerm:
+    async def test_mentions_filters_to_matching_postings(self, admin_client):
+        graphql_only = await _store(admin_client, JD_KUBERNETES, company="Acme")
+        terraform_only = await _store(
+            admin_client, JD_TERRAFORM, company="Beta", url="https://x/2"
+        )
+        await _analyze(admin_client, graphql_only["id"])
+        await _analyze(admin_client, terraform_only["id"])
+
+        resp = await admin_client.get(
+            f"{GAPS}/postings", params={"mentions": "GraphQL"}
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        postings = resp.json()["postings"]
+        assert len(postings) == 1
+        assert postings[0]["company"] == "Acme"
+
+    async def test_mentions_is_case_insensitive(self, admin_client):
+        posting = await _store(admin_client, JD_KUBERNETES, company="Acme")
+        await _analyze(admin_client, posting["id"])
+
+        resp = await admin_client.get(
+            f"{GAPS}/postings", params={"mentions": "graphql"}
+        )
+        assert len(resp.json()["postings"]) == 1
+
+    async def test_unanalyzed_posting_is_excluded(self, admin_client):
+        await _store(admin_client, JD_KUBERNETES, company="Acme")
+        # Never analyzed — the term can neither be confirmed nor denied.
+
+        resp = await admin_client.get(
+            f"{GAPS}/postings", params={"mentions": "GraphQL"}
+        )
+        assert resp.json()["postings"] == []
+
+    async def test_unmatched_term_returns_empty(self, admin_client):
+        posting = await _store(admin_client, JD_KUBERNETES, company="Acme")
+        await _analyze(admin_client, posting["id"])
+
+        resp = await admin_client.get(f"{GAPS}/postings", params={"mentions": "Kafka"})
+        assert resp.json()["postings"] == []
+
+    async def test_no_filter_returns_everything(self, admin_client):
+        await _store(admin_client, JD_KUBERNETES, company="Acme")
+        await _store(admin_client, JD_TERRAFORM, company="Beta", url="https://x/2")
+
+        resp = await admin_client.get(f"{GAPS}/postings")
+        assert len(resp.json()["postings"]) == 2
+
+
 class TestAnalysis:
     async def test_analysis_assigns_tiers_and_coverage(self, admin_client):
         posting = await _store(admin_client, JD_KUBERNETES)

@@ -13,6 +13,11 @@ output "api_games_runtime_sa_email" {
   value       = google_service_account.api_games_runtime.email
 }
 
+output "ats_refresh_trigger_runtime_sa_email" {
+  description = "ATS refresh trigger service account email"
+  value       = google_service_account.ats_refresh_trigger_runtime.email
+}
+
 output "deployer_sa_email" {
   description = "Email of the CI/CD deployer service account"
   value       = google_service_account.deployer.email

@@ -48,3 +48,9 @@ resource "google_project_service" "sqladmin" {
   service            = "sqladmin.googleapis.com"
   disable_on_destroy = false
 }
+
+# Phase 2b PR4: Cloud Scheduler triggers the ATS refresh job.
+resource "google_project_service" "cloudscheduler" {
+  service            = "cloudscheduler.googleapis.com"
+  disable_on_destroy = false
+}

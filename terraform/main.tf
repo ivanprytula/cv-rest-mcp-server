@@ -36,12 +36,13 @@ module "cloud_sql" {
 module "iam_secrets" {
   source = "./modules/iam_secrets"
 
-  project               = var.project_id
-  region                = var.region
-  jwt_signing_secret_id = var.jwt_signing_secret_id
-  api_core_secret_ids   = var.api_core_secret_ids
-  enable_cloud_sql      = var.enable_cloud_sql
-  labels                = merge(local.base_labels, { service = "iam-secrets" })
+  project                = var.project_id
+  region                 = var.region
+  jwt_signing_secret_id  = var.jwt_signing_secret_id
+  api_core_secret_ids    = var.api_core_secret_ids
+  database_url_secret_id = var.database_url_secret_id
+  enable_cloud_sql       = var.enable_cloud_sql
+  labels                 = merge(local.base_labels, { service = "iam-secrets" })
 }
 
 # GitHub Workload Identity Federation for CI/CD (optional)
@@ -112,9 +113,62 @@ module "run" {
   max_instances         = each.value.max_instances
   min_instances         = each.value.min_instances
   memory                = each.value.memory
-  # Only api-core talks to Postgres; games/spa-origin never mount the socket.
-  cloud_sql_instances = each.key == "api-core" && var.enable_cloud_sql ? [module.cloud_sql[0].connection_name] : []
+  ingress               = each.value.ingress
+  command               = each.value.command
+  # api-core and the ATS refresh trigger talk to Postgres directly;
+  # games/spa-origin never mount the socket.
+  cloud_sql_instances = contains(["api-core", "ats-refresh-trigger"], each.key) && var.enable_cloud_sql ? [module.cloud_sql[0].connection_name] : []
   labels              = merge(local.base_labels, { service = each.key })
+}
+
+# Phase 2b PR4: Cloud Scheduler invokes the private ats-refresh-trigger
+# service via native OIDC. Gated on the service actually being defined in
+# var.services, so a services map without it (e.g. before an operator
+# configures ATS_TRACKED_BOARDS) doesn't break `terraform plan`.
+locals {
+  ats_trigger_enabled = contains(keys(var.services), "ats-refresh-trigger")
+}
+
+# run.invoker scoped to exactly this one service — not project-wide, and
+# distinct from api-core's allUsers grant (this service has none; Cloud
+# Run's platform enforces the check for every other caller by default-deny).
+resource "google_cloud_run_v2_service_iam_member" "ats_refresh_trigger_invoker" {
+  count = local.ats_trigger_enabled ? 1 : 0
+
+  project  = var.project_id
+  location = var.region
+  name     = module.run["ats-refresh-trigger"].service_name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${module.iam_secrets.ats_refresh_trigger_runtime_sa_email}"
+}
+
+resource "google_cloud_scheduler_job" "ats_refresh" {
+  count       = local.ats_trigger_enabled ? 1 : 0
+  project     = var.project_id
+  region      = var.region
+  name        = "ats-refresh"
+  description = "Polls tracked ATS boards and re-analyzes changed postings."
+  schedule    = var.ats_refresh_schedule
+  time_zone   = var.ats_refresh_timezone
+  # Refresh may touch several boards sequentially (gap_service.py caps
+  # concurrency at 2) — generous deadline so a slow board doesn't cut the
+  # run short before close_missing_postings runs for the others.
+  attempt_deadline = "300s"
+
+  http_target {
+    http_method = "POST"
+    uri         = "${module.run["ats-refresh-trigger"].service_uri}/trigger"
+
+    oidc_token {
+      service_account_email = module.iam_secrets.ats_refresh_trigger_runtime_sa_email
+      audience              = module.run["ats-refresh-trigger"].service_uri
+    }
+  }
+
+  depends_on = [
+    module.gcp_apis,
+    google_cloud_run_v2_service_iam_member.ats_refresh_trigger_invoker,
+  ]
 }
 
 # HTTPS edge: global IP, managed certs, URL-map host routing, Cloud CDN bucket.

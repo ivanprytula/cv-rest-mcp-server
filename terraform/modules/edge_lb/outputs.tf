@@ -11,6 +11,7 @@ output "url_map_name" {
 output "certificates" {
   description = "Map of host label -> managed cert self link."
   value       = { for k, v in google_compute_managed_ssl_certificate.edge : k => v.id }
+  sensitive   = true
 }
 
 output "https_proxy_name" {

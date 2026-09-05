@@ -168,6 +168,7 @@ class SecurityHeadersMiddleware:
     """
 
     _HEADERS = (
+        (b"strict-transport-security", b"max-age=31536000; includeSubDomains"),
         (b"x-content-type-options", b"nosniff"),
         (b"x-frame-options", b"SAMEORIGIN"),
         (b"referrer-policy", b"strict-origin-when-cross-origin"),
