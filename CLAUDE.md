@@ -21,6 +21,7 @@ npm run css             # Rebuild Tailwind CSS (required after template changes)
 **Current phase**: Phase 2 — Cloud SQL Postgres + Alembic migrations underway (user store first).
 
 **Key files**:
+
 - `services/portfolio/main.py` — FastAPI app setup, middleware, lifespan
 - `services/portfolio/auth/user_repository.py` — Async SQLAlchemy user repo (asyncpg, Alembic-migrated schema)
 - `services/portfolio/alembic/` — migration scripts; `services/portfolio/db_migrations.py` runs them programmatically
@@ -165,6 +166,16 @@ Follow [ACROSS design principles](https://github.com/your-org/cv-rest-mcp-server
 - Minimize abstractions (YAGNI)
 
 Ruff + type checking enforced pre-commit. Run locally: `just code-quality`.
+
+## Code Validation Beyond Tests
+
+Beyond linting and unit tests, manually apply the security & correctness checks in [AGENTS.md § Code Validation Rules](AGENTS.md#code-validation-rules-beyond-linting--tests) for any change touching:
+- REST routes (input validation, error messages, response bodies)
+- Auth endpoints (login, token refresh, logout, scope/role gates)
+- Middleware (header attachment, request/response interception, exception handling)
+- Database interactions (connection strings, credentials, query error handling)
+
+The rules cover: information leaks in 200-OK responses, security headers, authentication/secrets handling, input validation, database safety, middleware order, regex patterns, logging, and a 5-item pre-commit checklist.
 
 ## Markdown Style
 

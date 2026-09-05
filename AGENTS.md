@@ -47,6 +47,74 @@ uv run <command>
   "see the `app.add_middleware(...)` block", not "see conftest.py:240" or
   "main.py:166-188"). If a path must be named, don't pin a line range.
 
+## Code Validation Rules (Beyond Linting & Tests)
+
+In addition to `just code-quality` (ruff + type checking) and `just test`, manually verify:
+
+### Information Leaks in 200 Responses
+
+- No exception messages (`.detail=str(exc)`) surfaced to clients — log exceptions to stderr, return generic messages like `"CV tailoring failed"` to the client
+- Error messages never expose: file paths, environment variable names, internal service names, stack traces, database schema, or username existence
+- Date/time stamps in responses are intentional (e.g., `created_at` on a revision) — check they're not sensitive or PII
+- JSON payloads returned at 200 should match the documented schema (run `uv run pytest --co -q` to list all tests)
+
+### Security Headers
+
+- `Strict-Transport-Security` (HSTS, 1 year max-age) — redirects all HTTP to HTTPS
+- `X-Content-Type-Options: nosniff` — prevents MIME-type sniffing
+- `X-Frame-Options: SAMEORIGIN` or `DENY` — blocks clickjacking (SAMEORIGIN if an endpoint embeds itself in an iframe, DENY otherwise)
+- `Content-Security-Policy` — declared with script-src hashes, style-src allowlist, no `unsafe-inline` for scripts
+- Check middleware in `main.py` (SecurityHeadersMiddleware) — verify headers are added to all responses, including 401/403/5xx
+
+### Authentication & Secrets
+
+- Login endpoints return the same error (`401 Invalid credentials`) for both nonexistent users and wrong passwords — no username enumeration
+- Access tokens returned in JSON bodies only, never in URLs or as cookies (refresh tokens are httpOnly cookies, not in JSON)
+- Refresh token rotation detects and revokes replayed tokens (family-based invalidation, not token-by-token)
+- No signing key, JD_CRYPTO_KEY, or JWT_SIGNING_KEY ever committed — all in Secret Manager or `.env` (gitignored)
+- Auth scope/role gates are checked at middleware before business logic runs (fail-closed: 401/403 before reaching handlers)
+
+### Input Validation Boundaries
+
+- Request bodies validated with Pydantic models (Content-Type checked, malformed JSON → 422)
+- File uploads (PDF/DOCX) size-capped before processing (`parse_jd_input` enforces 10 MB)
+- Query parameters that control behavior (e.g., `?theme=`, `?tailored=`) validated against a whitelist or strict pattern (not user-controlled CRUD ops)
+- Any endpoint accepting a file or large body has a max-size check and returns 413 Payload Too Large
+
+### Database & Credentials
+
+- Database connection strings (DATABASE_URL) never logged — they contain passwords
+- No credentials passed as CLI args or shell env vars at startup; use `.env` file (gitignored) or Secret Manager
+- Database errors (connection, query, constraint violations) logged server-side only — clients get generic 500 or 503
+
+### Middleware & Decorator Order
+
+- Middleware runs outside-in on requests, inside-out on responses — verify order in `main.py` `app.add_middleware()` matches comments
+- Rate limiters (@limits decorators) applied to public endpoints, MCP tools also rate-limited (mcp_limits.py)
+- Auth middleware (JWTAuthMiddleware) gates protected paths before business logic runs
+
+### Regex & Pattern Matching
+
+- Regex patterns (e.g., in path validators, document kind patterns) anchor at start/end (`^...$`) to avoid partial matches
+- No backreferences in user-facing validation patterns (performance cliff if input exploits catastrophic backtracking)
+- File paths extracted from user input (e.g., `?tailored=cv_tailored-*.json`) use `Path(name).name` to reject path traversal (`../`, absolute paths)
+
+### Logging & Observability
+
+- Sensitive data (passwords, tokens, API keys, personal email) never logged, even at DEBUG level
+- Error paths log the exception with `logger.exception()` (to stderr, captured by Cloud Logging as ERROR)
+- Access logs (who, what, when) safe for audit but not verbose (don't log request bodies)
+
+### Run the Checklist
+
+After making a change:
+
+1. `just code-quality` — passes all linting/type checks
+2. `just test` — 405 tests pass, coverage ≥96%
+3. Manually scan your routes for info leaks: grep for `detail=` error messages, check they're generic
+4. Check middleware order in `main.py`: SecurityHeaders first (outermost), Guard/CORS/JWTAuth innermost
+5. If you added an endpoint: verify auth scope/role gate is applied, no user input is trusted without validation, error messages are safe
+
 ## Commands
 
 ```bash
@@ -254,9 +322,9 @@ Plan: 3 to add, 0 to change, 0 to destroy.
 Two infra docs exist in **two versions**: a gitignored operator copy holding
 real values, and a sanitised copy committed to the public repo.
 
-| Local (gitignored, real values) | Committed (sanitised) |
-| --- | --- |
-| `.agent/infrastructure_local.md` | `docs/infrastructure.md` |
+| Local (gitignored, real values)         | Committed (sanitised)           |
+| --------------------------------------- | ------------------------------- |
+| `.agent/infrastructure_local.md`        | `docs/infrastructure.md`        |
 | `.agent/architecture-diagrams_local.md` | `docs/architecture-diagrams.md` |
 
 **Rule: never update one without the other.** Whenever a change introduces or
