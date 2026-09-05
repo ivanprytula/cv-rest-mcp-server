@@ -152,6 +152,15 @@ resource "google_project_iam_member" "deployer_cloudsql_viewer" {
   member  = "serviceAccount:${google_service_account.deployer.email}"
 }
 
+# Deployer creates new runtime SAs as part of `terraform apply` in CI
+# (e.g. ats_refresh_trigger_runtime) — every prior SA was bootstrapped by a
+# one-time local Owner apply, but that doesn't scale to a new SA per PR.
+resource "google_project_iam_member" "deployer_service_account_admin" {
+  project = var.project
+  role    = "roles/iam.serviceAccountAdmin"
+  member  = "serviceAccount:${google_service_account.deployer.email}"
+}
+
 # CI/CD deployer needs to assign runtime SAs to Cloud Run services.
 # Scoped to deployer SA only; acceptable trade-off for CI/CD automation.
 resource "google_project_iam_member" "deployer_actAs" {
