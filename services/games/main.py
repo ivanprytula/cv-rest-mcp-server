@@ -95,6 +95,12 @@ class SecurityHeadersMiddleware:
 app = FastAPI(
     title="CV REST/MCP Server — Games",
     description="Company Culture Bingo and other interactive games.",
+    # ponytail: two endpoints, no public API contract worth browsing —
+    # Swagger UI would need its own CSP carve-outs (jsdelivr script-src-elem,
+    # fastapi.tiangolo.com img-src) for a page that adds no value here.
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
 )
 app.state.limiter = limiter
 app.add_middleware(
