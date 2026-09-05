@@ -72,7 +72,7 @@ _READ_SCOPED_API_PATHS = {f"{API_V1_PREFIX}/cv", f"{API_V1_PREFIX}/cv/pdf"}
 
 # Read-scoped GET *subtrees*. Exact-path matching cannot express a route with
 # a path parameter (`/gaps/postings/{id}`), so these are prefix-matched.
-_READ_SCOPED_API_PREFIXES = (f"{API_V1_PREFIX}/gaps",)
+_READ_SCOPED_API_PREFIXES = (f"{API_V1_PREFIX}/gaps", f"{API_V1_PREFIX}/documents")
 
 # (method, path) pairs requiring the admin role. Mutations of operator content
 # live here; a set so adding the next one is data, not a code change.
@@ -81,9 +81,13 @@ _ADMIN_ROUTES = {
     ("POST", f"{API_V1_PREFIX}/gaps"),
 }
 
-# Admin-gated POST subtrees, for mutations whose route carries a path
-# parameter (`/gaps/postings/{id}/analyze`) and so cannot be matched exactly.
-_ADMIN_POST_PREFIXES = (f"{API_V1_PREFIX}/gaps/postings",)
+# Admin-gated (method, prefix) subtrees, for mutations whose route carries a
+# path parameter (`/gaps/postings/{id}/analyze`, `/documents/{kind}`) and so
+# cannot be matched exactly.
+_ADMIN_PREFIXES = (
+    ("POST", f"{API_V1_PREFIX}/gaps/postings"),
+    ("PUT", f"{API_V1_PREFIX}/documents"),
+)
 
 _SCOPE_READ = "cv:read"
 
@@ -220,8 +224,9 @@ class JWTAuthMiddleware:
         method, path = scope.get("method"), scope.get("path", "")
         if (method, path) in _ADMIN_ROUTES:
             return True
-        return method == "POST" and any(
-            path.startswith(f"{prefix}/") for prefix in _ADMIN_POST_PREFIXES
+        return any(
+            method == admin_method and path.startswith(f"{prefix}/")
+            for admin_method, prefix in _ADMIN_PREFIXES
         )
 
     @staticmethod

@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     # class, only static analysis does.
     from services.portfolio.auth.refresh_token_service import RefreshTokenService
     from services.portfolio.auth.user_service import UserService
+    from services.portfolio.documents.document_service import DocumentService
     from services.portfolio.gaps.gap_service import GapService
     from services.portfolio.revisions.revision_service import RevisionService
 
@@ -44,6 +45,16 @@ async def get_revision_service(request: Request) -> RevisionService:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Revision service not initialized",
+        )
+    return service
+
+
+async def get_document_service(request: Request) -> DocumentService:
+    service = getattr(request.app.state, "document_service", None)
+    if service is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Document service not initialized",
         )
     return service
 

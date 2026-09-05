@@ -95,6 +95,15 @@ def load_baseline(path: Path, key: str = "skills") -> list[dict[str, Any]]:
     except json.JSONDecodeError as exc:
         raise BaselineError(f"Skill bank is not valid JSON ({path}): {exc}") from exc
 
+    return parse_baseline(raw, key)
+
+
+def parse_baseline(raw: Any, key: str = "skills") -> list[dict[str, Any]]:
+    """Validate an already-parsed bank payload, returning one atom list.
+
+    Split from :func:`load_baseline` so a bank read from Postgres validates
+    through exactly the same rules as one read from disk.
+    """
     if not isinstance(raw, dict):
         raise BaselineError(
             f"Skill bank must be a JSON object, got {type(raw).__name__}"
@@ -105,7 +114,7 @@ def load_baseline(path: Path, key: str = "skills") -> list[dict[str, Any]]:
     if entries is None and key != "skills":
         return []
     if not isinstance(entries, list) or (not entries and key == "skills"):
-        raise BaselineError(f"Skill bank {path} must have a non-empty {key!r} list")
+        raise BaselineError(f"Skill bank must have a non-empty {key!r} list")
 
     atoms = [_validate_atom(atom) for atom in entries]
     names = [atom["atom"] for atom in atoms]
@@ -113,6 +122,25 @@ def load_baseline(path: Path, key: str = "skills") -> list[dict[str, Any]]:
         dupes = sorted({n for n in names if names.count(n) > 1})
         raise BaselineError(f"Skill bank has duplicate atoms: {dupes}")
     return atoms
+
+
+def validate_bank_payload(kind: str, payload: Any) -> None:
+    """Raise :class:`BaselineError` if *payload* is unusable for *kind*.
+
+    Used on write (documents API) so a document that would break matching is
+    rejected before it reaches storage, rather than on every later read.
+    """
+    if kind == "jd_vocabulary":
+        terms = payload.get("terms") if isinstance(payload, dict) else None
+        if not isinstance(terms, list) or not terms:
+            raise BaselineError("JD vocabulary must have a non-empty 'terms' list")
+        for entry in terms:
+            if not isinstance(entry, dict) or not str(entry.get("term", "")).strip():
+                raise BaselineError(f"Vocabulary entry missing a 'term': {entry!r}")
+        return
+    # Skill bank: both lists must validate, and `deferred` may be absent.
+    parse_baseline(payload, "skills")
+    parse_baseline(payload, "deferred")
 
 
 def build_atom_index(atoms: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:

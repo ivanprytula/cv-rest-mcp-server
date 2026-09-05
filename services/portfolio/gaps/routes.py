@@ -12,11 +12,24 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from services.portfolio.constants import API_V1_PREFIX
-from services.portfolio.dependencies import get_gap_service, get_pdf_service
+from services.portfolio.dependencies import (
+    get_document_service,
+    get_gap_service,
+    get_pdf_service,
+)
+from services.portfolio.documents.document_row import (
+    KIND_CV,
+    KIND_JD_VOCABULARY,
+    KIND_SKILL_BANK,
+)
+from services.portfolio.documents.document_service import (
+    DocumentService,
+    document_sources,
+)
 from services.portfolio.gaps.gap_service import ANALYZER_VERSION, GapService
 from services.portfolio.jd_input import PayloadTooLargeError, parse_jd_input
-from services.portfolio.matching.baseline import BaselineError, get_baseline
-from services.portfolio.matching.gap import load_vocabulary
+from services.portfolio.matching.baseline import BaselineError, parse_baseline
+from services.portfolio.matching.gap import parse_vocabulary
 from services.portfolio.pdf_generator import PdfService
 from services.portfolio.schemas.gaps import (
     GapReportOut,
@@ -33,19 +46,35 @@ router = APIRouter(prefix=f"{API_V1_PREFIX}/gaps", tags=["gaps"])
 
 get_gap_service_dep = Depends(get_gap_service)
 get_pdf_service_dep = Depends(get_pdf_service)
+get_document_service_dep = Depends(get_document_service)
 
 
-def _analysis_inputs() -> tuple[list[dict], list[dict], list[dict]]:
+async def _analysis_inputs(
+    documents: DocumentService,
+) -> tuple[list[dict], list[dict], list[dict]]:
     """Load the bank, deferred pool and vocabulary, or fail loudly.
+
+    Reads through `DocumentService`, so an operator edit made via
+    `PUT /api/v1/documents/{kind}` takes effect immediately, and a database
+    miss falls back to the shipped JSON files.
 
     A missing vocabulary would silently sink every term into the "unknown"
     tier, so this raises rather than degrading — a wrong roadmap is worse
     than an error.
     """
+    sources = document_sources(settings)
+    bank_payload = await documents.read(
+        KIND_SKILL_BANK, fallback_path=sources[KIND_SKILL_BANK]
+    )
+    vocab_payload = await documents.read(
+        KIND_JD_VOCABULARY, fallback_path=sources[KIND_JD_VOCABULARY]
+    )
     try:
-        bank = get_baseline(settings.cv_baseline_path, "skills")
-        deferred = get_baseline(settings.cv_baseline_path, "deferred")
-        vocabulary = load_vocabulary(settings.jd_vocabulary_path)
+        if bank_payload is None or vocab_payload is None:
+            raise BaselineError("skill bank or JD vocabulary is unavailable")
+        bank = parse_baseline(bank_payload, "skills")
+        deferred = parse_baseline(bank_payload, "deferred")
+        vocabulary = parse_vocabulary(vocab_payload)
     except BaselineError as exc:
         logger.warning("Gap analysis inputs unavailable: %s", exc)
         raise HTTPException(
@@ -104,19 +133,23 @@ async def analyze_job_posting(
     posting_id: int,
     gap_service: GapService = get_gap_service_dep,
     pdf_service: PdfService = get_pdf_service_dep,
+    documents: DocumentService = get_document_service_dep,
 ) -> GapReportOut:
     """Analyse a stored posting and persist the gap report.
 
     Idempotent: re-analyzing at the same analyzer version overwrites the
     previous result rather than accumulating rows.
     """
-    bank, deferred, vocabulary = _analysis_inputs()
+    bank, deferred, vocabulary = await _analysis_inputs(documents)
+    live_cv = await documents.read(
+        KIND_CV, fallback_path=document_sources(settings).get(KIND_CV)
+    )
     report = await gap_service.analyze_posting(
         posting_id,
         bank_atoms=bank,
         deferred_atoms=deferred,
         vocabulary=vocabulary,
-        live_cv=pdf_service.cv_data,
+        live_cv=live_cv if live_cv is not None else pdf_service.cv_data,
     )
     if report is None:
         raise HTTPException(status_code=404, detail="Job posting not found")

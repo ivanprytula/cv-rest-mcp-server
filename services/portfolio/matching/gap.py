@@ -90,9 +90,18 @@ def load_vocabulary(path: Path) -> list[dict[str, Any]]:
     except json.JSONDecodeError as exc:
         raise BaselineError(f"JD vocabulary is not valid JSON ({path}): {exc}") from exc
 
+    return parse_vocabulary(raw)
+
+
+def parse_vocabulary(raw: Any) -> list[dict[str, Any]]:
+    """Validate an already-parsed vocabulary payload.
+
+    Split from :func:`load_vocabulary` so a vocabulary read from Postgres
+    validates through exactly the same rules as one read from disk.
+    """
     terms = raw.get("terms") if isinstance(raw, dict) else None
     if not isinstance(terms, list) or not terms:
-        raise BaselineError(f"JD vocabulary {path} must have a non-empty 'terms' list")
+        raise BaselineError("JD vocabulary must have a non-empty 'terms' list")
 
     return [
         {

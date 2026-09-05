@@ -8,6 +8,7 @@ from sqlalchemy import engine_from_config, pool
 # been imported somewhere. Add future models (e.g. a Revision row) here too.
 import services.portfolio.auth.refresh_token_row  # noqa: F401,E402
 import services.portfolio.auth.user_row  # noqa: F401,E402
+import services.portfolio.documents.document_row  # noqa: F401,E402
 import services.portfolio.gaps.job_posting_row  # noqa: F401,E402
 import services.portfolio.revisions.revision_row  # noqa: F401,E402
 from services.portfolio.db import Base
