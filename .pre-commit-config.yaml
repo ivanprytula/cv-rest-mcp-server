@@ -114,3 +114,10 @@ repos:
         files: ^terraform/
         language: system
         pass_filenames: false
+      - id: tool-versions-sync
+        name: sync .tool-versions to CI
+        entry: bash scripts/check_tool_versions.sh
+        files: ^\.tool-versions$
+        language: system
+        pass_filenames: false
+        stages: [commit]
