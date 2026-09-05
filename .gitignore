@@ -25,6 +25,9 @@ data/*
 # version-control your levels/priorities. Live CV (cv.json) is still
 # GCS-only; the bank is a curated operator artifact, not personal data.
 !data/cv_baseline.json
+# JD-side vocabulary for gap analysis — curated like the bank, and grown by
+# hand from real postings, so it belongs in version control.
+!data/jd_vocabulary.json
 
 .kilo/
 .vscode/

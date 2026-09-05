@@ -19,6 +19,7 @@ import docx
 from pydantic import ValidationError
 from pypdf import PdfReader
 
+from services.portfolio.matching.normalize import normalize_jd_text
 from services.portfolio.schemas.tailor import TailorRequest
 
 
@@ -59,7 +60,7 @@ def _from_pdf(body: bytes, title: str) -> JdInput:
         text = "\n".join(page.extract_text() or "" for page in reader.pages)
     except Exception as exc:
         raise ValueError(f"Could not read PDF: {exc}") from exc
-    return JdInput(_normalize_text(text), title)
+    return JdInput(normalize_jd_text(text), title)
 
 
 def _from_docx(body: bytes, title: str) -> JdInput:
@@ -71,17 +72,11 @@ def _from_docx(body: bytes, title: str) -> JdInput:
     for table in document.tables:
         for row in table.rows:
             parts.extend(cell.text for cell in row.cells)
-    return JdInput(_normalize_text("\n".join(parts)), title)
+    return JdInput(normalize_jd_text("\n".join(parts)), title)
 
 
 def _from_text(body: bytes, title: str) -> JdInput:
-    return JdInput(body.decode("utf-8", errors="replace").strip(), title)
-
-
-def _normalize_text(raw: str) -> str:
-    """Collapse blank noise; keep the JD readable for the matcher."""
-    clean = "\n".join(line.strip() for line in raw.splitlines() if line.strip())
-    return clean.strip()
+    return JdInput(normalize_jd_text(body.decode("utf-8", errors="replace")), title)
 
 
 Parser = Callable[[bytes, str], JdInput]

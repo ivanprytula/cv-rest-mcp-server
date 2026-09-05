@@ -83,14 +83,51 @@ h1 {
   padding: 24px;
 }
 
-.revisions-table {
+.revisions-table,
+.roadmap-table,
+.postings-table {
   width: 100%;
   border-collapse: collapse;
 }
 
 .revisions-table th,
-.revisions-table td {
+.revisions-table td,
+.roadmap-table th,
+.roadmap-table td,
+.postings-table th,
+.postings-table td {
   text-align: left;
   padding: 8px 12px;
   border-bottom: 1px solid var(--border);
+}
+
+/* Gap tiers, cheapest-to-close first: update the CV, reconsider a parked
+   skill, or actually go learn something. */
+.tier {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+
+.tier-unvouched {
+  background: #e8f0fe;
+  color: #1a4a8a;
+}
+
+.tier-deferred {
+  background: #fdf0d5;
+  color: #7a5200;
+}
+
+.tier-unknown {
+  background: #fde8e8;
+  color: #8a1a1a;
+}
+
+.tier-blurb {
+  margin: 0 0 4px;
+  color: var(--muted, #666);
+  font-size: 0.9em;
 }

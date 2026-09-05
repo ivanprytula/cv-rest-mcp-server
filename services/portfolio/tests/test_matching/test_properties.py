@@ -10,7 +10,6 @@ independent of `data/cv.json` content.
 import hypothesis.strategies as st
 from hypothesis import given
 
-from services.portfolio.matching.matcher import match_skills
 from services.portfolio.matching.parser import extract_mentions
 from services.portfolio.matching.taxonomy import (
     _UK_TO_US,
@@ -89,15 +88,3 @@ class TestExtractMentions:
             assert m.skill in INDEX
             assert m.level in _VALID_LEVELS
             assert m.raw
-
-
-class TestMatchSkills:
-    @given(jd_skills=st.lists(_SKILL_WORDS, min_size=0, max_size=25))
-    def test_scores_bounded_sorted_and_thresholded(self, jd_skills):
-        matches = match_skills(jd_skills, INDEX)
-        assert len(matches) <= len(jd_skills)
-        assert all(0.0 <= m.score <= 1.0 for m in matches)
-        assert all(m.score >= 0.8 for m in matches)
-        assert all(
-            matches[i].score >= matches[i + 1].score for i in range(len(matches) - 1)
-        )

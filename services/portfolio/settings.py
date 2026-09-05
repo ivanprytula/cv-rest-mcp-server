@@ -71,6 +71,7 @@ class Settings(BaseSettings):
 
     # Skill bank (CV tailor + MCP match_jd)
     cv_baseline_path: Path = Path("data/cv_baseline.json")
+    jd_vocabulary_path: Path = Path("data/jd_vocabulary.json")
     cv_tailored_dir: Path = Path("data/tailored")
 
     @property

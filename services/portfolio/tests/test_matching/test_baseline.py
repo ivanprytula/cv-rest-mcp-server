@@ -211,12 +211,22 @@ class TestRealBankStructuralOnly:
         path = PROJECT_ROOT / "data" / "cv_baseline.json"
         atoms = load_baseline(path)
         assert atoms
-        expected = ATOM_REQUIRED_KEYS | set(ATOM_OPTIONAL_KEYS)
+        allowed = ATOM_REQUIRED_KEYS | set(ATOM_OPTIONAL_KEYS)
         for atom in atoms:
-            assert set(atom) == expected
+            # Optional keys are optional: `_note` is present on only some
+            # atoms, so assert bounds rather than exact key equality.
+            assert ATOM_REQUIRED_KEYS <= set(atom) <= allowed
             assert atom["level"] in {"expert", "middle", "basic"}
             assert atom["priority"] in {"high", "medium", "low"}
             assert " > " in atom["category_hint"]
+
+    def test_deferred_atoms_validate_against_the_same_schema(self):
+        path = PROJECT_ROOT / "data" / "cv_baseline.json"
+        deferred = load_baseline(path, "deferred")
+        assert deferred
+        allowed = ATOM_REQUIRED_KEYS | set(ATOM_OPTIONAL_KEYS)
+        for atom in deferred:
+            assert ATOM_REQUIRED_KEYS <= set(atom) <= allowed
 
     def test_atom_names_are_unique(self):
         path = PROJECT_ROOT / "data" / "cv_baseline.json"

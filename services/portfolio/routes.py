@@ -9,7 +9,11 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 
 from services.portfolio.constants import API_V1_PREFIX, CONFIG_DIR
-from services.portfolio.dependencies import get_pdf_service, get_revision_service
+from services.portfolio.dependencies import (
+    get_optional_gap_service,
+    get_pdf_service,
+    get_revision_service,
+)
 from services.portfolio.jd_input import PayloadTooLargeError, parse_jd_input
 from services.portfolio.matching.baseline import BaselineError, get_baseline
 from services.portfolio.matching.tailor import tailor_cv
@@ -27,6 +31,7 @@ router = APIRouter()
 
 get_pdf_service_dep = Depends(get_pdf_service)
 get_revision_service_dep = Depends(get_revision_service)
+get_optional_gap_service_dep = Depends(get_optional_gap_service)
 
 MCP_CLIENTS_PATH = CONFIG_DIR / "mcp_clients.json"
 
@@ -403,6 +408,7 @@ async def tailor_cv_endpoint(
     request: Request,
     pdf_service=get_pdf_service_dep,
     revision_service=get_revision_service_dep,
+    gap_service=get_optional_gap_service_dep,
 ):
     """Match a job description against the skill bank and emit a tailored CV revision.
 
@@ -453,6 +459,22 @@ async def tailor_cv_endpoint(
     except Exception:
         logger.exception("CV tailoring failed")
         raise HTTPException(status_code=500, detail="CV tailoring failed") from None
+
+    # Keep the JD itself, not just its hash. Tailoring used to discard the
+    # text, so every tailored revision pointed at a job description nobody
+    # could read back. Storing it here feeds the same corpus the gap roadmap
+    # ranks, and `revisions.jd_hash == job_postings.content_hash` (both are
+    # SHA-256 of this same normalized text) links the two.
+    #
+    # Strictly a side effect: the service is optional (absent in tests and
+    # before the lifespan wires it) and `store_posting` already degrades to
+    # None on any DB error, so neither can fail an otherwise-good tailoring.
+    if gap_service is not None:
+        await gap_service.store_posting(
+            jd_text=jd.jd_text,
+            source="tailor",
+            title=jd.title,
+        )
 
     revision = await revision_service.create(jd_text=jd.jd_text, tailored_cv=tailored)
     if revision is not None:

@@ -17,6 +17,8 @@ export default function AdminShell() {
           <NavLink to="/" end>
             Revisions
           </NavLink>
+          <NavLink to="/roadmap">Roadmap</NavLink>
+          <NavLink to="/postings">Postings</NavLink>
         </nav>
         <button type="button" onClick={handleLogout}>
           Log out

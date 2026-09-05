@@ -155,6 +155,7 @@ tripped over:
 - Validate request bodies with Pydantic models.
 - No hardcoded file paths/line numbers in comments or docstrings — name the
   function/fixture instead. Line refs go stale on the next rename or refactor.
+- US spelling throughout (e.g. `Normalized`, not `Normalised`; `Color`, not `Colour`).
 
 Follow [ACROSS design principles](https://github.com/your-org/cv-rest-mcp-server/blob/main/ACROSS.md):
 
@@ -205,6 +206,10 @@ Local `.claude/settings.local.json` allows:
 - `just code-quality *` (linting)
 - `just test *` (testing)
 - Auth token curl for local testing
+
+## Plan Files
+
+When writing new plan files, **never overwrite existing ones** unless explicitly asked. Write new plans to separate files (e.g., `phase2-plan.md`, `phase2.2-plan.md`, `plan-<date>-<topic>.md`). Existing plans may document work in progress (live PRs, step references, decisions), and overwriting them breaks continuity.
 
 ## Notes for Next Sessions
 

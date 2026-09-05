@@ -19,6 +19,9 @@ data/*
 # Skill bank is operator-curated, not personal data. Ship in image so
 # the matcher works out of the box on Cloud Run.
 !data/cv_baseline.json
+# JD-side vocabulary, likewise curated and not personal. Without this every
+# JD term falls into the "unknown" gap tier in production.
+!data/jd_vocabulary.json
 
 Dockerfile
 .dockerignore

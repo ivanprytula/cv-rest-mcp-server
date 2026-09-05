@@ -42,7 +42,18 @@ from services.portfolio.constants import (
 from services.portfolio.cv_source import build_cv_source_from_settings
 from services.portfolio.db import build_engine, build_session_factory
 from services.portfolio.db_migrations import upgrade_head
+from services.portfolio.documents.document_repository import (
+    SqlAlchemyDocumentRepository,
+)
+from services.portfolio.documents.document_service import (
+    DocumentService,
+    document_sources,
+)
+from services.portfolio.documents.routes import router as documents_router
 from services.portfolio.failban import register_violation_from_request
+from services.portfolio.gaps.gap_repository import SqlAlchemyGapRepository
+from services.portfolio.gaps.gap_service import GapService
+from services.portfolio.gaps.routes import router as gaps_router
 from services.portfolio.guard_middleware import GuardMiddleware
 from services.portfolio.mcp_limits import (
     enforce_mcp_pdf_render_limit,
@@ -326,6 +337,18 @@ async def lifespan(app):
     refresh_token_repo = SqlAlchemyRefreshTokenRepository(session_factory)
     app.state.refresh_token_service = RefreshTokenService(refresh_token_repo)
 
+    # Gap analysis: stores job postings and ranks what to learn next.
+    gap_repo = SqlAlchemyGapRepository(session_factory)
+    app.state.gap_service = GapService(gap_repo)
+
+    # Operator documents (live CV, skill bank, JD vocabulary) in Postgres.
+    # Seeding is idempotent — an existing row is never overwritten, so a
+    # redeploy cannot clobber edits made through the API. Reads fall back to
+    # the JSON files, so local dev works with no database at all.
+    document_service = DocumentService(SqlAlchemyDocumentRepository(session_factory))
+    app.state.document_service = document_service
+    await document_service.seed_from_files(document_sources(settings))
+
     async with mcp_app.lifespan(app):
         yield
 
@@ -338,6 +361,8 @@ app.mount("/mcp", mcp_app)
 app.mount("/static", StaticFiles(directory=STATIC_DIR))
 app.include_router(router)
 app.include_router(auth_router)
+app.include_router(gaps_router)
+app.include_router(documents_router)
 
 
 # The /cv/tailor endpoint reads the raw body itself (multi-format: JSON,

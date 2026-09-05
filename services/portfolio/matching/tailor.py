@@ -270,6 +270,30 @@ def tailor_cv(
 ) -> dict[str, Any]:
     """Build a tailored copy of *live_cv* from *jd_text* + the skill bank.
 
+    Thin wrapper over :func:`tailor_with_gaps` keeping the tailored document
+    as the sole return value — the shape ``routes.py`` and the ``match_jd``
+    MCP tool consume.
+    """
+    tailored, _ = tailor_with_gaps(
+        jd_text, baseline_atoms, live_cv, title=title, threshold=threshold
+    )
+    return tailored
+
+
+def tailor_with_gaps(
+    jd_text: str,
+    baseline_atoms: list[dict[str, Any]],
+    live_cv: dict[str, Any],
+    *,
+    title: str = "",
+    threshold: float = 0.8,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Tailor *live_cv*, also returning the atoms the trust policy dropped.
+
+    The dropped atoms are bank skills a JD asked for that the live CV does not
+    vouch for — the "unvouched" gap tier. ``tailor_cv`` discards them; gap
+    analysis needs them.
+
     Steps:
     1. Build an attribution map: every JD mention (qualifier-aware) picks a
        bank atom, carrying its required level.
@@ -317,7 +341,7 @@ def tailor_cv(
     live_index = build_skill_index(
         live_cv.get("skills", []), live_cv.get("additional_skills")
     )
-    trusted, _ = _trust_filter(list(candidates.values()), live_index)
+    trusted, dropped = _trust_filter(list(candidates.values()), live_index)
 
     skills, additional = _group_atoms(trusted, _canonical_skill_order(live_cv))
 
@@ -326,4 +350,4 @@ def tailor_cv(
     tailored["additional_skills"] = additional
     if title:
         tailored["title"] = title
-    return tailored
+    return tailored, dropped
