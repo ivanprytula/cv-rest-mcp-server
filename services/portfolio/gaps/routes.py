@@ -17,19 +17,18 @@ from services.portfolio.dependencies import (
     get_gap_service,
     get_pdf_service,
 )
-from services.portfolio.documents.document_row import (
-    KIND_CV,
-    KIND_JD_VOCABULARY,
-    KIND_SKILL_BANK,
-)
+from services.portfolio.documents.document_row import KIND_CV
 from services.portfolio.documents.document_service import (
     DocumentService,
     document_sources,
 )
-from services.portfolio.gaps.gap_service import ANALYZER_VERSION, GapService
+from services.portfolio.gaps.gap_service import (
+    ANALYZER_VERSION,
+    GapService,
+    load_analysis_inputs,
+)
 from services.portfolio.jd_input import PayloadTooLargeError, parse_jd_input
-from services.portfolio.matching.baseline import BaselineError, parse_baseline
-from services.portfolio.matching.gap import parse_vocabulary
+from services.portfolio.matching.baseline import BaselineError
 from services.portfolio.pdf_generator import PdfService
 from services.portfolio.schemas.gaps import (
     GapReportOut,
@@ -52,35 +51,19 @@ get_document_service_dep = Depends(get_document_service)
 async def _analysis_inputs(
     documents: DocumentService,
 ) -> tuple[list[dict], list[dict], list[dict]]:
-    """Load the bank, deferred pool and vocabulary, or fail loudly.
+    """Route-layer wrapper: translates a loader failure into a 500.
 
-    Reads through `DocumentService`, so an operator edit made via
-    `PUT /api/v1/documents/{kind}` takes effect immediately, and a database
-    miss falls back to the shipped JSON files.
-
-    A missing vocabulary would silently sink every term into the "unknown"
-    tier, so this raises rather than degrading — a wrong roadmap is worse
-    than an error.
+    The loader itself (`load_analysis_inputs`) is framework-free so the
+    standalone refresh trigger process can reuse it without importing
+    FastAPI's `HTTPException`.
     """
-    sources = document_sources(settings)
-    bank_payload = await documents.read(
-        KIND_SKILL_BANK, fallback_path=sources[KIND_SKILL_BANK]
-    )
-    vocab_payload = await documents.read(
-        KIND_JD_VOCABULARY, fallback_path=sources[KIND_JD_VOCABULARY]
-    )
     try:
-        if bank_payload is None or vocab_payload is None:
-            raise BaselineError("skill bank or JD vocabulary is unavailable")
-        bank = parse_baseline(bank_payload, "skills")
-        deferred = parse_baseline(bank_payload, "deferred")
-        vocabulary = parse_vocabulary(vocab_payload)
+        return await load_analysis_inputs(documents)
     except BaselineError as exc:
         logger.warning("Gap analysis inputs unavailable: %s", exc)
         raise HTTPException(
             status_code=500, detail="Gap analysis is unavailable"
         ) from None
-    return bank, deferred, vocabulary
 
 
 @router.post("", response_model=PostingCreated, status_code=201)
@@ -122,10 +105,16 @@ async def store_job_posting(
 
 @router.get("/postings", response_model=PostingList)
 async def list_job_postings(
+    mentions: str | None = None,
     gap_service: GapService = get_gap_service_dep,
 ) -> PostingList:
-    """List stored postings, newest first."""
-    return PostingList(postings=await gap_service.list_postings())
+    """List stored postings, newest first.
+
+    `?mentions=<term>` filters to postings whose analysis mentions that term
+    in any tier, e.g. `?mentions=Python`. Matches against the term as stored
+    (the bank/vocabulary's canonical name), case-insensitively.
+    """
+    return PostingList(postings=await gap_service.list_postings(mentions_term=mentions))
 
 
 @router.post("/postings/{posting_id}/analyze", response_model=GapReportOut)

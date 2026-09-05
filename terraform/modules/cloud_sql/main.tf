@@ -106,5 +106,5 @@ resource "google_sql_user" "app" {
   name     = var.database_user
   project  = var.project
   instance = google_sql_database_instance.instance.name
-  password = data.google_secret_manager_secret_version.db_password.secret_data
+  password = sensitive(data.google_secret_manager_secret_version.db_password.secret_data)
 }

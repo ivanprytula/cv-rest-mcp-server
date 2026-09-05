@@ -52,6 +52,8 @@ variable "services" {
         max_instances         = int
         min_instances         = int
         memory                = "512Mi"
+        ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"  # optional
+        command               = []                                        # optional
       }
   EOT
   type = map(object({
@@ -63,6 +65,13 @@ variable "services" {
     max_instances         = optional(number, 1)
     min_instances         = optional(number, 0)
     memory                = optional(string, "512Mi")
+    # Internal-only services (e.g. the ATS refresh trigger, invoked by Cloud
+    # Scheduler's OIDC token, never by the public LB) override this away
+    # from the LB-routed default. See modules/cloud_run_service/variables.tf.
+    ingress = optional(string, "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER")
+    # Container command override — lets a second service run a different
+    # entrypoint from the same image (see modules/cloud_run_service).
+    command = optional(list(string), [])
   }))
 }
 
@@ -101,6 +110,32 @@ variable "cloud_sql_db_password_secret_id" {
   description = "Secret Manager secret ID holding the Cloud SQL app user password."
   type        = string
   default     = "cv-db-password"
+}
+
+# Composed from cloud_sql_db_password_secret_id + the instance's connection
+# name by `just deploy bootstrap-database-url` (see CLAUDE.md's Bootstrap &
+# Deployment section) — script-owned like the other secrets, this only names
+# the ID so the ats-refresh-trigger runtime SA can be granted read access.
+variable "database_url_secret_id" {
+  description = "Secret Manager secret ID holding the Postgres connection string (DATABASE_URL)."
+  type        = string
+  default     = "cv-database-url"
+}
+
+# Cron expression for the ATS refresh job (unix-cron, e.g. "0 */6 * * *" for
+# every 6 hours). Cloud Scheduler is a general cron scheduler, not limited to
+# once a day — pick whatever cadence fits; the ETag-based conditional GET in
+# gaps/ats.py keeps a more frequent schedule cheap against unchanged boards.
+variable "ats_refresh_schedule" {
+  description = "Unix-cron expression for how often the ATS refresh trigger runs."
+  type        = string
+  default     = "0 8 * * *" # once daily, 08:00
+}
+
+variable "ats_refresh_timezone" {
+  description = "IANA timezone for ats_refresh_schedule."
+  type        = string
+  default     = "Etc/UTC"
 }
 
 # Private upload bucket for user content (avatars/photos). Signed-URL only writes.

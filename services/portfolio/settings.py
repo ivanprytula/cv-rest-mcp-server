@@ -74,6 +74,11 @@ class Settings(BaseSettings):
     jd_vocabulary_path: Path = Path("data/jd_vocabulary.json")
     cv_tailored_dir: Path = Path("data/tailored")
 
+    # ATS boards to poll on refresh (Phase 2b PR4), "source:company_slug"
+    # pairs separated by commas, e.g. "greenhouse:stripe,lever:netflix".
+    # Empty = nothing tracked yet; the refresh trigger then does nothing.
+    ats_tracked_boards: str = ""
+
     @property
     def sync_database_url(self) -> str:
         """`database_url` with the async driver swapped for a sync one.

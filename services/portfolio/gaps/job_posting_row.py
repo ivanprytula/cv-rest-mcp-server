@@ -41,6 +41,11 @@ class JobPostingRow(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     source: Mapped[str] = mapped_column(String(32))
     external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # The ATS board this came from, e.g. "stripe" on Greenhouse. NULL for
+    # manual/pasted postings, which have no board to be "closed" relative to.
+    # `close_missing_postings` scopes on (source, company_slug), since a
+    # portal name alone can host many companies' boards.
+    company_slug: Mapped[str | None] = mapped_column(String(255), nullable=True)
     company: Mapped[str] = mapped_column(String(255), default="")
     title: Mapped[str] = mapped_column(String(512), default="")
     url: Mapped[str] = mapped_column(Text, default="")
@@ -100,4 +105,27 @@ class JdAnalysisRow(Base):
     result: Mapped[dict[str, Any]] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
+class AtsBoardRow(Base):
+    """One tracked company's board on one portal — fetch cache / polling state.
+
+    A "board" is (portal, company_slug): Greenhouse/Lever/Ashby each host many
+    companies, so the portal name alone cannot identify what to poll. `etag`
+    lets a refresh skip a board entirely on `304 Not Modified` instead of
+    re-parsing an unchanged listing.
+    """
+
+    __tablename__ = "ats_boards"
+    __table_args__ = (
+        UniqueConstraint("source", "company_slug", name="uq_ats_boards_source_slug"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    source: Mapped[str] = mapped_column(String(32))
+    company_slug: Mapped[str] = mapped_column(String(255))
+    etag: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    last_fetched_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
