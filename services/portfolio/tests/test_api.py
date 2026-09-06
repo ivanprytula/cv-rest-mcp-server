@@ -52,6 +52,33 @@ async def test_openapi_declares_tailor_bearer_auth(client):
         assert "security" not in schema["paths"][path]["get"]
 
 
+async def test_openapi_declares_bearer_auth_on_every_protected_api_v1_route(client):
+    """Every /api/v1/* route JWTAuthMiddleware actually gates must also carry
+    the security requirement in the schema, or Swagger's Authorize button
+    silently sends no Authorization header and every "Try it out" 401s (the
+    exact bug: /api/v1/auth/me was gated by the middleware but missing from
+    a hand-maintained operation list, so a pasted-in valid token still 401'd
+    from /docs)."""
+    resp = await client.get("/openapi.json")
+    schema = resp.json()
+    for path, methods in schema["paths"].items():
+        if not path.startswith("/api/v1"):
+            continue
+        for method, operation in methods.items():
+            if method == "options":
+                continue
+            if path in (
+                "/api/v1/auth/token",
+                "/api/v1/auth/refresh",
+                "/api/v1/auth/logout",
+            ):
+                assert "security" not in operation, f"{method.upper()} {path}"
+            else:
+                assert operation["security"] == [{"HTTPBearer": []}], (
+                    f"{method.upper()} {path}"
+                )
+
+
 async def test_site_css_served(client):
     resp = await client.get("/static/css/site.css")
     assert resp.status_code == status.HTTP_200_OK

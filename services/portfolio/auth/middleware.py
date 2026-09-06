@@ -131,6 +131,26 @@ def _is_protected(scope: Scope) -> bool:
     return _is_tailored_read(scope)
 
 
+def api_v1_route_requires_bearer(path: str) -> bool:
+    """True when an `/api/v1/*` route always needs a verified JWT.
+
+    Single source of truth for `main.py`'s OpenAPI schema, so the Swagger
+    "Authorize" padlock appears on exactly the routes `_is_protected` actually
+    gates — a hand-maintained duplicate list drifts the moment a new
+    `/api/v1/*` route is added (as happened with `/api/v1/auth/me`: gated by
+    this middleware, but missing from the schema, so Swagger silently sent no
+    Authorization header and every "Try it out" 401'd). Doesn't cover the
+    query-string-dependent `/cv/html?tailored=` case — that one is still
+    listed explicitly by the caller, since a static OpenAPI operation can't
+    express "protected only with this query param."
+    """
+    return path.startswith(API_V1_PREFIX) and path not in {
+        _TOKEN_PATH,
+        _REFRESH_PATH,
+        _LOGOUT_PATH,
+    }
+
+
 def _has_scope(claims: dict, required: str | None) -> bool:
     """True if `claims` carries the required scope (None means authenticated only)."""
     if required is None:

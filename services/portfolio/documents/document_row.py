@@ -21,8 +21,9 @@ from services.portfolio.db import Base
 KIND_CV = "cv"
 KIND_SKILL_BANK = "skill_bank"
 KIND_JD_VOCABULARY = "jd_vocabulary"
+KIND_ATS_BOARDS = "ats_boards"
 
-DOCUMENT_KINDS = (KIND_CV, KIND_SKILL_BANK, KIND_JD_VOCABULARY)
+DOCUMENT_KINDS = (KIND_CV, KIND_SKILL_BANK, KIND_JD_VOCABULARY, KIND_ATS_BOARDS)
 
 
 class DocumentRow(Base):

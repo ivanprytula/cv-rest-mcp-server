@@ -64,7 +64,6 @@ def test_limit_key_uses_xff_entry_when_configured(monkeypatch):
     from services.portfolio.settings import settings
 
     monkeypatch.setattr(settings, "client_ip_xff_entry", 2)
-    monkeypatch.setattr(settings, "client_ip_header", "")
     # Both clients share the same real client IP at XFF position 2.
     _patch_http_request(
         monkeypatch,

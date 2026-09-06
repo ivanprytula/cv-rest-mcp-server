@@ -21,6 +21,7 @@ from starlette.types import ASGIApp
 from services.portfolio.auth import (
     CredentialedCORSMiddleware,
     JWTAuthMiddleware,
+    api_v1_route_requires_bearer,
     auth_router,
 )
 from services.portfolio.auth.refresh_token_repository import (
@@ -82,15 +83,6 @@ for _noisy in ("weasyprint", "fontTools"):
 logger = logging.getLogger(__name__)
 
 
-def _openapi_contact() -> dict[str, str] | None:
-    contact = {}
-    if settings.contact_name:
-        contact["name"] = settings.contact_name
-    if settings.contact_email:
-        contact["email"] = settings.contact_email
-    return contact or None
-
-
 app = FastAPI(
     title="CV REST/MCP Server",
     description=(
@@ -108,7 +100,6 @@ app = FastAPI(
         "**MCP** — mount `/mcp` in any MCP client "
         "(config snippet on the landing page)."
     ),
-    contact=_openapi_contact(),
 )
 app.state.limiter = limiter
 
@@ -407,39 +398,36 @@ _TAILOR_REQUEST_BODY = {
 
 _openapi_getter = app.openapi
 
-# The /api/v1/cv/tailor mutation, the dedicated /api/v1/cv/pdf (operator-only
-# tailored PDF download), and the `?tailored=` revision reads on /cv|/cv/html
-# are all JWT-gated by JWTAuthMiddleware (migrated from TailorAuthMiddleware,
-# ADR-018); Swagger UI needs the security scheme declared on those operations
-# so the Authorize button sends `Authorization: Bearer <access_token>`. /cv
-# and /cv/html are only actually protected WHEN a `tailored` selector is
-# present — extra auth headers on the public surface are harmless, so the
-# declaration is unconditional here.
-_TAILOR_SECURITY_SCHEME = {"type": "http", "scheme": "bearer"}
-_TAILOR_SECURE_OPERATIONS = {
-    (f"{API_V1_PREFIX}/cv/tailor", "post"),
-    (f"{API_V1_PREFIX}/cv", "get"),
-    (f"{API_V1_PREFIX}/cv/pdf", "get"),
-    ("/cv/html", "get"),
-}
+# Every /api/v1/* route (except login/refresh/logout) is JWT-gated by
+# JWTAuthMiddleware — see auth.api_v1_route_requires_bearer, the same rule the
+# middleware itself enforces, so Swagger's Authorize padlock can never drift
+# from what actually 401s. /cv/html sits outside /api/v1 and is only
+# protected WHEN a `tailored` selector is present (a static OpenAPI operation
+# can't express that condition), so it stays an explicit, hardcoded case.
+_BEARER_SECURITY_SCHEME = {"type": "http", "scheme": "bearer"}
+_CONDITIONALLY_SECURE_OPERATIONS = {("/cv/html", "get")}
 
 
-def _openapi_with_tailor_contract() -> dict[str, Any]:
+def _openapi_with_auth_contract() -> dict[str, Any]:
     schema = _openapi_getter()
-    for path, method in _TAILOR_SECURE_OPERATIONS:
-        operation = schema.get("paths", {}).get(path, {}).get(method)
-        if operation is None:
-            continue
-        operation["security"] = [{"HTTPBearer": []}]
-        if path == f"{API_V1_PREFIX}/cv/tailor" and "requestBody" not in operation:
-            operation["requestBody"] = _TAILOR_REQUEST_BODY
+    paths = schema.get("paths", {})
+    for path, methods in paths.items():
+        for method, operation in methods.items():
+            is_secure = (path, method) in _CONDITIONALLY_SECURE_OPERATIONS or (
+                method != "options" and api_v1_route_requires_bearer(path)
+            )
+            if not is_secure:
+                continue
+            operation["security"] = [{"HTTPBearer": []}]
+            if path == f"{API_V1_PREFIX}/cv/tailor" and "requestBody" not in operation:
+                operation["requestBody"] = _TAILOR_REQUEST_BODY
     components = schema.setdefault("components", {})
     security_schemes = components.setdefault("securitySchemes", {})
-    security_schemes.setdefault("HTTPBearer", _TAILOR_SECURITY_SCHEME)
+    security_schemes.setdefault("HTTPBearer", _BEARER_SECURITY_SCHEME)
     return schema
 
 
-app.openapi = cast(Any, _openapi_with_tailor_contract)
+app.openapi = cast(Any, _openapi_with_auth_contract)
 
 
 if __name__ == "__main__":

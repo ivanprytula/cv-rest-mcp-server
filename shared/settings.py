@@ -23,7 +23,6 @@ class SharedSettings(BaseSettings):
     # ── Client IP resolution (used by shared/rate_limiter.py) ────────────────
     trust_proxy: bool = False
     client_ip_xff_entry: int = 0
-    client_ip_header: str = ""
 
 
 # Module-level singleton — imported by shared/rate_limiter.py

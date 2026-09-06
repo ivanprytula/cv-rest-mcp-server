@@ -30,7 +30,7 @@ from services.portfolio.db import build_engine, build_session_factory
 from services.portfolio.documents.document_repository import (
     SqlAlchemyDocumentRepository,
 )
-from services.portfolio.documents.document_row import KIND_CV
+from services.portfolio.documents.document_row import KIND_ATS_BOARDS, KIND_CV
 from services.portfolio.documents.document_service import (
     DocumentService,
     document_sources,
@@ -86,13 +86,18 @@ async def trigger_refresh() -> dict[str, object]:
     Returns per-board counts so the Scheduler job's execution log shows
     exactly what happened without a separate query.
     """
-    boards = parse_tracked_boards(settings.ats_tracked_boards)
-    if not boards:
-        logger.info("No ATS boards configured (ATS_TRACKED_BOARDS is empty)")
-        return {"boards": {}}
-
     gap_service: GapService = app.state.gap_service
     documents = app.state.document_service
+
+    # DB-first (operator-editable via PUT /api/v1/documents/ats_boards),
+    # falling back to ATS_TRACKED_BOARDS so a fresh deploy with no DB row yet
+    # still tracks whatever was configured before this moved out of env vars.
+    stored = await documents.read(KIND_ATS_BOARDS)
+    raw_boards = stored["raw"] if stored is not None else settings.ats_tracked_boards
+    boards = parse_tracked_boards(raw_boards)
+    if not boards:
+        logger.info("No ATS boards configured")
+        return {"boards": {}}
 
     try:
         analysis_inputs = await load_analysis_inputs(documents)

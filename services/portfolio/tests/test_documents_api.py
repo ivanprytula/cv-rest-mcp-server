@@ -60,7 +60,12 @@ class TestReadWrite:
         await admin_client.put(f"{DOCS}/skill_bank", json=_bank())
         body = (await admin_client.get(DOCS)).json()
         assert "skill_bank" in body["versions"]
-        assert set(body["kinds"]) == {"cv", "skill_bank", "jd_vocabulary"}
+        assert set(body["kinds"]) == {
+            "cv",
+            "skill_bank",
+            "jd_vocabulary",
+            "ats_boards",
+        }
 
     async def test_unknown_kind_is_rejected(self, admin_client):
         resp = await admin_client.get(f"{DOCS}/not_a_kind")
@@ -205,6 +210,41 @@ class TestRevert:
     async def test_revert_requires_authentication(self, client):
         resp = await client.delete(f"{DOCS}/cv", headers={"Authorization": ""})
         assert resp.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+class TestAtsBoards:
+    """ATS tracked boards: DB-first, falling back to ATS_TRACKED_BOARDS."""
+
+    async def test_write_then_read_round_trips(self, admin_client):
+        resp = await admin_client.put(
+            f"{DOCS}/ats_boards", json={"raw": "greenhouse:stripe,lever:netflix"}
+        )
+        assert resp.status_code == status.HTTP_200_OK, resp.text
+
+        read = await admin_client.get(f"{DOCS}/ats_boards")
+        assert read.json()["raw"] == "greenhouse:stripe,lever:netflix"
+
+    async def test_malformed_entry_is_rejected(self, admin_client):
+        resp = await admin_client.put(
+            f"{DOCS}/ats_boards", json={"raw": "not-a-valid-entry"}
+        )
+        assert resp.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    async def test_unknown_source_is_rejected(self, admin_client):
+        resp = await admin_client.put(
+            f"{DOCS}/ats_boards", json={"raw": "unknown_ats:acme"}
+        )
+        assert resp.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    async def test_read_falls_back_to_env_when_no_db_row(
+        self, admin_client, monkeypatch
+    ):
+        from services.portfolio.settings import settings
+
+        monkeypatch.setattr(settings, "ats_tracked_boards", "ashby:acme")
+        resp = await admin_client.get(f"{DOCS}/ats_boards")
+        assert resp.status_code == status.HTTP_200_OK
+        assert resp.json()["raw"] == "ashby:acme"
 
 
 class TestKindsAreDataDriven:

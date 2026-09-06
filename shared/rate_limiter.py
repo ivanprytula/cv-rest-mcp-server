@@ -11,8 +11,8 @@ from shared.settings import shared_settings
 def get_client_ip(request: Request) -> str:
     """Resolve the rate-limit key according to the configured client-IP strategy.
 
-    Order: X-Forwarded-For entry (if client_ip_xff_entry > 0), then the raw
-    client_ip_header, then the socket peer address.
+    Order: X-Forwarded-For entry (if client_ip_xff_entry > 0), then the socket
+    peer address.
     """
     if shared_settings.client_ip_xff_entry > 0:
         xff = request.headers.get("x-forwarded-for")
@@ -20,10 +20,6 @@ def get_client_ip(request: Request) -> str:
             entries = [entry.strip() for entry in xff.split(",")]
             if len(entries) >= shared_settings.client_ip_xff_entry:
                 return entries[-shared_settings.client_ip_xff_entry]
-    if shared_settings.client_ip_header:
-        value = request.headers.get(shared_settings.client_ip_header.lower())
-        if value:
-            return value.strip()
     return get_remote_address(request)
 
 

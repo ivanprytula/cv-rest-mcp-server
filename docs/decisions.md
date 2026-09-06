@@ -99,13 +99,18 @@ not apply.
 **Decision.** `get_client_ip()` uses configurable strategies in order:
 Nth XFF entry from the right (`CLIENT_IP_XFF_ENTRY`; Cloud Run recipe: `2`,
 the penultimate entry = real client, un-spoofable without controlling a hop
-adjacent to GFE), then a raw trusted header (`CLIENT_IP_HEADER`, nginx
-`X-Real-IP` case), then the socket peer.
+adjacent to GFE), then the socket peer.
 
-**Consequences.** Per-client fairness works behind proxies. The raw-header
-mode is spoofable if the app is reachable without that proxy — document
-deployment assumptions. IP rotation remains possible; sustained caps and the
-bounded executor bound total damage regardless of keying.
+**Consequences.** Per-client fairness works behind proxies. IP rotation
+remains possible; sustained caps and the bounded executor bound total damage
+regardless of keying.
+
+**Amendment (2026-09-05).** The original decision also proposed a
+`CLIENT_IP_HEADER` fallback (a raw trusted header, e.g. nginx's `X-Real-IP`)
+for non-Cloud-Run deployments. It was never configured in production —
+`CLIENT_IP_XFF_ENTRY=2` alone always resolved the client IP on this
+single-environment Cloud Run deployment — so it was removed as unused
+configuration surface.
 
 ## ADR-010: GuardMiddleware for static lists, hours, dynamic bans
 
@@ -125,12 +130,19 @@ default; with none configured the middleware short-circuits to passthrough.
 restart clears bans. Static blocklist intentionally has no loopback exemption
 (operator-explicit config), while dynamic bans never ban loopback.
 
+**Amendment (2026-09-05).** The scheduled-availability ("service hours") policy
+and its four env vars (`SERVICE_HOURS_START`/`END`/`SERVICE_DAYS`/`SERVICE_TIMEZONE`)
+were removed along with `service_hours.py`. This is an internet-facing API with
+no reason to be unavailable on a schedule — the feature was never configured in
+production. `GuardMiddleware`'s evaluation order is now allowlist → blocklist →
+dynamic ban.
+
 ## ADR-011: Loopback exemptions use socket peer only
 
 **Context.** Dev traffic (localhost) must bypass rate limits and bans, but
-header-derived IPs (XFF entries, `CLIENT_IP_HEADER`) are attacker-controllable
-behind a proxy — exempting on them would let anyone claim a loopback identity
-and bypass everything.
+header-derived IPs (XFF entries) are attacker-controllable behind a proxy —
+exempting on them would let anyone claim a loopback identity and bypass
+everything.
 
 **Decision.** Exemption checks (`peer_is_loopback`) read only `scope["client"]`,
 never headers.
@@ -623,6 +635,18 @@ and the **in-memory refresh store** swap. Both are deferred to Phase 3+.
   **only** by `POST /api/v1/auth/refresh`; it never touches JS storage.
   SameSite=None + Secure is required so the `app.<apex>` SPA can call the
   `api.<apex>` refresh endpoint cross-origin with credentials.
+
+  **Amendment (2026-09-06).** This shape is production-only. Local dev
+  (`ENVIRONMENT != "production"`) uses an unprefixed `refresh_token` cookie,
+  no `Secure`, `SameSite=Lax` instead: plain-HTTP `localhost` can satisfy
+  neither `SameSite=None`'s `Secure` requirement (browsers drop the whole
+  `Set-Cookie` otherwise) nor the `__Host-` prefix's HTTPS requirement, which
+  Firefox and Safari enforce strictly even with `Secure` absent (unlike
+  Chrome, which special-cases `localhost` as a secure context). Without this,
+  the refresh cookie silently never gets stored in dev, and a page refresh
+  always logs the operator out. `localhost:5173` → `localhost:8080` is still
+  same-site (differs only by port), so `SameSite=Lax` still delivers the
+  cookie on the SPA's credentialed fetch calls.
 - **Rotation + family reuse-detection.** Every successful refresh rotates the
   refresh token (a new random value is issued). Presenting a previously-issued
   but now-rotated token is treated as a **replay** and revokes the entire family
@@ -654,7 +678,7 @@ and the **in-memory refresh store** swap. Both are deferred to Phase 3+.
   injected into `scope["auth"]` for route handlers. Fail-closed 503 when the
   signing key is unset; 401 + `WWW-Authenticate: Bearer` on missing/invalid
   tokens. Mounted between `GuardMiddleware` and `TailorAuthMiddleware` so global
-  geo/failban/service-hours still apply and 401/503 responses still carry
+  geo/failban policies still apply and 401/503 responses still carry
   security headers.
 - **Credentialed CORS is an explicit exception.** `CredentialedCORSMiddleware`
   pins `Access-Control-Allow-Origin` to `CORS_ORIGIN` (the SPA) with

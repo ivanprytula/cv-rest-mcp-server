@@ -31,15 +31,31 @@ export function setAccessTokenExternal(token: string | null): void {
   currentAccessToken = token
 }
 
+// Refresh rotates the token server-side on every call (ADR-022 replay
+// detection): a second concurrent call would present the now-stale cookie
+// and get treated as a replay, revoking the whole family and logging the
+// user out. React 18 StrictMode double-invokes effects in dev (and two tabs,
+// or a fast double-click, can race in prod too), so concurrent callers must
+// share one in-flight request rather than each firing their own.
+let inFlightRefresh: Promise<string | null> | null = null
+
 export async function tryRefresh(): Promise<string | null> {
-  try {
-    const { access_token } = await apiRefresh()
-    setAccessTokenExternal(access_token)
-    return access_token
-  } catch {
-    setAccessTokenExternal(null)
-    return null
-  }
+  if (inFlightRefresh) return inFlightRefresh
+
+  inFlightRefresh = (async () => {
+    try {
+      const { access_token } = await apiRefresh()
+      setAccessTokenExternal(access_token)
+      return access_token
+    } catch {
+      setAccessTokenExternal(null)
+      return null
+    } finally {
+      inFlightRefresh = null
+    }
+  })()
+
+  return inFlightRefresh
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
