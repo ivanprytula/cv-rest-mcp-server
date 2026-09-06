@@ -13,6 +13,7 @@ reuse-detection in an in-memory store (Postgres in Phase 2).
 from services.portfolio.auth.middleware import (
     CredentialedCORSMiddleware,
     JWTAuthMiddleware,
+    api_v1_route_requires_bearer,
 )
 from services.portfolio.auth.routes import auth_router
 
@@ -20,5 +21,6 @@ from services.portfolio.auth.routes import auth_router
 __all__ = [
     "CredentialedCORSMiddleware",
     "JWTAuthMiddleware",
+    "api_v1_route_requires_bearer",
     "auth_router",
 ]

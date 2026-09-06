@@ -22,9 +22,8 @@ a bounded thread pool.
 | `app/themes/` | Theme modules exposing `CSS: str` |
 | `app/rate_limiter.py` | slowapi `Limiter`, client-IP resolution, stacked-limit decorator |
 | `app/mcp_limits.py` | Rate limits enforced inside MCP tools (slowapi stubs + request context) |
-| `app/guard_middleware.py` | Outermost access gate: allowlist/blocklist/bans/service hours |
+| `app/guard_middleware.py` | Outermost access gate: allowlist/blocklist/bans |
 | `app/ip_lists.py` | IP/CIDR parsing and membership checks |
-| `app/service_hours.py` | Scheduled availability window evaluation |
 | `app/failban.py` | Dynamic ban tracker (fail2ban-lite) fed by rate-limit violations |
 | `app/settings.py` | All runtime config (see `.env.example`) |
 | `static/css/` | Vendored Tailwind input and generated browser stylesheet |
@@ -74,7 +73,7 @@ Mounted at `/mcp` via Streamable HTTP. Tools (`get_cv`, `get_available_themes`,
 
 slowapi `Limiter` keyed by `get_client_ip()` (`app/rate_limiter.py`): the resolved
 client IP follows `CLIENT_IP_XFF_ENTRY` (Nth X-Forwarded-For entry from the right),
-then `CLIENT_IP_HEADER`, then the socket peer. **Loopback socket peers are exempt**
+then the socket peer. **Loopback socket peers are exempt**
 from all limits and dynamic bans (dev convenience; header-derived IPs are ignored
 for exemption because they are attacker-controllable).
 
@@ -110,12 +109,11 @@ the real client protocol — behind the GCP Load Balancer, TLS terminates
 before Cloud Run, so `request.base_url` would otherwise always report
 `http://` — before anything else runs; it never touches `scope["client"]`,
 only the scheme, and is a no-op unless `TRUST_PROXY=true`.
-Evaluation order: allowlist (`ALLOWED_IPS`) → blocklist (`BLOCKED_IPS`) →
-dynamic bans (`FAILBAN_*`) → service hours (`SERVICE_HOURS_*`). Each list may
-be inline (comma-separated) or file-based (`BLOCKED_IPS_FILE` /
-`ALLOWED_IPS_FILE`, one CIDR per line, `#` comments); inline and file contents merge, and a configured but
-unreadable file aborts startup. `/health` always passes; with no policy
-configured the middleware short-circuits to passthrough.
+Evaluation order: allowlist (`ALLOWED_IPS_FILE`) → blocklist (`BLOCKED_IPS_FILE`) →
+dynamic bans (`FAILBAN_*`). Each list is file-based (one CIDR per line, `#`
+comments), and a configured but unreadable file aborts startup. `/health`
+always passes; with no policy configured the middleware short-circuits to
+passthrough.
 
 MCP tools enforce their own limits inside the tool body via FastMCP's request
 context — the mounted `/mcp` sub-app is invisible to route-level middleware

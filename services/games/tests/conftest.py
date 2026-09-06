@@ -3,17 +3,14 @@ import os
 
 os.environ.update(
     {
-        # Disable geo/time guards so tests run predictably
-        "SERVICE_HOURS_START": "",
-        "SERVICE_HOURS_END": "",
-        "SERVICE_DAYS": "",
-        "SERVICE_TIMEZONE": "",
-        "ALLOWED_IPS": "",
-        "BLOCKED_IPS": "",
+        # Disable geo guards so tests run predictably
         "FAILBAN_THRESHOLD": "0",
         "TRUST_PROXY": "false",
         "CLIENT_IP_XFF_ENTRY": "0",
-        "CLIENT_IP_HEADER": "",
+        # Must not leak the developer's real local .env value (used to point
+        # "Back to portfolio" at http://localhost:8080 in dev) — tests assert
+        # the same-origin default (empty = bare "/" link).
+        "PORTFOLIO_BASE_URL": "",
     }
 )
 os.environ.pop("ALLOWED_IPS_FILE", None)

@@ -5,10 +5,16 @@ Router prefix `/api/v1/auth`. The login and refresh endpoints are excluded from
 the verified claims injected into `scope["auth"]` by the middleware.
 
 Credential transport (ADR-022): the access token is returned in the JSON body
-and kept memory-only by the SPA. The refresh token is delivered as a `__Host-`
-httpOnly, Secure, SameSite=None cookie scoped to this router so it never touches
-JavaScript storage. Only the refresh endpoint accepts credentials cross-origin
-via `CredentialedCORSMiddleware`.
+and kept memory-only by the SPA. The refresh token is delivered as an httpOnly
+cookie scoped to this router so it never touches JavaScript storage. In
+production it is `__Host-refresh_token`, Secure, SameSite=None (required for
+the cross-origin app.<apex> -> api.<apex> call). In dev it is an unprefixed
+`refresh_token`, no Secure, SameSite=Lax — plain-HTTP localhost can satisfy
+neither the `__Host-` prefix's HTTPS requirement (enforced by Firefox/Safari
+even with Secure absent) nor SameSite=None's Secure requirement, so dev uses
+the weaker-but-functional cookie shape instead of one browsers silently drop.
+Only the refresh endpoint accepts credentials cross-origin via
+`CredentialedCORSMiddleware`.
 """
 
 from __future__ import annotations
@@ -39,13 +45,24 @@ auth_router = APIRouter(prefix=f"{API_V1_PREFIX}/auth", tags=["auth"])
 get_user_service_dep = Depends(get_user_service)
 get_refresh_token_service_dep = Depends(get_refresh_token_service)
 
-_REFRESH_COOKIE = "__Host-refresh_token"
-# The __Host- prefix REQUIRES Path=/ (plus Secure and no Domain); a narrower
-# path would be rejected by the browser. Because Path=/ the cookie is sent on
-# every request, but it is httpOnly so JS never sees it and only the
-# server-side refresh/logout endpoints consume it. SameSite=None + Secure
-# allows the credentialed cross-origin call from app.<apex> to api.<apex>.
+# The __Host- prefix REQUIRES Path=/, Secure, no Domain, AND (per Firefox and
+# Safari, unlike Chrome which special-cases localhost) an actual HTTPS
+# connection — not just the Secure attribute. Local dev's plain-HTTP uvicorn
+# can never satisfy that, so the prefix itself — not just Secure/SameSite —
+# is production-only; dev uses an unprefixed cookie name instead.
+# Because Path=/ the cookie is sent on every request, but it is httpOnly so JS
+# never sees it and only the server-side refresh/logout endpoints consume it.
+# SameSite=None + Secure allows the credentialed cross-origin call from
+# app.<apex> to api.<apex>.
 _COOKIE_PATH = "/"
+
+
+def _refresh_cookie_name() -> str:
+    return (
+        "__Host-refresh_token"
+        if settings.environment == "production"
+        else "refresh_token"
+    )
 
 
 def _refresh_ttl_seconds() -> int:
@@ -53,25 +70,29 @@ def _refresh_ttl_seconds() -> int:
 
 
 def _set_refresh_cookie(response: Response, token: str) -> None:
-    # In local dev over HTTP, Secure=True rejects the __Host- cookie.
-    # Set Secure only in production; dev/test can run without it.
+    # In local dev over HTTP, Secure=True rejects the cookie, so Secure (and
+    # SameSite=None, which REQUIRES Secure per spec — browsers silently drop
+    # the whole Set-Cookie otherwise) are both production-only. Dev's SPA and
+    # API differ only by port (localhost:5173 -> :8080), which is still
+    # same-site, so SameSite=Lax still lets the cookie through.
+    is_production = settings.environment == "production"
     response.set_cookie(
-        key=_REFRESH_COOKIE,
+        key=_refresh_cookie_name(),
         value=token,
         max_age=_refresh_ttl_seconds(),
         path=_COOKIE_PATH,
-        secure=(settings.environment == "production"),
+        secure=is_production,
         httponly=True,
-        samesite="none",
+        samesite="none" if is_production else "lax",
     )
 
 
 def _clear_refresh_cookie(response: Response) -> None:
-    response.delete_cookie(key=_REFRESH_COOKIE, path=_COOKIE_PATH)
+    response.delete_cookie(key=_refresh_cookie_name(), path=_COOKIE_PATH)
 
 
 def _read_refresh_cookie(request: Request) -> str | None:
-    return request.cookies.get(_REFRESH_COOKIE)
+    return request.cookies.get(_refresh_cookie_name())
 
 
 def _get_auth_claims(request: Request) -> dict:

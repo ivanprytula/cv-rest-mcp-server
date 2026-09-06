@@ -7,16 +7,9 @@ from httpx import ASGITransport, AsyncClient
 
 os.environ.update(
     {
-        "SERVICE_HOURS_START": "",
-        "SERVICE_HOURS_END": "",
-        "SERVICE_DAYS": "",
-        "SERVICE_TIMEZONE": "",
-        "ALLOWED_IPS": "",
-        "BLOCKED_IPS": "",
         "FAILBAN_THRESHOLD": "0",
         "TRUST_PROXY": "false",
         "CLIENT_IP_XFF_ENTRY": "0",
-        "CLIENT_IP_HEADER": "",
         "CV_DATA_PATH": "data/cv.example.json",
         "CV_DATA_GCS_URI": "",
         # Placeholder only: settings.database_url has no default (fail-fast

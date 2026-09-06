@@ -23,17 +23,16 @@ def parse_ip_list(raw: str) -> list[ipaddress.IPv4Network | ipaddress.IPv6Networ
 
 
 def load_ip_list(
-    inline: str, file_path: Path | None
+    file_path: Path | None,
 ) -> list[ipaddress.IPv4Network | ipaddress.IPv6Network]:
-    """Load an access list from an inline value merged with an optional file.
+    """Load an access list from an optional file. None = no policy configured.
 
     A configured file that cannot be read is a startup error: silently
     ignoring it would disable the policy the operator believes is active.
     """
-    raw = inline or ""
-    if file_path is not None:
-        raw += "\n" + file_path.read_text(encoding="utf-8")
-    return parse_ip_list(raw)
+    if file_path is None:
+        return []
+    return parse_ip_list(file_path.read_text(encoding="utf-8"))
 
 
 def ip_in_networks(ip_str: str, networks: list) -> bool:

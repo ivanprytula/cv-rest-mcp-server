@@ -367,6 +367,23 @@ async def test_login_success(auth_client):
     assert "samesite=none" in cookie_lower
 
 
+async def test_login_dev_cookie_is_samesite_lax_not_secure(auth_client, monkeypatch):
+    """In dev (non-production): SameSite=None without Secure is silently
+    dropped by browsers, and Firefox/Safari (unlike Chrome) reject the
+    __Host- prefix outright over plain HTTP even with Secure absent — so dev
+    must use an unprefixed cookie name, no Secure, and SameSite=Lax for
+    refresh to actually work on localhost across ports."""
+    monkeypatch.setattr(settings, "environment", "development")
+    resp = await login(auth_client)
+    set_cookie = resp.headers.get("set-cookie", "")
+    cookie_lower = set_cookie.lower()
+    assert "__Host-refresh_token=" not in set_cookie
+    assert "refresh_token=" in set_cookie
+    assert "httponly" in cookie_lower
+    assert "secure" not in cookie_lower
+    assert "samesite=lax" in cookie_lower
+
+
 async def test_login_wrong_password(auth_client):
     resp = await login(auth_client, password="wrong")
     assert resp.status_code == 401

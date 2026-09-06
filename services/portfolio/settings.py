@@ -15,15 +15,17 @@ class Settings(BaseSettings):
     cv_data_path: Path = Path("data/cv.json")
     port: int = 8080
 
-    # OpenAPI / Swagger UI metadata
-    contact_name: str = ""
-    contact_email: str = ""
-
     # Base URL of the games service. Empty = same-origin (local dev, where the
     # games router is mounted in this app). In production the games workload is
     # a separate Cloud Run service on its own host, so set e.g.
     # "https://games.example.com" — no trailing slash.
     games_base_url: str = ""
+
+    # Unused by this service — declared only because .env is shared with
+    # services/games (its "back to portfolio" link, services/games/settings.py).
+    # extra="forbid" below rejects any undeclared var, so every service sharing
+    # this .env must declare the other services' vars too, even unused here.
+    portfolio_base_url: str = ""
 
     # CV content delivery (GCS)
     cv_data_gcs_uri: str = ""
@@ -32,17 +34,8 @@ class Settings(BaseSettings):
     # Rate limiting and access control
     trust_proxy: bool = False
     client_ip_xff_entry: int = 0
-    client_ip_header: str = ""
-    blocked_ips: str = ""
-    allowed_ips: str = ""
     blocked_ips_file: Path | None = None
     allowed_ips_file: Path | None = None
-
-    # Scheduled availability
-    service_hours_start: str = ""
-    service_hours_end: str = ""
-    service_days: str = ""
-    service_timezone: str = ""
 
     # Dynamic rate-limit bans (fail2ban-lite)
     failban_threshold: int = 0
