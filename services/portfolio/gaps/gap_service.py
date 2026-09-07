@@ -26,6 +26,7 @@ from services.portfolio.documents.document_row import (
 from services.portfolio.documents.document_service import document_sources
 from services.portfolio.gaps.ats import TIMEOUT_SECONDS, USER_AGENT, fetcher_for
 from services.portfolio.gaps.gap_repository import GapRepository
+from services.portfolio.gaps.jd_document_store import JdDocument, JdDocumentStore
 from services.portfolio.gaps.job_posting import (
     JobPosting,
     JobPostingSummary,
@@ -82,13 +83,17 @@ def content_hash(jd_text: str) -> str:
 class GapService:
     """Orchestrates posting storage and gap analysis.
 
-    Depends on the `GapRepository` Protocol, not a concrete implementation.
+    Depends on the `GapRepository` and `JdDocumentStore` Protocols, not
+    concrete implementations. `repo` (Postgres) holds the relational
+    skeleton of a posting; `jd_docs` (Firestore) holds its raw text and
+    per-portal metadata — see `jd_document_store.py` for why they're split.
     The analysis itself lives in `matching/gap.py` as pure functions; this
     service only handles persistence and the domain mapping.
     """
 
-    def __init__(self, repo: GapRepository) -> None:
+    def __init__(self, repo: GapRepository, jd_docs: JdDocumentStore) -> None:
         self._repo = repo
+        self._jd_docs = jd_docs
 
     async def store_posting(
         self,
@@ -120,6 +125,20 @@ class GapService:
         the ORM `default=`: the session uses `expire_on_commit=False`, so the
         row is never reloaded after INSERT and a client-side default would
         leave `to_domain()` reading `None`.
+
+        Consistency across the two stores (no shared transaction — see
+        `jd_document_store.py`): the Firestore write happens *before* the
+        Postgres write, deliberately. If Firestore fails, nothing is written
+        to Postgres — no row can end up pointing at a missing document. If
+        Firestore succeeds but the Postgres write then fails, the result is
+        an orphaned Firestore document (unreachable, harmless, naturally
+        overwritten by a future retry with the same text via `set()`'s
+        idempotency) rather than an unreadable posting. The failure mode
+        this ordering exists to prevent — `get_posting` returning a row
+        whose `content_hash` has no Firestore document — is not eliminated
+        (a process killed mid-write, or a manually deleted document, can
+        still cause it), only made structurally impossible from this method.
+        There is no reconciliation job for that residual case today.
         """
         digest = content_hash(jd_text)
         if external_id is None:
@@ -129,7 +148,19 @@ class GapService:
                 logger.warning("Failed to check for duplicate posting", exc_info=True)
                 existing = None
             if existing is not None:
-                return existing.to_domain(), True
+                # Found by its content_hash, so its text is exactly jd_text
+                # — no Firestore round trip needed to hydrate it.
+                return existing.to_domain(jd_text=jd_text), True
+
+        try:
+            await self._jd_docs.save(
+                JdDocument(
+                    content_hash=digest, jd_text=jd_text, raw_payload=raw_payload or {}
+                )
+            )
+        except Exception:
+            logger.warning("Failed to store JD document", exc_info=True)
+            return None, False
 
         now = datetime.now(UTC)
         row = JobPostingRow(
@@ -139,9 +170,7 @@ class GapService:
             company_slug=company_slug,
             title=title,
             url=url,
-            jd_text=jd_text,
             content_hash=digest,
-            raw_payload=raw_payload or {},
             first_seen_at=now,
             last_seen_at=now,
         )
@@ -150,7 +179,7 @@ class GapService:
         except Exception:
             logger.warning("Failed to persist job posting", exc_info=True)
             return None, False
-        return stored.to_domain(), False
+        return stored.to_domain(jd_text=jd_text), False
 
     async def sync_ats_posting(
         self,
@@ -375,12 +404,35 @@ class GapService:
         return results
 
     async def get_posting(self, posting_id: int) -> JobPosting | None:
+        """Read a posting, hydrating its text from the JD document store.
+
+        The single seam every caller (analyze/cluster/route handlers) goes
+        through — none of them need to know the text lives in Firestore, not
+        the row they just fetched.
+        """
         try:
             row = await self._repo.get_posting(posting_id)
         except Exception:
             logger.warning("Failed to read posting %s", posting_id, exc_info=True)
             return None
-        return row.to_domain() if row else None
+        if row is None:
+            return None
+
+        try:
+            document = await self._jd_docs.get(row.content_hash)
+        except Exception:
+            logger.warning(
+                "Failed to read JD document for posting %s", posting_id, exc_info=True
+            )
+            return None
+        if document is None:
+            logger.warning(
+                "Posting %s has no JD document for content_hash %s",
+                posting_id,
+                row.content_hash,
+            )
+            return None
+        return row.to_domain(jd_text=document.jd_text)
 
     async def list_postings(
         self, *, mentions_term: str | None = None

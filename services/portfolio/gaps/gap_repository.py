@@ -126,9 +126,7 @@ class SqlAlchemyGapRepository:
                 constraint="uq_job_postings_source_ext",
                 set_={
                     "last_seen_at": values["last_seen_at"],
-                    "jd_text": values["jd_text"],
                     "content_hash": values["content_hash"],
-                    "raw_payload": values["raw_payload"],
                     "closed_at": None,
                 },
             )

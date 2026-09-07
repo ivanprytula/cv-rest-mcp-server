@@ -77,6 +77,79 @@ class TestStorePosting:
         assert "jd_text" not in postings[0]
 
 
+class TestJdDocumentConsistency:
+    """The Postgres row and its Firestore document are two writes with no
+    shared transaction (see jd_document_store.py) — these lock in the
+    ordering that keeps a partial failure from producing an unreadable
+    posting, rather than relying on it staying correct by accident.
+    """
+
+    async def test_firestore_write_happens_before_the_postgres_row(self, admin_client):
+        from services.portfolio.main import app
+
+        gap_service = app.state.gap_service
+        calls: list[str] = []
+        real_jd_docs_save = gap_service._jd_docs.save
+        real_upsert_posting = gap_service._repo.upsert_posting
+
+        async def spy_jd_docs_save(*args, **kwargs):
+            calls.append("firestore")
+            return await real_jd_docs_save(*args, **kwargs)
+
+        async def spy_upsert_posting(*args, **kwargs):
+            calls.append("postgres")
+            return await real_upsert_posting(*args, **kwargs)
+
+        gap_service._jd_docs.save = spy_jd_docs_save
+        gap_service._repo.upsert_posting = spy_upsert_posting
+        try:
+            await _store(admin_client, JD_KUBERNETES)
+        finally:
+            gap_service._jd_docs.save = real_jd_docs_save
+            gap_service._repo.upsert_posting = real_upsert_posting
+
+        assert calls == ["firestore", "postgres"]
+
+    async def test_a_failed_firestore_write_never_creates_a_postgres_row(
+        self, admin_client
+    ):
+        from services.portfolio.main import app
+
+        gap_service = app.state.gap_service
+        real_jd_docs_save = gap_service._jd_docs.save
+
+        async def failing_save(*args, **kwargs):
+            raise RuntimeError("Firestore unavailable")
+
+        gap_service._jd_docs.save = failing_save
+        try:
+            resp = await admin_client.post(GAPS, content=JD_KUBERNETES.encode())
+        finally:
+            gap_service._jd_docs.save = real_jd_docs_save
+
+        assert resp.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+
+        listing = await admin_client.get(f"{GAPS}/postings")
+        assert listing.json()["postings"] == []
+
+    async def test_a_posting_missing_its_jd_document_is_reported_not_crashed(
+        self, admin_client
+    ):
+        # Simulates the residual risk the docstrings call out: a Postgres
+        # row exists, but its Firestore document is gone (process killed
+        # mid-write, or a document deleted out-of-band). get_posting must
+        # degrade to a logged failure, never an unhandled exception.
+        from services.portfolio.main import app
+
+        posting = await _store(admin_client, JD_KUBERNETES)
+        gap_service = app.state.gap_service
+        row = await gap_service._repo.get_posting(posting["id"])
+        gap_service._jd_docs._documents.pop(row.content_hash)
+
+        resp = await admin_client.post(f"{GAPS}/postings/{posting['id']}/analyze")
+        assert resp.status_code == status.HTTP_404_NOT_FOUND
+
+
 class TestListingFilteredByTerm:
     async def test_mentions_filters_to_matching_postings(self, admin_client):
         graphql_only = await _store(admin_client, JD_KUBERNETES, company="Acme")

@@ -112,6 +112,21 @@ variable "cloud_sql_db_password_secret_id" {
   default     = "cv-db-password"
 }
 
+# Firestore for raw JD documents (Phase 2b PR8). Defaults to false — every
+# earlier PR stores postings in Postgres, so this is purely additive and
+# revertable (delete jd_document_store.py + this module + FIRESTORE_PROJECT).
+variable "enable_firestore" {
+  description = "Provision the Firestore database (modules/firestore) for raw JD document storage."
+  type        = bool
+  default     = false
+}
+
+variable "firestore_location" {
+  description = "Firestore location id. Not always identical to var.region's Cloud Run region name — check `gcloud firestore locations list` for the project."
+  type        = string
+  default     = "eur3"
+}
+
 # Composed from cloud_sql_db_password_secret_id + the instance's connection
 # name by `just deploy bootstrap-database-url` (see CLAUDE.md's Bootstrap &
 # Deployment section) — script-owned like the other secrets, this only names

@@ -395,6 +395,7 @@ async def user_service(auth_settings, _fresh_postgres_url, monkeypatch):
     from services.portfolio.documents.document_service import DocumentService
     from services.portfolio.gaps.gap_repository import SqlAlchemyGapRepository
     from services.portfolio.gaps.gap_service import GapService
+    from services.portfolio.gaps.jd_document_store import InMemoryJdDocumentStore
     from services.portfolio.gaps.tracked_board_repository import (
         SqlAlchemyTrackedBoardRepository,
     )
@@ -423,7 +424,9 @@ async def user_service(auth_settings, _fresh_postgres_url, monkeypatch):
     refresh_token_service = RefreshTokenService(
         SqlAlchemyRefreshTokenRepository(session_factory)
     )
-    gap_service = GapService(SqlAlchemyGapRepository(session_factory))
+    gap_service = GapService(
+        SqlAlchemyGapRepository(session_factory), InMemoryJdDocumentStore()
+    )
     document_service = DocumentService(SqlAlchemyDocumentRepository(session_factory))
     tracked_board_service = TrackedBoardService(
         SqlAlchemyTrackedBoardRepository(session_factory)

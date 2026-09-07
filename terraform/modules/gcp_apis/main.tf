@@ -54,3 +54,11 @@ resource "google_project_service" "cloudscheduler" {
   service            = "cloudscheduler.googleapis.com"
   disable_on_destroy = false
 }
+
+# Phase 2b PR8: Firestore holds raw JD documents (text + per-portal
+# metadata); Postgres keeps only the relational skeleton. See
+# services/portfolio/gaps/jd_document_store.py.
+resource "google_project_service" "firestore" {
+  service            = "firestore.googleapis.com"
+  disable_on_destroy = false
+}

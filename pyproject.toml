@@ -27,6 +27,7 @@ dependencies = [
     "psycopg[binary]>=3.3.5",
     "fastembed>=0.8.0",
     "numpy>=2.5.3",
+    "google-cloud-firestore>=2.30.0",
 ]
 
 [dependency-groups]

@@ -54,6 +54,9 @@ from services.portfolio.documents.routes import router as documents_router
 from services.portfolio.failban import register_violation_from_request
 from services.portfolio.gaps.gap_repository import SqlAlchemyGapRepository
 from services.portfolio.gaps.gap_service import GapService
+from services.portfolio.gaps.jd_document_store import (
+    build_jd_document_store_from_settings,
+)
 from services.portfolio.gaps.routes import router as gaps_router
 from services.portfolio.gaps.tracked_board_repository import (
     SqlAlchemyTrackedBoardRepository,
@@ -337,8 +340,11 @@ async def lifespan(app):
     app.state.refresh_token_service = RefreshTokenService(refresh_token_repo)
 
     # Gap analysis: stores job postings and ranks what to learn next.
+    # Raw JD text/payload live in Firestore (jd_document_store.py), not
+    # Postgres — gap_repo only ever sees the relational skeleton.
     gap_repo = SqlAlchemyGapRepository(session_factory)
-    app.state.gap_service = GapService(gap_repo)
+    jd_docs = build_jd_document_store_from_settings()
+    app.state.gap_service = GapService(gap_repo, jd_docs)
 
     # Tracked-board registry: what the ATS refresh trigger polls. Independent
     # of AtsBoardRow (gap_repo's fetch-cache) — this is the operator-editable
