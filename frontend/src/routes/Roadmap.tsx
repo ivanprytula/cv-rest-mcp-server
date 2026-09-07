@@ -1,7 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
 import { fetchRoadmap } from '../api/gaps'
+import { DataTable, TableScroll, th } from '../components/Table'
+import TierBadge from '../components/TierBadge'
 
 const TIER_LABEL: Record<string, string> = {
+  stale: 'Refresh',
   unvouched: 'Update CV',
   deferred: 'Parked',
   unknown: 'Learn',
@@ -19,33 +22,36 @@ export default function Roadmap() {
     return <p>No gaps yet. Store and analyse some job postings first.</p>
 
   return (
-    <table className="roadmap-table">
-      <thead>
-        <tr>
-          <th>Term</th>
-          <th>Wanted by</th>
-          <th>Tier</th>
-          <th>Level asked</th>
-          <th>Note</th>
-        </tr>
-      </thead>
-      <tbody>
-        {data.map((item) => (
-          <tr key={`${item.term}-${item.tier}`}>
-            <td>{item.term}</td>
-            <td>
-              {item.jd_count} {item.jd_count === 1 ? 'posting' : 'postings'}
-            </td>
-            <td>
-              <span className={`tier tier-${item.tier}`}>
-                {TIER_LABEL[item.tier] ?? item.tier}
-              </span>
-            </td>
-            <td>{item.strongest_level_asked ?? '—'}</td>
-            <td>{item.note ?? ''}</td>
+    <TableScroll>
+      <DataTable>
+        <caption className="mb-2 text-muted">
+          Learning roadmap: gap terms ranked by how many postings demand them
+        </caption>
+        <thead>
+          <tr>
+            <th className={th}>Term</th>
+            <th className={th}>Wanted by</th>
+            <th className={th}>Tier</th>
+            <th className={th}>Level asked</th>
+            <th className={th}>Note</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {data.map((item) => (
+            <tr key={`${item.term}-${item.tier}`}>
+              <td className={th}>{item.term}</td>
+              <td className={th}>
+                {item.jd_count} {item.jd_count === 1 ? 'posting' : 'postings'}
+              </td>
+              <td className={th}>
+                <TierBadge tier={item.tier} label={TIER_LABEL[item.tier] ?? item.tier} />
+              </td>
+              <td className={th}>{item.strongest_level_asked ?? '—'}</td>
+              <td className={th}>{item.note ?? ''}</td>
+            </tr>
+          ))}
+        </tbody>
+      </DataTable>
+    </TableScroll>
   )
 }

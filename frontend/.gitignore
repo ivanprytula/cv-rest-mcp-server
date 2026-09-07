@@ -12,6 +12,14 @@ dist
 dist-ssr
 *.local
 
+# Playwright output — traces/screenshots can capture form field values
+# (including credentials typed during a test run), so this must never be
+# committed.
+test-results
+playwright-report
+blob-report
+playwright/.cache
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

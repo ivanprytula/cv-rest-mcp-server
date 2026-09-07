@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { listRevisions } from '../api/revisions'
+import { DataTable, TableScroll, th } from '../components/Table'
 
 export default function Revisions() {
   const { data, isLoading, isError, error } = useQuery({
@@ -13,25 +14,30 @@ export default function Revisions() {
   if (!data || data.length === 0) return <p>No tailored CV revisions yet.</p>
 
   return (
-    <table className="revisions-table">
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Created</th>
-          <th>Size</th>
-        </tr>
-      </thead>
-      <tbody>
-        {data.map((revision) => (
-          <tr key={revision.id}>
-            <td>
-              <Link to={`/revisions/${encodeURIComponent(revision.id)}`}>{revision.name}</Link>
-            </td>
-            <td>{new Date(revision.created_at).toLocaleString()}</td>
-            <td>{(revision.size_bytes / 1024).toFixed(1)} KB</td>
+    <TableScroll>
+      <DataTable>
+        <caption className="mb-2 text-muted">Tailored CV revisions</caption>
+        <thead>
+          <tr>
+            <th className={th}>Name</th>
+            <th className={th}>Created</th>
+            <th className={th}>Size</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {data.map((revision) => (
+            <tr key={revision.id}>
+              <td className={th}>
+                <Link to={`/revisions/${encodeURIComponent(revision.id)}`} className="text-accent">
+                  {revision.name}
+                </Link>
+              </td>
+              <td className={th}>{new Date(revision.created_at).toLocaleString()}</td>
+              <td className={th}>{(revision.size_bytes / 1024).toFixed(1)} KB</td>
+            </tr>
+          ))}
+        </tbody>
+      </DataTable>
+    </TableScroll>
   )
 }

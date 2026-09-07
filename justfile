@@ -111,6 +111,17 @@ test-ui-games:
     uv run playwright install chromium
     uv run pytest services/games/tests/ -m e2e --no-cov
 
+# SPA component tests (Vitest + React Testing Library) — no server required.
+test-spa:
+    cd frontend && npm run test
+
+# SPA browser e2e tests (Playwright). Spins up api-core (no --reload, so
+# writing trace files under frontend/test-results/ can't trigger a
+# mid-test restart) and the Vite dev server itself — requires `just dev-db`
+# already running and a seeded FIRST_ADMIN_USERNAME/PASSWORD in .env.
+test-spa-e2e:
+    cd frontend && npx playwright install chromium && npm run test:e2e
+
 # Recompute the SHA-256 hash of FastAPI's /docs inline init script.
 # Run after upgrading FastAPI; paste output into services/portfolio/main.py _CSP_DIRECTIVE.
 # Requires dev server running on :8080 (just dev).

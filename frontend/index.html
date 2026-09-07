@@ -5,6 +5,23 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>CV Operator Console</title>
+    <script>
+      // Applies any saved theme/palette before first paint, so the page
+      // never flashes the default look and then jumps to the saved one.
+      // Kept inline (not in a bundled module) specifically so it runs
+      // before the CSS/React bundle loads.
+      (function () {
+        try {
+          var theme = localStorage.getItem('theme');
+          var palette = localStorage.getItem('palette');
+          if (theme) document.documentElement.setAttribute('data-theme', theme);
+          if (palette) document.documentElement.setAttribute('data-palette', palette);
+        } catch (e) {
+          // localStorage unavailable (private mode, disabled storage) — fall
+          // back to the CSS defaults untouched.
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

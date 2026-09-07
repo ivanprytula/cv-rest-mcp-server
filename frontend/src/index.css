@@ -1,133 +1,149 @@
-:root {
-  --text: #333;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --accent: #6a3bff;
-  color-scheme: light dark;
-  font: 16px/1.5 system-ui, 'Segoe UI', Roboto, sans-serif;
-  color: var(--text);
-  background: var(--bg);
+@import 'tailwindcss';
+
+/* Dark mode = system preference, UNLESS the user picked one explicitly
+   (data-theme="light"|"dark" on <html>, set by ThemeContext). This mirrors
+   dark: to also match media queries by default while still letting an
+   explicit choice win either direction. */
+@custom-variant dark {
+  &:where([data-theme='dark'], [data-theme='dark'] *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(:not([data-theme='light'], [data-theme='light'] *)) {
+      @slot;
+    }
+  }
 }
 
+/* Design tokens
+   ==============
+   Every color the app uses is a CSS variable here, referenced through
+   Tailwind's @theme so `bg-accent`, `text-muted`, etc. exist as utilities.
+   A palette swap ([data-palette]) or theme swap ([data-theme] / OS) only
+   ever touches this block — no component file changes needed.
+
+   Tier colors are fixed status hues (a "covered" gap is always green)
+   independent of the accent palette, but still need dark-mode pairs so a
+   pastel light background doesn't wash out on a dark page. */
+@theme {
+  --color-bg: #fff;
+  --color-surface: #f7f7f9;
+  --color-text: #333;
+  --color-text-h: #08060d;
+  --color-border: #e5e4e7;
+  --color-muted: #666;
+  --color-danger: #d33;
+
+  --color-accent: #6a3bff;
+  --color-accent-contrast: #fff;
+
+  --color-tier-covered-bg: #e6f4ea;
+  --color-tier-covered-text: #1e6b34;
+  --color-tier-stale-bg: #fff0e0;
+  --color-tier-stale-text: #8a4a1a;
+  --color-tier-unvouched-bg: #e8f0fe;
+  --color-tier-unvouched-text: #1a4a8a;
+  --color-tier-deferred-bg: #fdf0d5;
+  --color-tier-deferred-text: #7a5200;
+  --color-tier-unknown-bg: #fde8e8;
+  --color-tier-unknown-text: #8a1a1a;
+
+  --breakpoint-content: 1200px;
+}
+
+/* Dark mode overrides — system preference unless data-theme="light" is set;
+   explicit data-theme="dark" always applies regardless of the OS setting. */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --text: #d0d0d5;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --accent: #c084fc;
+  :root:not([data-theme='light']) {
+    --color-bg: #16171d;
+    --color-surface: #1e1f27;
+    --color-text: #d0d0d5;
+    --color-text-h: #f3f4f6;
+    --color-border: #2e303a;
+    --color-muted: #9a9aa2;
+    --color-tier-covered-bg: #16341f;
+    --color-tier-covered-text: #7fd99a;
+    --color-tier-stale-bg: #3a2712;
+    --color-tier-stale-text: #f0b877;
+    --color-tier-unvouched-bg: #182a4a;
+    --color-tier-unvouched-text: #8fb8f5;
+    --color-tier-deferred-bg: #3a2e0f;
+    --color-tier-deferred-text: #f0cd7a;
+    --color-tier-unknown-bg: #3a1717;
+    --color-tier-unknown-text: #f0a3a3;
   }
+
+  :root:not([data-theme='light'], [data-palette='blue'], [data-palette='green']) {
+    --color-accent: #c084fc;
+    --color-accent-contrast: #1a0f2e;
+  }
+
+  :root:not([data-theme='light'])[data-palette='blue'] {
+    --color-accent: #7aa8ff;
+    --color-accent-contrast: #0b1a3a;
+  }
+
+  :root:not([data-theme='light'])[data-palette='green'] {
+    --color-accent: #4ade80;
+    --color-accent-contrast: #063214;
+  }
+}
+
+:root[data-theme='dark'] {
+  --color-bg: #16171d;
+  --color-surface: #1e1f27;
+  --color-text: #d0d0d5;
+  --color-text-h: #f3f4f6;
+  --color-border: #2e303a;
+  --color-muted: #9a9aa2;
+  --color-tier-covered-bg: #16341f;
+  --color-tier-covered-text: #7fd99a;
+  --color-tier-stale-bg: #3a2712;
+  --color-tier-stale-text: #f0b877;
+  --color-tier-unvouched-bg: #182a4a;
+  --color-tier-unvouched-text: #8fb8f5;
+  --color-tier-deferred-bg: #3a2e0f;
+  --color-tier-deferred-text: #f0cd7a;
+  --color-tier-unknown-bg: #3a1717;
+  --color-tier-unknown-text: #f0a3a3;
+}
+
+:root[data-theme='dark']:not([data-palette='blue'], [data-palette='green']) {
+  --color-accent: #c084fc;
+  --color-accent-contrast: #1a0f2e;
+}
+
+:root[data-theme='dark'][data-palette='blue'] {
+  --color-accent: #7aa8ff;
+  --color-accent-contrast: #0b1a3a;
+}
+
+:root[data-theme='dark'][data-palette='green'] {
+  --color-accent: #4ade80;
+  --color-accent-contrast: #063214;
+}
+
+/* Accent palettes — light values. Unattributed :root defaults to violet. */
+:root[data-palette='blue'] {
+  --color-accent: #2563eb;
+  --color-accent-contrast: #fff;
+}
+
+:root[data-palette='green'] {
+  --color-accent: #16803c;
+  --color-accent-contrast: #fff;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
-}
-
-h1 {
-  font-size: 24px;
-  color: var(--text-h);
-}
-
-.login-page {
-  min-height: 100svh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.login-form {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  width: 280px;
-}
-
-.login-form input {
-  padding: 8px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--bg);
-  color: var(--text);
-}
-
-.login-form button {
-  margin-top: 8px;
-  padding: 8px;
-  border: none;
-  border-radius: 4px;
-  background: var(--accent);
-  color: #fff;
-  cursor: pointer;
-}
-
-.login-error {
-  color: #d33;
-}
-
-.admin-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 24px;
-  border-bottom: 1px solid var(--border);
-}
-
-.admin-header nav a {
-  color: var(--text);
-  text-decoration: none;
-  font-weight: 600;
-}
-
-.admin-shell main {
-  padding: 24px;
-}
-
-.revisions-table,
-.roadmap-table,
-.postings-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.revisions-table th,
-.revisions-table td,
-.roadmap-table th,
-.roadmap-table td,
-.postings-table th,
-.postings-table td {
-  text-align: left;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--border);
-}
-
-/* Gap tiers, cheapest-to-close first: update the CV, reconsider a parked
-   skill, or actually go learn something. */
-.tier {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-size: 0.85em;
-  white-space: nowrap;
-}
-
-.tier-unvouched {
-  background: #e8f0fe;
-  color: #1a4a8a;
-}
-
-.tier-deferred {
-  background: #fdf0d5;
-  color: #7a5200;
-}
-
-.tier-unknown {
-  background: #fde8e8;
-  color: #8a1a1a;
-}
-
-.tier-blurb {
-  margin: 0 0 4px;
-  color: var(--muted, #666);
-  font-size: 0.9em;
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  color: var(--color-text);
+  background: var(--color-bg);
+  color-scheme: light dark;
 }
