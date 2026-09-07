@@ -303,7 +303,88 @@ redeploying an earlier tag.
 
 ---
 
-## 6. Terraform: the infrastructure as code
+## 6. Scheduled work: Cloud Scheduler and the ATS refresh trigger
+
+Not every workload is triggered by a browser. `ats-refresh-trigger` is a
+fourth Cloud Run service — same image as `api-core`, different `command`
+override — that polls tracked job boards (`tracked_boards` table) and
+re-analyzes changed postings. Nothing about it goes through the load
+balancer or DNS: it is invoked directly by **Cloud Scheduler**, GCP's
+managed cron.
+
+```text
+Cloud Scheduler job  --(POST, OIDC token)-->  ats-refresh-trigger (Cloud Run)
+```
+
+### Why this service bypasses the load balancer entirely
+
+`ats-refresh-trigger` sets `ingress = "internal"` and
+`allow_unauthenticated = false` — the exact opposite of `api-core`. Cloud
+Run enforces `run.invoker` at the platform layer for a private service, so
+Cloud Scheduler's OIDC identity token is verified *before* the request
+reaches the container. No JWT/OIDC verification code exists inside the
+service at all; the platform does it for free. This is also why the
+service is absent from `modules/edge_lb`'s URL map (section 4) — it was
+never meant to be reachable from a browser.
+
+### One scheduler job per tracked-board group
+
+`google_cloud_scheduler_job.ats_refresh` (`terraform/main.tf`) uses
+`for_each` over `var.ats_refresh_groups`, a map of `{schedule, timezone,
+group}`. Each map entry becomes its own Cloud Scheduler job — the key
+becomes the job name suffix (`ats-refresh-<key>`), and `group` (when set)
+is appended as `?group=<group>` on the POSTed URL, scoping that job's run
+to boards tagged with that group in the `tracked_boards` table:
+
+```text
+ats-refresh-default   POST .../trigger              (schedule: 0 8 * * *)
+ats-refresh-priority  POST .../trigger?group=priority (schedule: 0 * * * *)
+```
+
+Adding a new cadence/group is a `terraform.tfvars` edit — one new map
+entry — never a new `.tf` resource block. The tracked boards themselves are
+managed entirely via the API (`/api/v1/tracked-boards`), not Terraform or
+env vars.
+
+### A `for_each` migration is a resource replacement, not an update
+
+This job started as a single `count`-indexed resource (`ats_refresh[0]`,
+name `ats-refresh`). Converting it to `for_each` changed its Terraform
+*address*, which Terraform treats as destroy-the-old, create-the-new — a
+one-time **destroy + create**, not a config drift bug, and not something a
+`for_each` conversion can avoid. Confirm this scope with `terraform plan`
+before applying: exactly one destroy (the old `ats-refresh`) and one create
+per map entry (`ats-refresh-default`, plus any others you've added).
+
+### The 403 this exposed: `cloudscheduler.jobs.get`
+
+The `deployer@` service account could originally *create* the scheduler job
+(via a one-time local Owner apply, same bootstrap pattern as every other
+first-created resource — see section 8) but had no ongoing Cloud Scheduler
+permissions of its own. That was invisible as long as CI only ever created
+new jobs. The `for_each` conversion was the first time CI needed to *read*
+an existing job (to plan its destroy) — which surfaced as:
+
+```text
+Error: Error when reading or editing CloudSchedulerJob "projects/<project>/locations/europe-west1/jobs/ats-refresh":
+googleapi: Error 403: The principal (user or service account) lacks IAM permission "cloudscheduler.jobs.get"
+```
+
+Fixed by granting `roles/cloudscheduler.admin` to `deployer@` in
+`modules/iam_secrets/main.tf` — applied once locally (Owner), same as every
+other first-time permission grant in this project (see section 8's `actAs`
+note for the general pattern: a brand-new permission requirement often
+needs one manual bootstrap apply before CI can use it going forward).
+
+> **Lesson, same shape as the DNS one in section 2:** a resource that
+> worked fine under `count` can fail under `for_each` for reasons that have
+> nothing to do with the Terraform syntax itself — the *operation* CI needs
+> to perform changes (create-only vs. read-then-destroy), and IAM was only
+> ever scoped for the narrower one.
+
+---
+
+## 7. Terraform: the infrastructure as code
 
 Everything above — DNS zone, records, IP, certificates, load balancer, Cloud Run
 services, IAM, Artifact Registry — is *declared* in `terraform/`. You describe
@@ -371,7 +452,7 @@ full-infrastructure operation.
 
 ---
 
-## 7. Identity: how CI talks to GCP without keys
+## 8. Identity: how CI talks to GCP without keys
 
 CI needs GCP permissions, but storing a service account key in GitHub would mean
 a long-lived credential that leaks badly.
@@ -394,7 +475,7 @@ trust to this repository — otherwise any GitHub repo could request access.
 
 ---
 
-## 8. Putting it together: a request end to end
+## 9. Putting it together: a request end to end
 
 Someone opens `https://app.<APEX_DOMAIN>`:
 
@@ -414,7 +495,7 @@ Someone opens `https://app.<APEX_DOMAIN>`:
 
 ---
 
-## 9. Debugging by layer
+## 10. Debugging by layer
 
 Faults are easiest to find by testing each layer independently, outermost first.
 
@@ -450,6 +531,7 @@ Common symptoms:
 | `SERVFAIL` everywhere            | DNSSEC mismatch — DS record disagrees with the signing key                       |
 | 404 on `*.run.app`               | Expected: `ingress` restricts to load-balancer traffic                           |
 | 403 `actAs` in CI                | Deployer identity lacks `serviceAccountUser` — check *which* SA is authenticated |
+| 403 `cloudscheduler.jobs.get`    | Deployer lacks `cloudscheduler.admin` — a `for_each`/address change on a scheduler job needs read access CI never previously required |
 
 ---
 
