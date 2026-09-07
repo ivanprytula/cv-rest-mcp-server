@@ -25,6 +25,13 @@ class GapReportOut(BaseModel):
     posting_id: int
     coverage: float = Field(description="Share of requirements already on the CV")
     gaps: list[SkillGapOut]
+    unrecognized: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Technical-looking tokens absent from the JD vocabulary, most "
+            "frequent first — candidates to add to data/jd_vocabulary.json"
+        ),
+    )
 
 
 class PostingCreated(BaseModel):

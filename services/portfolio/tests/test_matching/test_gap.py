@@ -9,6 +9,7 @@ from services.portfolio.matching.gap import (
     GapReport,
     detect_gaps,
     load_vocabulary,
+    report_unrecognized,
 )
 from services.portfolio.settings import settings
 
@@ -164,3 +165,22 @@ class TestVocabularyFile:
             if " " in entry["atom"] and re.search(r"[,.:–—]", entry["atom"])
         ]
         assert offenders == []
+
+
+class TestReportUnrecognized:
+    def test_known_vocabulary_terms_are_excluded(self):
+        tokens = report_unrecognized("We need Python and Kafka experience.", VOCAB)
+        assert tokens == []
+
+    def test_unknown_technical_token_is_surfaced_by_frequency(self):
+        jd = "Snowflake experience required. Snowflake, Snowflake pipelines."
+        tokens = report_unrecognized(jd, VOCAB)
+        assert tokens[0] == ("Snowflake", 3)
+
+    def test_stopwords_and_lowercase_words_are_never_surfaced(self):
+        jd = "Strong Experience with Our Team and Requirements."
+        assert report_unrecognized(jd, VOCAB) == []
+
+    def test_top_n_caps_the_result(self):
+        jd = " ".join(f"Tool{i}" for i in range(30))
+        assert len(report_unrecognized(jd, VOCAB, top_n=5)) == 5

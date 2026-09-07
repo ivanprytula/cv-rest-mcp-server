@@ -25,6 +25,8 @@ one tier, so a term cannot be counted twice or missed.
 from __future__ import annotations
 
 import json
+import re
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -233,3 +235,88 @@ def detect_gaps(
 
     gaps = sorted(best.values(), key=lambda g: (TIERS.index(g.tier), g.term.lower()))
     return GapReport(gaps=tuple(gaps))
+
+
+# Capitalised or all-caps tokens (proper nouns, acronyms), 2+ chars, hyphens
+# allowed (CI/CD, single-page apps). Deliberately loose — noise is the point;
+# a human skims frequency-sorted output, this never feeds an index unattended.
+_TECHNICAL_TOKEN_RE = re.compile(r"\b[A-Z][A-Za-z0-9+#.-]{1,}\b")
+
+# Common capitalised JD filler that would otherwise dominate the frequency
+# count. Not exhaustive by design: whatever leaks through is exactly the
+# noise a human filters while skimming, not a correctness bug to chase.
+_STOPWORDS = frozenset(
+    {
+        "the",
+        "and",
+        "for",
+        "with",
+        "you",
+        "our",
+        "team",
+        "role",
+        "years",
+        "experience",
+        "strong",
+        "ability",
+        "work",
+        "working",
+        "join",
+        "company",
+        "we",
+        "will",
+        "must",
+        "have",
+        "is",
+        "are",
+        "to",
+        "of",
+        "in",
+        "a",
+        "an",
+        "as",
+        "including",
+        "such",
+        "etc",
+        "environment",
+        "skills",
+        "knowledge",
+        "understanding",
+        "required",
+        "preferred",
+        "responsibilities",
+        "requirements",
+        "about",
+        "who",
+        "what",
+    }
+)
+
+
+def report_unrecognized(
+    jd_text: str, vocabulary: list[dict[str, Any]], *, top_n: int = 20
+) -> list[tuple[str, int]]:
+    """Technical-looking tokens the vocabulary doesn't know, by frequency.
+
+    A suggestion feed for a human growing :data:`data/jd_vocabulary.json` —
+    never an automatic vocabulary source, since it is deliberately noisy.
+    Doubles as the coverage metric: once real JDs come back mostly stopword
+    noise, the vocabulary is complete enough to stop hand-curating.
+    """
+    known = {normalize_skill(entry["atom"]) for entry in vocabulary}
+    known.update(
+        normalize_skill(alias)
+        for entry in vocabulary
+        for alias in entry.get("aliases", [])
+    )
+
+    normalized = normalize_jd_text(jd_text)
+    counts: Counter[str] = Counter()
+    for match in _TECHNICAL_TOKEN_RE.finditer(normalized):
+        token = match.group(0)
+        key = normalize_skill(token)
+        if not key or key in known or token.lower() in _STOPWORDS:
+            continue
+        counts[token] += 1
+
+    return counts.most_common(top_n)

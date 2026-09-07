@@ -146,11 +146,13 @@ class TestAnalysis:
         assert first == second
 
     async def test_stored_report_is_readable(self, admin_client):
+        # `unrecognized` is computed live against the posting text at analyze
+        # time, not persisted — reading the stored report omits it.
         posting = await _store(admin_client, JD_KUBERNETES)
         analyzed = await _analyze(admin_client, posting["id"])
         resp = await admin_client.get(f"{GAPS}/postings/{posting['id']}")
         assert resp.status_code == status.HTTP_200_OK
-        assert resp.json() == analyzed
+        assert resp.json() == {**analyzed, "unrecognized": []}
 
     async def test_missing_posting_is_404(self, admin_client):
         resp = await admin_client.post(f"{GAPS}/postings/999999/analyze")
