@@ -25,6 +25,13 @@ tests/
 node_modules/
 dist/
 build/
+
+# Playwright output (frontend/) — can capture form field values (including
+# credentials typed during a test run) in traces/screenshots.
+test-results/
+playwright-report/
+blob-report/
+
 .env
 .env.local
 .env.*.local
