@@ -29,9 +29,14 @@ from services.portfolio.gaps.gap_repository import GapRepository
 from services.portfolio.gaps.job_posting import (
     JobPosting,
     JobPostingSummary,
+    PhraseCluster,
     RoadmapItem,
 )
 from services.portfolio.gaps.job_posting_row import JdAnalysisRow, JobPostingRow
+from services.portfolio.gaps.phrase_cluster_row import (
+    PhraseClusterRow,
+    PhraseEmbeddingRow,
+)
 from services.portfolio.matching.baseline import BaselineError, parse_baseline
 from services.portfolio.matching.gap import GapReport, detect_gaps, parse_vocabulary
 from services.portfolio.settings import settings
@@ -58,6 +63,15 @@ ANALYZER_VERSION = "2"
 # more urgent than an unknown one because a recruiter is already being shown
 # it. Bumping ANALYZER_VERSION because the tier set changed.
 ROADMAP_TIERS = ["stale", "unvouched", "deferred", "unknown"]
+
+# Baked into the image at build time (see Dockerfile) — never downloaded at
+# request time. Bump this alongside a model change so the embedding cache
+# never mixes vectors from two model generations.
+EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
+
+# Starting point from eyeballing real JD sentences, not a derived constant.
+# Expect to move it between 0.78-0.88 once real clusters are visible.
+CLUSTER_THRESHOLD = 0.82
 
 
 def content_hash(jd_text: str) -> str:
@@ -449,6 +463,136 @@ class GapService:
             logger.warning("Failed to aggregate roadmap", exc_info=True)
             return []
         return [RoadmapItem(**row) for row in rows]
+
+    async def cluster_posting(
+        self, posting_id: int, *, threshold: float = CLUSTER_THRESHOLD
+    ) -> list[PhraseCluster] | None:
+        """Group this posting's paraphrased responsibility sentences.
+
+        Returns None when the posting is missing, embedding fails, or a DB
+        error occurs. Embeddings are cached by phrase content hash *and*
+        `EMBEDDING_MODEL` — a model bump treats every prior row as a cache
+        miss rather than mixing vectors from two model generations in one
+        clustering run. Re-clustering a posting replaces its prior result;
+        a posting with no clusterable phrases persists an empty result too,
+        so a later read sees `[]` rather than 404ing on unanalyzed state.
+        """
+        from services.portfolio.matching.clustering import (
+            cluster_vectors,
+            embed_phrases,
+            medoid_index,
+            segment_phrases,
+        )
+
+        posting = await self.get_posting(posting_id)
+        if posting is None:
+            return None
+
+        phrases = segment_phrases(posting.jd_text)
+        if not phrases:
+            return await self._save_clusters(posting_id, [], threshold)
+
+        hashes = [content_hash(phrase) for phrase in phrases]
+        try:
+            cached = await self._repo.get_cached_embeddings(
+                hashes, model_name=EMBEDDING_MODEL
+            )
+        except Exception:
+            logger.warning(
+                "Failed to read cached embeddings for posting %s",
+                posting_id,
+                exc_info=True,
+            )
+            return None
+
+        missing = [
+            (phrase, digest)
+            for phrase, digest in zip(phrases, hashes, strict=True)
+            if digest not in cached
+        ]
+        if missing:
+            try:
+                # embed_phrases runs real model inference (CPU-bound, via
+                # fastembed/onnxruntime) — offloaded to a worker thread so it
+                # never blocks the event loop for other in-flight requests.
+                new_vectors = await asyncio.to_thread(
+                    embed_phrases, [phrase for phrase, _ in missing]
+                )
+                if len(new_vectors) != len(missing):
+                    raise ValueError(
+                        f"embed_phrases returned {len(new_vectors)} vectors "
+                        f"for {len(missing)} phrases"
+                    )
+            except Exception:
+                logger.warning(
+                    "Failed to embed phrases for posting %s", posting_id, exc_info=True
+                )
+                return None
+
+            new_rows = [
+                PhraseEmbeddingRow(
+                    content_hash=digest,
+                    phrase=phrase,
+                    vector=vector,
+                    model_name=EMBEDDING_MODEL,
+                    created_at=datetime.now(UTC),
+                )
+                for (phrase, digest), vector in zip(missing, new_vectors, strict=True)
+            ]
+            try:
+                await self._repo.save_embeddings(rows=new_rows)
+            except Exception:
+                logger.warning(
+                    "Failed to cache embeddings for posting %s",
+                    posting_id,
+                    exc_info=True,
+                )
+            for (_, digest), vector in zip(missing, new_vectors, strict=True):
+                cached[digest] = vector
+
+        vectors = [cached[digest] for digest in hashes]
+        groups = cluster_vectors(vectors, threshold=threshold)
+        clusters = [
+            PhraseCluster(
+                label=phrases[medoid_index(vectors, group)],
+                phrases=[phrases[i] for i in group],
+            )
+            for group in groups
+        ]
+        return await self._save_clusters(posting_id, clusters, threshold)
+
+    async def _save_clusters(
+        self, posting_id: int, clusters: list[PhraseCluster], threshold: float
+    ) -> list[PhraseCluster] | None:
+        """Persist a clustering result (possibly empty) and return it, or
+        None on a DB error."""
+        row = PhraseClusterRow(
+            posting_id=posting_id,
+            clusters=[cluster.model_dump() for cluster in clusters],
+            threshold=threshold,
+            created_at=datetime.now(UTC),
+        )
+        try:
+            await self._repo.save_phrase_clusters(row=row)
+        except Exception:
+            logger.warning(
+                "Failed to persist clusters for posting %s", posting_id, exc_info=True
+            )
+            return None
+        return clusters
+
+    async def get_phrase_clusters(self, posting_id: int) -> list[PhraseCluster] | None:
+        """Read a posting's stored clustering result."""
+        try:
+            row = await self._repo.get_phrase_clusters(posting_id)
+        except Exception:
+            logger.warning(
+                "Failed to read clusters for posting %s", posting_id, exc_info=True
+            )
+            return None
+        if row is None:
+            return None
+        return [PhraseCluster(**cluster) for cluster in row.clusters]
 
 
 def _report_from_result(result: dict[str, Any]) -> GapReport:

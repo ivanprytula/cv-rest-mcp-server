@@ -20,6 +20,10 @@ from services.portfolio.gaps.job_posting_row import (
     JdAnalysisRow,
     JobPostingRow,
 )
+from services.portfolio.gaps.phrase_cluster_row import (
+    PhraseClusterRow,
+    PhraseEmbeddingRow,
+)
 
 
 # Aggregates the roadmap straight out of the analyses' JSONB. Recomputed per
@@ -77,6 +81,14 @@ class GapRepository(Protocol):
     async def upsert_board(
         self, *, source: str, company_slug: str, etag: str | None
     ) -> AtsBoardRow: ...
+    async def get_cached_embeddings(
+        self, content_hashes: list[str], *, model_name: str
+    ) -> dict[str, list[float]]: ...
+    async def save_embeddings(self, *, rows: list[PhraseEmbeddingRow]) -> None: ...
+    async def save_phrase_clusters(
+        self, *, row: PhraseClusterRow
+    ) -> PhraseClusterRow: ...
+    async def get_phrase_clusters(self, posting_id: int) -> PhraseClusterRow | None: ...
 
 
 class SqlAlchemyGapRepository:
@@ -277,6 +289,102 @@ class SqlAlchemyGapRepository:
                     select(JdAnalysisRow).where(
                         JdAnalysisRow.posting_id == posting_id,
                         JdAnalysisRow.analyzer_version == analyzer_version,
+                    )
+                )
+            ).scalar_one_or_none()
+
+    async def get_cached_embeddings(
+        self, content_hashes: list[str], *, model_name: str
+    ) -> dict[str, list[float]]:
+        """Return whatever subset of *content_hashes* is already embedded
+        under *model_name*.
+
+        Callers embed only the remainder — a phrase seen in an earlier
+        posting (a common line like "Led cross-functional collaboration")
+        never re-runs the model. Filtering on `model_name` means a bumped
+        `EMBEDDING_MODEL` treats every prior row as a cache miss rather than
+        silently mixing vectors from two model generations in one
+        clustering run.
+        """
+        if not content_hashes:
+            return {}
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(PhraseEmbeddingRow).where(
+                    PhraseEmbeddingRow.content_hash.in_(content_hashes),
+                    PhraseEmbeddingRow.model_name == model_name,
+                )
+            )
+            return {row.content_hash: row.vector for row in result.scalars()}
+
+    async def save_embeddings(self, *, rows: list[PhraseEmbeddingRow]) -> None:
+        """Upsert by content_hash, overwriting a stale model's vector.
+
+        `content_hash` is the primary key — one row per phrase — so a
+        cache miss under a newer `model_name` (see `get_cached_embeddings`)
+        must replace the old row's vector/model_name rather than leaving it
+        untouched, or the stale vector would still exist for a caller that
+        queries without a model filter.
+        """
+        if not rows:
+            return
+        stmt = insert(PhraseEmbeddingRow)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["content_hash"],
+            set_={
+                "phrase": stmt.excluded.phrase,
+                "vector": stmt.excluded.vector,
+                "model_name": stmt.excluded.model_name,
+                "created_at": stmt.excluded.created_at,
+            },
+        )
+        async with self._session_factory() as session:
+            await session.execute(
+                stmt,
+                [
+                    {
+                        "content_hash": row.content_hash,
+                        "phrase": row.phrase,
+                        "vector": row.vector,
+                        "model_name": row.model_name,
+                        "created_at": row.created_at,
+                    }
+                    for row in rows
+                ],
+            )
+            await session.commit()
+
+    async def save_phrase_clusters(self, *, row: PhraseClusterRow) -> PhraseClusterRow:
+        """Replace this posting's prior clustering run, if any."""
+        stmt = (
+            insert(PhraseClusterRow)
+            .values(
+                posting_id=row.posting_id,
+                clusters=row.clusters,
+                threshold=row.threshold,
+                created_at=row.created_at,
+            )
+            .on_conflict_do_update(
+                constraint="uq_phrase_clusters_posting",
+                set_={
+                    "clusters": row.clusters,
+                    "threshold": row.threshold,
+                    "created_at": row.created_at,
+                },
+            )
+            .returning(PhraseClusterRow)
+        )
+        async with self._session_factory() as session:
+            saved = (await session.execute(stmt)).scalar_one()
+            await session.commit()
+            return saved
+
+    async def get_phrase_clusters(self, posting_id: int) -> PhraseClusterRow | None:
+        async with self._session_factory() as session:
+            return (
+                await session.execute(
+                    select(PhraseClusterRow).where(
+                        PhraseClusterRow.posting_id == posting_id
                     )
                 )
             ).scalar_one_or_none()

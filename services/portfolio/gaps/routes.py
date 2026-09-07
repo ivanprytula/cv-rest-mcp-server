@@ -34,6 +34,7 @@ from services.portfolio.pdf_generator import PdfService
 from services.portfolio.schemas.gaps import (
     GapReportOut,
     LearningRoadmap,
+    PhraseClustersOut,
     PostingCreated,
     PostingList,
 )
@@ -171,6 +172,36 @@ async def read_gap_report(
         coverage=report.coverage,
         gaps=[gap.__dict__ for gap in report.gaps],
     )
+
+
+@router.post("/postings/{posting_id}/cluster", response_model=PhraseClustersOut)
+async def cluster_job_posting(
+    posting_id: int,
+    gap_service: GapService = get_gap_service_dep,
+) -> PhraseClustersOut:
+    """Group a posting's paraphrased responsibility sentences.
+
+    Complements tier-based gap detection: two JD bullets that share no skill
+    term but describe the same responsibility ("Built CI/CD pipelines" /
+    "Automated deployment workflows") cluster together here. Idempotent:
+    re-clustering replaces the prior result.
+    """
+    clusters = await gap_service.cluster_posting(posting_id)
+    if clusters is None:
+        raise HTTPException(status_code=404, detail="Job posting not found")
+    return PhraseClustersOut(posting_id=posting_id, clusters=clusters)
+
+
+@router.get("/postings/{posting_id}/clusters", response_model=PhraseClustersOut)
+async def read_phrase_clusters(
+    posting_id: int,
+    gap_service: GapService = get_gap_service_dep,
+) -> PhraseClustersOut:
+    """Read a posting's stored clustering result."""
+    clusters = await gap_service.get_phrase_clusters(posting_id)
+    if clusters is None:
+        raise HTTPException(status_code=404, detail="No clusters for this posting")
+    return PhraseClustersOut(posting_id=posting_id, clusters=clusters)
 
 
 @router.get("/roadmap", response_model=LearningRoadmap)

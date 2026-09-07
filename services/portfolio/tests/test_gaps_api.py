@@ -278,3 +278,119 @@ class TestTailoringStoresThePosting:
             await admin_client.post("/api/v1/cv/tailor", content=JD_KUBERNETES.encode())
         postings = (await admin_client.get(f"{GAPS}/postings")).json()["postings"]
         assert len(postings) == 1
+
+
+JD_TWO_RESPONSIBILITIES = (
+    "Built CI/CD pipelines for microservices deployments across teams\n"
+    "Automated deployment workflows across every backend service\n"
+    "Owned the on-call rotation for the payments platform"
+)
+
+
+@pytest.fixture
+def fake_embeddings(monkeypatch):
+    """Replace the model call with a deterministic, model-free stand-in.
+
+    Sentences containing "pipeline" or "deployment" get a shared vector so
+    they cluster together; the on-call sentence gets an orthogonal one. Never
+    touches fastembed — keeps this test hermetic and fast, per the plan's
+    "embed_phrases gets no unit test" split.
+    """
+
+    def _fake_embed(phrases: list[str]) -> list[list[float]]:
+        vectors = []
+        for phrase in phrases:
+            lowered = phrase.lower()
+            if "pipeline" in lowered or "deployment" in lowered:
+                vectors.append([1.0, 0.0])
+            else:
+                vectors.append([0.0, 1.0])
+        return vectors
+
+    monkeypatch.setattr(
+        "services.portfolio.matching.clustering.embed_phrases", _fake_embed
+    )
+
+
+class TestPhraseClustering:
+    async def test_paraphrased_sentences_cluster_together(
+        self, admin_client, fake_embeddings
+    ):
+        posting = await _store(admin_client, JD_TWO_RESPONSIBILITIES)
+        resp = await admin_client.post(f"{GAPS}/postings/{posting['id']}/cluster")
+        assert resp.status_code == status.HTTP_200_OK, resp.text
+        clusters = resp.json()["clusters"]
+        sizes = sorted(len(c["phrases"]) for c in clusters)
+        assert sizes == [1, 2]
+
+    async def test_cluster_label_is_a_real_phrase(self, admin_client, fake_embeddings):
+        posting = await _store(admin_client, JD_TWO_RESPONSIBILITIES)
+        resp = await admin_client.post(f"{GAPS}/postings/{posting['id']}/cluster")
+        clusters = resp.json()["clusters"]
+        for cluster in clusters:
+            assert cluster["label"] in cluster["phrases"]
+
+    async def test_stored_clusters_are_readable(self, admin_client, fake_embeddings):
+        posting = await _store(admin_client, JD_TWO_RESPONSIBILITIES)
+        clustered = (
+            await admin_client.post(f"{GAPS}/postings/{posting['id']}/cluster")
+        ).json()
+        resp = await admin_client.get(f"{GAPS}/postings/{posting['id']}/clusters")
+        assert resp.status_code == status.HTTP_200_OK
+        assert resp.json() == clustered
+
+    async def test_missing_posting_is_404(self, admin_client):
+        resp = await admin_client.post(f"{GAPS}/postings/999999/cluster")
+        assert resp.status_code == status.HTTP_404_NOT_FOUND
+
+    async def test_unclustered_posting_read_is_404(self, admin_client):
+        posting = await _store(admin_client, JD_TWO_RESPONSIBILITIES)
+        resp = await admin_client.get(f"{GAPS}/postings/{posting['id']}/clusters")
+        assert resp.status_code == status.HTTP_404_NOT_FOUND
+
+    async def test_reclustering_replaces_the_prior_result(
+        self, admin_client, fake_embeddings
+    ):
+        posting = await _store(admin_client, JD_TWO_RESPONSIBILITIES)
+        first = (
+            await admin_client.post(f"{GAPS}/postings/{posting['id']}/cluster")
+        ).json()
+        second = (
+            await admin_client.post(f"{GAPS}/postings/{posting['id']}/cluster")
+        ).json()
+        assert first == second
+
+    async def test_a_posting_with_no_clusterable_phrases_persists_an_empty_result(
+        self, admin_client
+    ):
+        # No 5-40 word verb-bearing segment in this text — segment_phrases
+        # yields nothing, but the empty result must still be stored so a
+        # later GET reads it back rather than 404ing on "never analyzed".
+        posting = await _store(admin_client, "3+ years\nPython")
+        posted = await admin_client.post(f"{GAPS}/postings/{posting['id']}/cluster")
+        assert posted.status_code == status.HTTP_200_OK, posted.text
+        assert posted.json()["clusters"] == []
+
+        read = await admin_client.get(f"{GAPS}/postings/{posting['id']}/clusters")
+        assert read.status_code == status.HTTP_200_OK
+        assert read.json()["clusters"] == []
+
+    async def test_a_model_bump_never_returns_a_stale_embedding(
+        self, admin_client, fake_embeddings, monkeypatch
+    ):
+        # A phrase cached under one EMBEDDING_MODEL must be treated as a
+        # cache miss (and re-embedded/overwritten) once the model changes —
+        # get_cached_embeddings filters by model_name, so a bump can't
+        # silently mix vectors from two model generations in one cluster.
+        from services.portfolio.gaps import gap_service as gap_service_module
+
+        posting = await _store(admin_client, JD_TWO_RESPONSIBILITIES)
+        await admin_client.post(f"{GAPS}/postings/{posting['id']}/cluster")
+
+        monkeypatch.setattr(gap_service_module, "EMBEDDING_MODEL", "a-different-model")
+        resp = await admin_client.post(f"{GAPS}/postings/{posting['id']}/cluster")
+        assert resp.status_code == status.HTTP_200_OK, resp.text
+        # Re-clustering succeeded (didn't silently reuse the old-model cache
+        # and skip re-embedding); the paraphrase pair still groups together.
+        sizes = sorted(len(c["phrases"]) for c in resp.json()["clusters"])
+        assert sizes == [1, 2]

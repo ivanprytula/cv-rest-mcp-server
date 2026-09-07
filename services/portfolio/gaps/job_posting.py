@@ -56,3 +56,14 @@ class RoadmapItem(BaseModel):
     jd_count: int
     strongest_level_asked: str | None = None
     note: str | None = None
+
+
+class PhraseCluster(BaseModel):
+    """One group of paraphrased responsibility sentences from a posting.
+
+    ``label`` is the medoid phrase — a real JD sentence closest, on average,
+    to every other phrase in its own cluster — not an LLM summary.
+    """
+
+    label: str
+    phrases: list[str]
