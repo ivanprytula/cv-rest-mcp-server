@@ -29,6 +29,7 @@ from services.portfolio.gaps.gap_service import (
 )
 from services.portfolio.jd_input import PayloadTooLargeError, parse_jd_input
 from services.portfolio.matching.baseline import BaselineError
+from services.portfolio.matching.gap import report_unrecognized
 from services.portfolio.pdf_generator import PdfService
 from services.portfolio.schemas.gaps import (
     GapReportOut,
@@ -142,10 +143,17 @@ async def analyze_job_posting(
     )
     if report is None:
         raise HTTPException(status_code=404, detail="Job posting not found")
+    posting = await gap_service.get_posting(posting_id)
+    unrecognized = (
+        [token for token, _count in report_unrecognized(posting.jd_text, vocabulary)]
+        if posting is not None
+        else []
+    )
     return GapReportOut(
         posting_id=posting_id,
         coverage=report.coverage,
         gaps=[gap.__dict__ for gap in report.gaps],
+        unrecognized=unrecognized,
     )
 
 
