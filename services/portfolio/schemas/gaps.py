@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from services.portfolio.gaps.job_posting import JobPostingSummary, RoadmapItem
+from services.portfolio.gaps.job_posting import (
+    JobPostingSummary,
+    PhraseCluster,
+    RoadmapItem,
+)
 
 
 class SkillGapOut(BaseModel):
@@ -53,3 +57,10 @@ class LearningRoadmap(BaseModel):
 
     items: list[RoadmapItem]
     analyzer_version: str
+
+
+class PhraseClustersOut(BaseModel):
+    """A posting's responsibility sentences, grouped by paraphrase."""
+
+    posting_id: int
+    clusters: list[PhraseCluster]
