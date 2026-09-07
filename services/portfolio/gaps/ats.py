@@ -261,26 +261,3 @@ _FETCHERS = {
 def fetcher_for(source: str):
     """Return the fetch function for a portal name, or None if unknown."""
     return _FETCHERS.get(source)
-
-
-def parse_tracked_boards(raw: str) -> list[tuple[str, str]]:
-    """Parse "source:company_slug" pairs, comma-separated, from settings.
-
-    Fails fast on a malformed entry (missing colon, unknown portal) so
-    misconfiguration surfaces at startup rather than as a silent skip
-    during a scheduled refresh.
-    """
-    boards: list[tuple[str, str]] = []
-    for entry in raw.split(","):
-        entry = entry.strip()
-        if not entry:
-            continue
-        if ":" not in entry:
-            raise ValueError(
-                f"Invalid ATS board entry {entry!r}: expected 'source:company_slug'"
-            )
-        source, _, company_slug = entry.partition(":")
-        if fetcher_for(source) is None:
-            raise ValueError(f"Unknown ATS source {source!r} in {entry!r}")
-        boards.append((source, company_slug))
-    return boards

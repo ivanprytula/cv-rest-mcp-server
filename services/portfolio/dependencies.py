@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from services.portfolio.auth.user_service import UserService
     from services.portfolio.documents.document_service import DocumentService
     from services.portfolio.gaps.gap_service import GapService
+    from services.portfolio.gaps.tracked_board_service import TrackedBoardService
     from services.portfolio.revisions.revision_service import RevisionService
 
 
@@ -77,6 +78,16 @@ async def get_gap_service(request: Request) -> GapService:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Gap service not initialized",
+        )
+    return service
+
+
+async def get_tracked_board_service(request: Request) -> TrackedBoardService:
+    service = getattr(request.app.state, "tracked_board_service", None)
+    if service is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Tracked board service not initialized",
         )
     return service
 

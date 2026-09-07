@@ -30,14 +30,18 @@ from services.portfolio.db import build_engine, build_session_factory
 from services.portfolio.documents.document_repository import (
     SqlAlchemyDocumentRepository,
 )
-from services.portfolio.documents.document_row import KIND_ATS_BOARDS, KIND_CV
+from services.portfolio.documents.document_row import KIND_CV
 from services.portfolio.documents.document_service import (
     DocumentService,
     document_sources,
 )
-from services.portfolio.gaps.ats import parse_tracked_boards
 from services.portfolio.gaps.gap_repository import SqlAlchemyGapRepository
 from services.portfolio.gaps.gap_service import GapService, load_analysis_inputs
+from services.portfolio.gaps.tracked_board_repository import (
+    SqlAlchemyTrackedBoardRepository,
+)
+from services.portfolio.gaps.tracked_board_row import API_BACKED_KINDS
+from services.portfolio.gaps.tracked_board_service import TrackedBoardService
 from services.portfolio.matching.baseline import BaselineError
 from services.portfolio.settings import settings
 
@@ -56,6 +60,9 @@ async def lifespan(app: FastAPI):
     app.state.gap_service = GapService(SqlAlchemyGapRepository(session_factory))
     app.state.document_service = DocumentService(
         SqlAlchemyDocumentRepository(session_factory)
+    )
+    app.state.tracked_board_service = TrackedBoardService(
+        SqlAlchemyTrackedBoardRepository(session_factory)
     )
     yield
     await engine.dispose()
@@ -78,23 +85,34 @@ async def health() -> dict[str, str]:
 
 
 @app.post("/trigger")
-async def trigger_refresh() -> dict[str, object]:
+async def trigger_refresh(group: str | None = None) -> dict[str, object]:
     """Fetch every tracked ATS board, sync postings, and re-analyze changes.
 
     No request body, no auth check: Cloud Run's platform IAM already
     verified the caller (Scheduler's OIDC token) before this handler runs.
     Returns per-board counts so the Scheduler job's execution log shows
     exactly what happened without a separate query.
+
+    `?group=X` scopes the run to boards tagged with that group — how a
+    Cloud Scheduler job with its own cadence polls only its slice of the
+    registry (terraform's `ats_refresh_groups` var), and how an operator
+    triggers an on-demand batch by hand. Omitted (the scheduled default's
+    behavior) means every active API-backed board, regardless of group.
     """
     gap_service: GapService = app.state.gap_service
     documents = app.state.document_service
+    tracked_board_service: TrackedBoardService = app.state.tracked_board_service
 
-    # DB-first (operator-editable via PUT /api/v1/documents/ats_boards),
-    # falling back to ATS_TRACKED_BOARDS so a fresh deploy with no DB row yet
-    # still tracks whatever was configured before this moved out of env vars.
-    stored = await documents.read(KIND_ATS_BOARDS)
-    raw_boards = stored["raw"] if stored is not None else settings.ats_tracked_boards
-    boards = parse_tracked_boards(raw_boards)
+    # url_only entries have no fetcher and are filtered out here, not inside
+    # gap_service.sync_board — that keeps a deliberate url_only board from
+    # ever hitting the `fetcher_for(source) is None` branch there, which
+    # would otherwise count it as an error on every single refresh run.
+    tracked_rows = await tracked_board_service.list_all(active_only=True, group=group)
+    boards: list[tuple[str, str]] = [
+        (row.kind, row.company_slug)
+        for row in tracked_rows
+        if row.kind in API_BACKED_KINDS and row.company_slug is not None
+    ]
     if not boards:
         logger.info("No ATS boards configured")
         return {"boards": {}}

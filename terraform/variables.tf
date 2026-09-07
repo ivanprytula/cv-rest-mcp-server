@@ -122,20 +122,47 @@ variable "database_url_secret_id" {
   default     = "cv-database-url"
 }
 
-# Cron expression for the ATS refresh job (unix-cron, e.g. "0 */6 * * *" for
-# every 6 hours). Cloud Scheduler is a general cron scheduler, not limited to
-# once a day — pick whatever cadence fits; the ETag-based conditional GET in
-# gaps/ats.py keeps a more frequent schedule cheap against unchanged boards.
-variable "ats_refresh_schedule" {
-  description = "Unix-cron expression for how often the ATS refresh trigger runs."
-  type        = string
-  default     = "0 8 * * *" # once daily, 08:00
-}
-
-variable "ats_refresh_timezone" {
-  description = "IANA timezone for ats_refresh_schedule."
-  type        = string
-  default     = "Etc/UTC"
+# One Cloud Scheduler job per map entry, each hitting POST /trigger on the
+# ATS refresh service — optionally scoped to one tracked_boards.group via
+# ?group=<group>, so different groups (e.g. a "priority" list of boards) can
+# run on different cadences. Cloud Scheduler is a general cron scheduler, not
+# limited to once a day; the ETag-based conditional GET in gaps/ats.py keeps
+# a more frequent schedule cheap against unchanged boards.
+variable "ats_refresh_groups" {
+  description = <<-EOT
+    Cloud Scheduler jobs polling the ATS refresh trigger, keyed by job-name
+    suffix (job becomes "ats-refresh-<key>"). Each entry becomes its own
+    scheduler job hitting POST /trigger (with ?group=<group> appended when
+    group is set).
+      <key> = {
+        schedule = "0 8 * * *"   # unix-cron
+        timezone = "Etc/UTC"     # IANA timezone
+        group    = null          # tracked_boards.group to scope to, or null for "every active board"
+      }
+    Example: to add an hourly sweep of a "priority" group alongside the
+    once-daily default, set in terraform.tfvars:
+      ats_refresh_groups = {
+        default  = { schedule = "0 8 * * *", group = null }
+        priority = { schedule = "0 * * * *", group = "priority" }
+      }
+  EOT
+  type = map(object({
+    schedule = string
+    timezone = optional(string, "Etc/UTC")
+    group    = optional(string)
+  }))
+  # Matches the previously deployed behavior exactly — one ungrouped daily
+  # job. Applying this module with zero tfvars changes is a no-op; add an
+  # entry in terraform.tfvars when ready, per the example above. This
+  # default deliberately does NOT turn on a second scheduler job (and its
+  # cost) for every user of this module.
+  default = {
+    default = {
+      schedule = "0 8 * * *" # once daily, 08:00
+      timezone = "Etc/UTC"
+      group    = null
+    }
+  }
 }
 
 # Private upload bucket for user content (avatars/photos). Signed-URL only writes.

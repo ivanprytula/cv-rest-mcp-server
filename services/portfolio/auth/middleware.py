@@ -72,13 +72,18 @@ _READ_SCOPED_API_PATHS = {f"{API_V1_PREFIX}/cv", f"{API_V1_PREFIX}/cv/pdf"}
 
 # Read-scoped GET *subtrees*. Exact-path matching cannot express a route with
 # a path parameter (`/gaps/postings/{id}`), so these are prefix-matched.
-_READ_SCOPED_API_PREFIXES = (f"{API_V1_PREFIX}/gaps", f"{API_V1_PREFIX}/documents")
+_READ_SCOPED_API_PREFIXES = (
+    f"{API_V1_PREFIX}/gaps",
+    f"{API_V1_PREFIX}/documents",
+    f"{API_V1_PREFIX}/tracked-boards",
+)
 
 # (method, path) pairs requiring the admin role. Mutations of operator content
 # live here; a set so adding the next one is data, not a code change.
 _ADMIN_ROUTES = {
     (_TAILOR_MUTATION_METHOD, _TAILOR_MUTATION_PATH),
     ("POST", f"{API_V1_PREFIX}/gaps"),
+    ("POST", f"{API_V1_PREFIX}/tracked-boards"),
 }
 
 # Admin-gated (method, prefix) subtrees, for mutations whose route carries a
@@ -88,6 +93,8 @@ _ADMIN_PREFIXES = (
     ("POST", f"{API_V1_PREFIX}/gaps/postings"),
     ("PUT", f"{API_V1_PREFIX}/documents"),
     ("DELETE", f"{API_V1_PREFIX}/documents"),
+    ("PATCH", f"{API_V1_PREFIX}/tracked-boards"),
+    ("DELETE", f"{API_V1_PREFIX}/tracked-boards"),
 )
 
 _SCOPE_READ = "cv:read"

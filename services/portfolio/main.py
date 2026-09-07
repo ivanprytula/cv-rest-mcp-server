@@ -55,6 +55,13 @@ from services.portfolio.failban import register_violation_from_request
 from services.portfolio.gaps.gap_repository import SqlAlchemyGapRepository
 from services.portfolio.gaps.gap_service import GapService
 from services.portfolio.gaps.routes import router as gaps_router
+from services.portfolio.gaps.tracked_board_repository import (
+    SqlAlchemyTrackedBoardRepository,
+)
+from services.portfolio.gaps.tracked_board_routes import (
+    router as tracked_boards_router,
+)
+from services.portfolio.gaps.tracked_board_service import TrackedBoardService
 from services.portfolio.guard_middleware import GuardMiddleware
 from services.portfolio.mcp_limits import (
     enforce_mcp_pdf_render_limit,
@@ -333,6 +340,12 @@ async def lifespan(app):
     gap_repo = SqlAlchemyGapRepository(session_factory)
     app.state.gap_service = GapService(gap_repo)
 
+    # Tracked-board registry: what the ATS refresh trigger polls. Independent
+    # of AtsBoardRow (gap_repo's fetch-cache) — this is the operator-editable
+    # "what to track" list, not fetch state.
+    tracked_board_repo = SqlAlchemyTrackedBoardRepository(session_factory)
+    app.state.tracked_board_service = TrackedBoardService(tracked_board_repo)
+
     # Operator documents (live CV, skill bank, JD vocabulary) in Postgres.
     # Seeding is idempotent — an existing row is never overwritten, so a
     # redeploy cannot clobber edits made through the API. Reads fall back to
@@ -355,6 +368,7 @@ app.include_router(router)
 app.include_router(auth_router)
 app.include_router(gaps_router)
 app.include_router(documents_router)
+app.include_router(tracked_boards_router)
 
 
 # The /cv/tailor endpoint reads the raw body itself (multi-format: JSON,

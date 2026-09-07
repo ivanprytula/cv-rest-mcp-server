@@ -153,30 +153,3 @@ class TestFetcherFor:
 
     def test_unknown_portal_returns_none(self):
         assert fetcher_for("workday") is None
-
-
-class TestParseTrackedBoards:
-    def test_parses_comma_separated_pairs(self):
-        from services.portfolio.gaps.ats import parse_tracked_boards
-
-        assert parse_tracked_boards("greenhouse:stripe,lever:netflix") == [
-            ("greenhouse", "stripe"),
-            ("lever", "netflix"),
-        ]
-
-    def test_empty_string_yields_no_boards(self):
-        from services.portfolio.gaps.ats import parse_tracked_boards
-
-        assert parse_tracked_boards("") == []
-
-    def test_missing_colon_raises(self):
-        from services.portfolio.gaps.ats import parse_tracked_boards
-
-        with pytest.raises(ValueError, match="expected"):
-            parse_tracked_boards("greenhouse-stripe")
-
-    def test_unknown_source_raises(self):
-        from services.portfolio.gaps.ats import parse_tracked_boards
-
-        with pytest.raises(ValueError, match="Unknown ATS source"):
-            parse_tracked_boards("workday:acme")
