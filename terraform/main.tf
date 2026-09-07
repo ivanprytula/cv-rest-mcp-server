@@ -142,14 +142,18 @@ resource "google_cloud_run_v2_service_iam_member" "ats_refresh_trigger_invoker" 
   member   = "serviceAccount:${module.iam_secrets.ats_refresh_trigger_runtime_sa_email}"
 }
 
+# One scheduler job per var.ats_refresh_groups entry — adding a new
+# group/cadence is a tfvars edit, not a new resource block. The default
+# value (one "default" entry, group = null) matches the previously single,
+# non-for_each resource's exact behavior.
 resource "google_cloud_scheduler_job" "ats_refresh" {
-  count       = local.ats_trigger_enabled ? 1 : 0
+  for_each    = local.ats_trigger_enabled ? var.ats_refresh_groups : {}
   project     = var.project_id
   region      = var.region
-  name        = "ats-refresh"
-  description = "Polls tracked ATS boards and re-analyzes changed postings."
-  schedule    = var.ats_refresh_schedule
-  time_zone   = var.ats_refresh_timezone
+  name        = "ats-refresh-${each.key}"
+  description = each.value.group != null ? "Polls the '${each.value.group}' group of tracked ATS boards and re-analyzes changed postings." : "Polls tracked ATS boards and re-analyzes changed postings."
+  schedule    = each.value.schedule
+  time_zone   = each.value.timezone
   # Refresh may touch several boards sequentially (gap_service.py caps
   # concurrency at 2) — generous deadline so a slow board doesn't cut the
   # run short before close_missing_postings runs for the others.
@@ -157,7 +161,11 @@ resource "google_cloud_scheduler_job" "ats_refresh" {
 
   http_target {
     http_method = "POST"
-    uri         = "${module.run["ats-refresh-trigger"].service_uri}/trigger"
+    uri = each.value.group != null ? (
+      "${module.run["ats-refresh-trigger"].service_uri}/trigger?group=${each.value.group}"
+      ) : (
+      "${module.run["ats-refresh-trigger"].service_uri}/trigger"
+    )
 
     oidc_token {
       service_account_email = module.iam_secrets.ats_refresh_trigger_runtime_sa_email

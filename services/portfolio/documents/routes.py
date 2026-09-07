@@ -16,7 +16,6 @@ from services.portfolio.cv_data import validate_cv_payload
 from services.portfolio.dependencies import get_document_service
 from services.portfolio.documents.document_row import (
     DOCUMENT_KINDS,
-    KIND_ATS_BOARDS,
     KIND_CV,
     KIND_JD_VOCABULARY,
     KIND_SKILL_BANK,
@@ -25,7 +24,6 @@ from services.portfolio.documents.document_service import (
     DocumentService,
     document_sources,
 )
-from services.portfolio.gaps.ats import parse_tracked_boards
 from services.portfolio.matching.baseline import BaselineError, validate_bank_payload
 from services.portfolio.settings import settings
 
@@ -44,16 +42,6 @@ kind_path = Path(
 )
 
 
-def _validate_ats_boards_payload(payload: dict[str, Any]) -> None:
-    """Reuse `parse_tracked_boards`'s own fail-fast parsing as the validator —
-    a payload that can't be parsed at write time would otherwise only fail
-    later, inside a scheduled refresh run with no caller to report it to."""
-    raw = payload.get("raw", "")
-    if not isinstance(raw, str):
-        raise ValueError("ats_boards payload must have a string 'raw' field")
-    parse_tracked_boards(raw)
-
-
 # Per-kind validators. A kind absent here is stored as-is — adding a new
 # document kind should not require inventing a schema for it, and an
 # unvalidated document is only a risk to whatever chooses to read it.
@@ -63,7 +51,6 @@ _VALIDATORS = {
     KIND_JD_VOCABULARY: lambda payload: validate_bank_payload(
         KIND_JD_VOCABULARY, payload
     ),
-    KIND_ATS_BOARDS: _validate_ats_boards_payload,
 }
 
 
@@ -98,12 +85,10 @@ async def read_document(
     kind: str = kind_path,
     service: DocumentService = get_document_service_dep,
 ) -> dict[str, Any]:
-    """Read a document — from the DB, or its fallback (file, or env for ats_boards)."""
+    """Read a document — from the DB, or its file fallback."""
     payload = await service.read(
         kind, fallback_path=document_sources(settings).get(kind)
     )
-    if payload is None and kind == KIND_ATS_BOARDS:
-        payload = {"raw": settings.ats_tracked_boards}
     if payload is None:
         raise HTTPException(status_code=404, detail=f"No {kind} document available")
     return payload

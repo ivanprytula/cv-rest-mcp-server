@@ -10,6 +10,7 @@ import services.portfolio.auth.refresh_token_row  # noqa: F401,E402
 import services.portfolio.auth.user_row  # noqa: F401,E402
 import services.portfolio.documents.document_row  # noqa: F401,E402
 import services.portfolio.gaps.job_posting_row  # noqa: F401,E402
+import services.portfolio.gaps.tracked_board_row  # noqa: F401,E402
 import services.portfolio.revisions.revision_row  # noqa: F401,E402
 from services.portfolio.db import Base
 from services.portfolio.settings import settings

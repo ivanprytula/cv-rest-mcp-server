@@ -387,6 +387,7 @@ async def user_service(auth_settings, _fresh_postgres_url, monkeypatch):
         get_gap_service,
         get_refresh_token_service,
         get_revision_service,
+        get_tracked_board_service,
     )
     from services.portfolio.documents.document_repository import (
         SqlAlchemyDocumentRepository,
@@ -394,6 +395,10 @@ async def user_service(auth_settings, _fresh_postgres_url, monkeypatch):
     from services.portfolio.documents.document_service import DocumentService
     from services.portfolio.gaps.gap_repository import SqlAlchemyGapRepository
     from services.portfolio.gaps.gap_service import GapService
+    from services.portfolio.gaps.tracked_board_repository import (
+        SqlAlchemyTrackedBoardRepository,
+    )
+    from services.portfolio.gaps.tracked_board_service import TrackedBoardService
     from services.portfolio.revisions.revision_repository import (
         SqlAlchemyRevisionRepository,
     )
@@ -420,6 +425,9 @@ async def user_service(auth_settings, _fresh_postgres_url, monkeypatch):
     )
     gap_service = GapService(SqlAlchemyGapRepository(session_factory))
     document_service = DocumentService(SqlAlchemyDocumentRepository(session_factory))
+    tracked_board_service = TrackedBoardService(
+        SqlAlchemyTrackedBoardRepository(session_factory)
+    )
 
     monkeypatch.setattr(settings, "database_url", _fresh_postgres_url)
     app.dependency_overrides[get_user_service] = lambda: service
@@ -427,22 +435,26 @@ async def user_service(auth_settings, _fresh_postgres_url, monkeypatch):
     app.dependency_overrides[get_refresh_token_service] = lambda: refresh_token_service
     app.dependency_overrides[get_gap_service] = lambda: gap_service
     app.dependency_overrides[get_document_service] = lambda: document_service
+    app.dependency_overrides[get_tracked_board_service] = lambda: tracked_board_service
     app.state.user_service = service
     app.state.document_service = document_service
     app.state.revision_service = revision_service
     app.state.refresh_token_service = refresh_token_service
     app.state.gap_service = gap_service
+    app.state.tracked_board_service = tracked_board_service
     yield service
     app.dependency_overrides.pop(get_user_service, None)
     app.dependency_overrides.pop(get_revision_service, None)
     app.dependency_overrides.pop(get_refresh_token_service, None)
     app.dependency_overrides.pop(get_gap_service, None)
     app.dependency_overrides.pop(get_document_service, None)
+    app.dependency_overrides.pop(get_tracked_board_service, None)
     app.state.user_service = None
     app.state.document_service = None
     app.state.revision_service = None
     app.state.refresh_token_service = None
     app.state.gap_service = None
+    app.state.tracked_board_service = None
     await engine.dispose()
 
 
