@@ -163,6 +163,17 @@ resource "google_project_iam_member" "deployer_cloudsql_viewer" {
   member  = "serviceAccount:${google_service_account.deployer.email}"
 }
 
+# Deployer's `terraform plan`/`apply` needs to read (and, when a resource's
+# address changes — e.g. count -> for_each — destroy/recreate) Cloud
+# Scheduler jobs. The original ats-refresh job was created by a one-time
+# local Owner apply like every other first-created resource; the gap only
+# surfaced once CI needed cloudscheduler.jobs.get to plan a destroy of it.
+resource "google_project_iam_member" "deployer_cloudscheduler_admin" {
+  project = var.project
+  role    = "roles/cloudscheduler.admin"
+  member  = "serviceAccount:${google_service_account.deployer.email}"
+}
+
 # Deployer creates new runtime SAs as part of `terraform apply` in CI
 # (e.g. ats_refresh_trigger_runtime) — every prior SA was bootstrapped by a
 # one-time local Owner apply, but that doesn't scale to a new SA per PR.
