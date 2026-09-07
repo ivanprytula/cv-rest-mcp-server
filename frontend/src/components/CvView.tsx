@@ -1,5 +1,37 @@
+import type { ReactNode } from 'react'
 import type { CVData } from '../api/cv'
 import { flattenSkills } from '../api/cv'
+
+const skillList = 'my-2 list-disc pl-5'
+const section = 'mb-6 max-sm:mb-4'
+
+// One dated/organized item (a job, project, cert, ...) shared by every CV
+// section below — same header/org/tech layout, just different content.
+function CvEntry({
+  title,
+  meta,
+  org,
+  tech,
+  children,
+}: {
+  title: string
+  meta?: ReactNode
+  org?: string
+  tech?: string
+  children?: ReactNode
+}) {
+  return (
+    <article className="mb-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <h3 className="m-0 text-base text-text-h">{title}</h3>
+        {meta}
+      </div>
+      {org && <div className="text-muted">{org}</div>}
+      {tech && <div className="text-sm text-muted">{tech}</div>}
+      {children}
+    </article>
+  )
+}
 
 // Mirrors templates/cv_base.html's section structure and ordering (no theme
 // CSS — this is the operator console's data view, not the recruiter-facing
@@ -11,17 +43,17 @@ export default function CvView({ cv }: { cv: CVData }) {
   const links = [cv.github, cv.linkedin, ...cv.websites.map((w) => w.url)].filter(Boolean)
 
   return (
-    <article className="cv-view">
-      <header>
-        <h1>{cv.name}</h1>
-        <p className="cv-subtitle">{cv.title}</p>
-        <address className="cv-contact-line">
+    <article className="max-w-180">
+      <header className={section}>
+        <h1 className="text-2xl text-text-h">{cv.name}</h1>
+        <p>{cv.title}</p>
+        <address className="text-muted not-italic">
           {contactParts.join(' · ')}
           {links.length > 0 && (
             <>
               <br />
               {links.map((link, i) => (
-                <a key={link} href={link} target="_blank" rel="noreferrer">
+                <a key={link} href={link} target="_blank" rel="noreferrer" className="text-accent">
                   {i > 0 && ' · '}
                   {link}
                 </a>
@@ -32,16 +64,16 @@ export default function CvView({ cv }: { cv: CVData }) {
       </header>
 
       {cv.summary && (
-        <section>
-          <h2>Summary</h2>
+        <section className={section}>
+          <h2 className="text-xl text-text-h">Summary</h2>
           <p>{cv.summary}</p>
         </section>
       )}
 
       {flatSkills.length > 0 && (
-        <section>
-          <h2>Skills</h2>
-          <ul className="cv-skill-list">
+        <section className={section}>
+          <h2 className="text-xl text-text-h">Skills</h2>
+          <ul className={skillList}>
             {flatSkills.map((skill) => (
               <li key={skill.category}>
                 <strong>{skill.category}:</strong> {skill.items.join(', ')}
@@ -52,9 +84,9 @@ export default function CvView({ cv }: { cv: CVData }) {
       )}
 
       {flatAdditionalSkills.length > 0 && (
-        <section>
-          <h2>Additional Skills</h2>
-          <ul className="cv-skill-list">
+        <section className={section}>
+          <h2 className="text-xl text-text-h">Additional Skills</h2>
+          <ul className={skillList}>
             {flatAdditionalSkills.map((skill) => (
               <li key={skill.category}>
                 <strong>{skill.category}:</strong> {skill.items.join(', ')}
@@ -65,128 +97,115 @@ export default function CvView({ cv }: { cv: CVData }) {
       )}
 
       {cv.experience.length > 0 && (
-        <section>
-          <h2>Experience</h2>
+        <section className={section}>
+          <h2 className="text-xl text-text-h">Experience</h2>
           {cv.experience.map((job) => (
-            <article key={`${job.company}-${job.role}-${job.period}`} className="cv-entry">
-              <div className="cv-entry-header">
-                <h3>{job.role}</h3>
-                <time>{job.period}</time>
-              </div>
-              <div className="cv-entry-org">{job.company}</div>
-              {job.tech.length > 0 && <div className="cv-entry-tech">{job.tech.join(', ')}</div>}
+            <CvEntry
+              key={`${job.company}-${job.role}-${job.period}`}
+              title={job.role}
+              meta={<time>{job.period}</time>}
+              org={job.company}
+              tech={job.tech.length > 0 ? job.tech.join(', ') : undefined}
+            >
               {job.highlights.length > 0 && (
-                <ul>
+                <ul className={skillList}>
                   {job.highlights.map((highlight) => (
                     <li key={highlight}>{highlight}</li>
                   ))}
                 </ul>
               )}
-            </article>
+            </CvEntry>
           ))}
         </section>
       )}
 
       {cv.projects.length > 0 && (
-        <section>
-          <h2>Projects</h2>
+        <section className={section}>
+          <h2 className="text-xl text-text-h">Projects</h2>
           {cv.projects.map((project) => (
-            <article key={project.name} className="cv-entry">
-              <div className="cv-entry-header">
-                <h3>{project.name}</h3>
-                {project.url && (
-                  <a href={project.url} target="_blank" rel="noreferrer">
+            <CvEntry
+              key={project.name}
+              title={project.name}
+              meta={
+                project.url && (
+                  <a href={project.url} target="_blank" rel="noreferrer" className="text-accent">
                     Link
                   </a>
-                )}
-              </div>
-              {project.description && <div className="cv-entry-org">{project.description}</div>}
-              {project.tech.length > 0 && <div className="cv-entry-tech">{project.tech.join(', ')}</div>}
-            </article>
+                )
+              }
+              org={project.description || undefined}
+              tech={project.tech.length > 0 ? project.tech.join(', ') : undefined}
+            />
           ))}
         </section>
       )}
 
       {cv.certifications.length > 0 && (
-        <section>
-          <h2>Certifications</h2>
+        <section className={section}>
+          <h2 className="text-xl text-text-h">Certifications</h2>
           {cv.certifications.map((cert) => (
-            <article key={cert.name} className="cv-entry">
-              <div className="cv-entry-header">
-                <h3>{cert.name}</h3>
-                <time>{cert.date}</time>
-              </div>
-              <div className="cv-entry-org">{cert.issuer}</div>
-            </article>
+            <CvEntry key={cert.name} title={cert.name} meta={<time>{cert.date}</time>} org={cert.issuer} />
           ))}
         </section>
       )}
 
       {cv.publications.length > 0 && (
-        <section>
-          <h2>Publications</h2>
+        <section className={section}>
+          <h2 className="text-xl text-text-h">Publications</h2>
           {cv.publications.map((pub) => (
-            <article key={pub.title} className="cv-entry">
-              <div className="cv-entry-header">
-                <h3>{pub.title}</h3>
-                <time>{pub.year}</time>
-              </div>
-              <div className="cv-entry-org">{pub.venue}</div>
-            </article>
+            <CvEntry key={pub.title} title={pub.title} meta={<time>{pub.year}</time>} org={pub.venue} />
           ))}
         </section>
       )}
 
       {cv.awards.length > 0 && (
-        <section>
-          <h2>Awards</h2>
+        <section className={section}>
+          <h2 className="text-xl text-text-h">Awards</h2>
           {cv.awards.map((award) => (
-            <article key={award.name} className="cv-entry">
-              <div className="cv-entry-header">
-                <h3>{award.name}</h3>
-                <time>{award.date}</time>
-              </div>
-              <div className="cv-entry-org">{award.issuer}</div>
-            </article>
+            <CvEntry
+              key={award.name}
+              title={award.name}
+              meta={<time>{award.date}</time>}
+              org={award.issuer}
+            />
           ))}
         </section>
       )}
 
       {cv.volunteering.length > 0 && (
-        <section>
-          <h2>Volunteering</h2>
+        <section className={section}>
+          <h2 className="text-xl text-text-h">Volunteering</h2>
           {cv.volunteering.map((vol) => (
-            <article key={`${vol.organization}-${vol.role}`} className="cv-entry">
-              <div className="cv-entry-header">
-                <h3>{vol.role}</h3>
-                <time>{vol.period}</time>
-              </div>
-              <div className="cv-entry-org">{vol.organization}</div>
+            <CvEntry
+              key={`${vol.organization}-${vol.role}`}
+              title={vol.role}
+              meta={<time>{vol.period}</time>}
+              org={vol.organization}
+            >
               {vol.description && <div>{vol.description}</div>}
-            </article>
+            </CvEntry>
           ))}
         </section>
       )}
 
       {cv.education.length > 0 && (
-        <section>
-          <h2>Education</h2>
+        <section className={section}>
+          <h2 className="text-xl text-text-h">Education</h2>
           {cv.education.map((edu) => (
-            <article key={`${edu.institution}-${edu.degree}`} className="cv-entry">
-              <div className="cv-entry-header">
-                <h3>{edu.degree}</h3>
-                <time>{edu.year}</time>
-              </div>
-              <div className="cv-entry-org">{edu.institution}</div>
-            </article>
+            <CvEntry
+              key={`${edu.institution}-${edu.degree}`}
+              title={edu.degree}
+              meta={<time>{edu.year}</time>}
+              org={edu.institution}
+            />
           ))}
         </section>
       )}
 
       {cv.languages.length > 0 && (
-        <section>
-          <h2>Languages</h2>
-          <ul className="cv-skill-list">
+        <section className={section}>
+          <h2 className="text-xl text-text-h">Languages</h2>
+          <ul className={skillList}>
             {cv.languages.map((lang) => (
               <li key={lang}>{lang}</li>
             ))}

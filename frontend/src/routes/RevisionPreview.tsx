@@ -28,11 +28,18 @@ export default function RevisionPreview() {
   }
 
   return (
-    <div className="revision-preview">
-      <div className="revision-preview-toolbar">
-        <Link to="/">&larr; Revisions</Link>
+    <div>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <Link to="/" className="text-accent">
+          &larr; Revisions
+        </Link>
         {data && (
-          <button type="button" onClick={handleDownloadPdf} disabled={downloadingPdf}>
+          <button
+            type="button"
+            onClick={handleDownloadPdf}
+            disabled={downloadingPdf}
+            className="rounded border border-border px-3 py-1.5 disabled:cursor-default disabled:opacity-60"
+          >
             {downloadingPdf ? 'Generating…' : 'Download PDF'}
           </button>
         )}
