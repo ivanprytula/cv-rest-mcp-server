@@ -182,10 +182,18 @@ enable_cloud_sql = false
 # and per-portal metadata live in Firestore instead (see
 # services/portfolio/gaps/jd_document_store.py). Purely additive — every
 # earlier PR already stores postings in Postgres, so this is revertable by
-# deleting jd_document_store.py + this module + FIRESTORE_PROJECT, nothing
-# else moves. FIRESTORE_PROJECT (app env var, not a Terraform var) must be
-# set to this project's id once applied, or api-core/the refresh trigger
-# keep running on the in-memory fake with no error.
+# deleting jd_document_store.py + this module + the env var below, nothing
+# else moves.
+#
+# FIRESTORE_PROJECT is a plain (non-secret) Cloud Run env var, not its own
+# Terraform variable — add it to api-core's env_vars block above once this
+# is applied (and to ats-refresh-trigger's env_vars too, once that service
+# is added to `services` — see Phase 2b PR4), or both keep running on the
+# in-memory fake with no error (see jd_document_store.py's "empty setting
+# means skip" note). No GitHub Actions/deploy-app.yml wiring needed: Cloud
+# Run env vars come entirely from `terraform apply`, same as every other
+# plain env var in this file.
+#   FIRESTORE_PROJECT = "cv-rest-mcp-server"
 enable_firestore = false
 # firestore_location = "eur3"  # default shown; check `gcloud firestore locations list` for this project
 
