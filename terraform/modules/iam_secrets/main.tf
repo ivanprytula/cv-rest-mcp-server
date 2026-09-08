@@ -174,6 +174,18 @@ resource "google_project_iam_member" "deployer_cloudscheduler_admin" {
   member  = "serviceAccount:${google_service_account.deployer.email}"
 }
 
+# Firestore database (Phase 2b PR8) was bootstrapped by a one-time local
+# Owner apply, like every other first-created resource — CI's deployer SA
+# was never granted a matching role, so its next `terraform plan` 403'd
+# trying to refresh google_firestore_database.default. datastore.owner (not
+# .user, which is data read/write only) covers database-level management.
+resource "google_project_iam_member" "deployer_datastore_owner" {
+  count   = var.enable_firestore ? 1 : 0
+  project = var.project
+  role    = "roles/datastore.owner"
+  member  = "serviceAccount:${google_service_account.deployer.email}"
+}
+
 # Deployer creates new runtime SAs as part of `terraform apply` in CI
 # (e.g. ats_refresh_trigger_runtime) — every prior SA was bootstrapped by a
 # one-time local Owner apply, but that doesn't scale to a new SA per PR.

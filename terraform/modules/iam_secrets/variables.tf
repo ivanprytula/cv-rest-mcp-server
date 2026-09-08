@@ -27,6 +27,12 @@ variable "enable_cloud_sql" {
   default     = false
 }
 
+variable "enable_firestore" {
+  description = "Bind roles/datastore.owner to the deployer SA, so CI's terraform plan/apply can read and manage the Firestore database (modules/firestore). Mirrors the root module's enable_firestore flag."
+  type        = bool
+  default     = false
+}
+
 variable "database_url_secret_id" {
   description = "Secret Manager secret ID for the Postgres connection string (empty = skip IAM binding). Granted to the ATS refresh trigger's runtime SA — it needs DATABASE_URL directly, unlike api_core_secret_ids which is a list keyed for api-core."
   type        = string
