@@ -37,6 +37,9 @@ from services.portfolio.documents.document_service import (
 )
 from services.portfolio.gaps.gap_repository import SqlAlchemyGapRepository
 from services.portfolio.gaps.gap_service import GapService, load_analysis_inputs
+from services.portfolio.gaps.jd_document_store import (
+    build_jd_document_store_from_settings,
+)
 from services.portfolio.gaps.tracked_board_repository import (
     SqlAlchemyTrackedBoardRepository,
 )
@@ -57,7 +60,10 @@ async def lifespan(app: FastAPI):
     # process risks two processes racing the same DDL for no benefit.
     engine = build_engine(settings.database_url)
     session_factory = build_session_factory(engine)
-    app.state.gap_service = GapService(SqlAlchemyGapRepository(session_factory))
+    app.state.gap_service = GapService(
+        SqlAlchemyGapRepository(session_factory),
+        build_jd_document_store_from_settings(),
+    )
     app.state.document_service = DocumentService(
         SqlAlchemyDocumentRepository(session_factory)
     )

@@ -177,6 +177,26 @@ cloud_armor_rate_limit_interval_sec = 60
 enable_cloud_sql = false
 # cloud_sql_db_password_secret_id = "cv-db-password"  # default shown; override only if renamed
 
+# --- Firestore (Phase 2b PR8 — raw JD documents) ---
+# Postgres keeps only the relational skeleton of a job posting; raw JD text
+# and per-portal metadata live in Firestore instead (see
+# services/portfolio/gaps/jd_document_store.py). Purely additive — every
+# earlier PR already stores postings in Postgres, so this is revertable by
+# deleting jd_document_store.py + this module + the env var below, nothing
+# else moves.
+#
+# FIRESTORE_PROJECT is a plain (non-secret) Cloud Run env var, not its own
+# Terraform variable — add it to api-core's env_vars block above once this
+# is applied (and to ats-refresh-trigger's env_vars too, once that service
+# is added to `services` — see Phase 2b PR4), or both keep running on the
+# in-memory fake with no error (see jd_document_store.py's "empty setting
+# means skip" note). No GitHub Actions/deploy-app.yml wiring needed: Cloud
+# Run env vars come entirely from `terraform apply`, same as every other
+# plain env var in this file.
+#   FIRESTORE_PROJECT = "cv-rest-mcp-server"
+enable_firestore = false
+# firestore_location = "eur3"  # default shown; check `gcloud firestore locations list` for this project
+
 # --- Bootstrap (one-time setup before terraform apply) ---
 # Use deploy-cloud-run.sh for first-time setup:
 #   just deploy bootstrap          # enable APIs (now also via Terraform gcp_apis module)

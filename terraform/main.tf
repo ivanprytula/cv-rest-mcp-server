@@ -45,6 +45,21 @@ module "iam_secrets" {
   labels                 = merge(local.base_labels, { service = "iam-secrets" })
 }
 
+# Firestore for raw JD documents (Phase 2b PR8). Depends on iam_secrets for
+# the runtime service account emails it grants roles/datastore.user to.
+module "firestore" {
+  count      = var.enable_firestore ? 1 : 0
+  depends_on = [module.gcp_apis]
+  source     = "./modules/firestore"
+
+  project  = var.project_id
+  location = var.firestore_location
+  runtime_service_account_emails = [
+    module.iam_secrets.api_core_runtime_sa_email,
+    module.iam_secrets.ats_refresh_trigger_runtime_sa_email,
+  ]
+}
+
 # GitHub Workload Identity Federation for CI/CD (optional)
 module "github_wif" {
   count  = var.setup_github_wif ? 1 : 0

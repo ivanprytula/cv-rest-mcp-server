@@ -67,6 +67,13 @@ class Settings(BaseSettings):
     jd_vocabulary_path: Path = Path("data/jd_vocabulary.json")
     cv_tailored_dir: Path = Path("data/tailored")
 
+    # JD document store (Phase 2b PR8). Empty = no Firestore project
+    # configured — local dev runs on an in-memory fake instead (see
+    # gaps/jd_document_store.py), same "empty means skip" pattern as
+    # cv_data_gcs_uri above. Set to the GCP project id to use the real
+    # Firestore-backed store.
+    firestore_project: str = ""
+
     @property
     def sync_database_url(self) -> str:
         """`database_url` with the async driver swapped for a sync one.
