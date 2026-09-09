@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 from fastapi import HTTPException, Request, status
 
 from services.portfolio.pdf_generator import PdfService
+from services.portfolio.tenancy import TenantId
 
 
 if TYPE_CHECKING:
@@ -102,7 +103,7 @@ async def get_refresh_token_service(request: Request) -> RefreshTokenService:
     return service
 
 
-async def get_tenant_id(request: Request) -> int:
+async def get_tenant_id(request: Request) -> TenantId:
     """The tenant this request acts on: the `uid` claim of its access token.
 
     One seam, so "which tenant is this?" has a single answer instead of each
@@ -126,4 +127,4 @@ async def get_tenant_id(request: Request) -> int:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Access token predates tenant support; sign in again",
         )
-    return uid
+    return TenantId(uid)

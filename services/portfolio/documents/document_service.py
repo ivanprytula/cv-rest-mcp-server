@@ -24,6 +24,7 @@ from services.portfolio.documents.document_row import (
     KIND_JD_VOCABULARY,
     KIND_SKILL_BANK,
 )
+from services.portfolio.tenancy import TenantId
 
 
 logger = logging.getLogger(__name__)
@@ -39,7 +40,7 @@ class DocumentService:
         self._repo = repo
 
     async def read(
-        self, kind: str, *, tenant_id: int, fallback_path: Path | None = None
+        self, kind: str, *, tenant_id: TenantId, fallback_path: Path | None = None
     ) -> dict[str, Any] | None:
         """Return one tenant's document: the DB row, else the file, else None.
 
@@ -68,7 +69,7 @@ class DocumentService:
             return None
 
     async def write(
-        self, kind: str, payload: dict[str, Any], *, tenant_id: int
+        self, kind: str, payload: dict[str, Any], *, tenant_id: TenantId
     ) -> int | None:
         """Store a tenant's document, returning its new version (None on failure)."""
         try:
@@ -78,7 +79,7 @@ class DocumentService:
             return None
         return row.version
 
-    async def revert_to_file(self, kind: str, *, tenant_id: int) -> bool:
+    async def revert_to_file(self, kind: str, *, tenant_id: TenantId) -> bool:
         """Drop the stored document so reads fall back to the shipped file.
 
         Named for the effect, not the mechanism: the document does not
@@ -91,7 +92,7 @@ class DocumentService:
             logger.warning("Failed to revert document %s", kind, exc_info=True)
             return False
 
-    async def versions(self, *, tenant_id: int) -> dict[str, int]:
+    async def versions(self, *, tenant_id: TenantId) -> dict[str, int]:
         """Current version per stored document kind, for one tenant."""
         try:
             rows = await self._repo.list_all(tenant_id=tenant_id)
@@ -101,7 +102,7 @@ class DocumentService:
         return {row.kind: row.version for row in rows}
 
     async def seed_from_files(
-        self, sources: dict[str, Path], *, tenant_id: int
+        self, sources: dict[str, Path], *, tenant_id: TenantId
     ) -> None:
         """Import each file into the DB if that document has no row yet.
 

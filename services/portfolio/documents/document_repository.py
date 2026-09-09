@@ -29,15 +29,16 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from services.portfolio.documents.document_row import DocumentRow
+from services.portfolio.tenancy import TenantId
 
 
 class DocumentRepository(Protocol):
-    async def get(self, kind: str, *, tenant_id: int) -> DocumentRow | None: ...
+    async def get(self, kind: str, *, tenant_id: TenantId) -> DocumentRow | None: ...
     async def put(
-        self, *, kind: str, payload: dict[str, Any], tenant_id: int
+        self, *, kind: str, payload: dict[str, Any], tenant_id: TenantId
     ) -> DocumentRow: ...
-    async def list_all(self, *, tenant_id: int) -> list[DocumentRow]: ...
-    async def delete(self, kind: str, *, tenant_id: int) -> bool: ...
+    async def list_all(self, *, tenant_id: TenantId) -> list[DocumentRow]: ...
+    async def delete(self, kind: str, *, tenant_id: TenantId) -> bool: ...
 
 
 class SqlAlchemyDocumentRepository:
@@ -51,7 +52,7 @@ class SqlAlchemyDocumentRepository:
         self._session_factory = session_factory
 
     @asynccontextmanager
-    async def _tenant_session(self, tenant_id: int) -> AsyncIterator[AsyncSession]:
+    async def _tenant_session(self, tenant_id: TenantId) -> AsyncIterator[AsyncSession]:
         """A session whose transaction is pinned to one tenant for RLS.
 
         `SET LOCAL` is transaction-scoped, so the value cannot outlive the
@@ -68,7 +69,7 @@ class SqlAlchemyDocumentRepository:
                 )
                 yield session
 
-    async def get(self, kind: str, *, tenant_id: int) -> DocumentRow | None:
+    async def get(self, kind: str, *, tenant_id: TenantId) -> DocumentRow | None:
         async with self._tenant_session(tenant_id) as session:
             return (
                 await session.execute(
@@ -80,7 +81,7 @@ class SqlAlchemyDocumentRepository:
             ).scalar_one_or_none()
 
     async def put(
-        self, *, kind: str, payload: dict[str, Any], tenant_id: int
+        self, *, kind: str, payload: dict[str, Any], tenant_id: TenantId
     ) -> DocumentRow:
         """Insert or replace one tenant's document, bumping its version.
 
@@ -111,7 +112,7 @@ class SqlAlchemyDocumentRepository:
         async with self._tenant_session(tenant_id) as session:
             return (await session.execute(stmt)).scalar_one()
 
-    async def list_all(self, *, tenant_id: int) -> list[DocumentRow]:
+    async def list_all(self, *, tenant_id: TenantId) -> list[DocumentRow]:
         async with self._tenant_session(tenant_id) as session:
             result = await session.execute(
                 select(DocumentRow)
@@ -120,7 +121,7 @@ class SqlAlchemyDocumentRepository:
             )
             return list(result.scalars().all())
 
-    async def delete(self, kind: str, *, tenant_id: int) -> bool:
+    async def delete(self, kind: str, *, tenant_id: TenantId) -> bool:
         """Drop one tenant's document row. True when one was removed."""
         async with self._tenant_session(tenant_id) as session:
             result = await session.execute(

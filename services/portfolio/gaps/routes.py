@@ -42,6 +42,7 @@ from services.portfolio.schemas.gaps import (
     PostingList,
 )
 from services.portfolio.settings import settings
+from services.portfolio.tenancy import TenantId
 
 
 logger = logging.getLogger(__name__)
@@ -56,7 +57,7 @@ tenant_id_dep = Depends(get_tenant_id)
 
 
 async def _analysis_inputs(
-    documents: DocumentService, tenant_id: int
+    documents: DocumentService, tenant_id: TenantId
 ) -> tuple[list[dict], list[dict], list[dict]]:
     """Route-layer wrapper: translates a loader failure into a 500.
 
@@ -130,7 +131,7 @@ async def analyze_job_posting(
     gap_service: GapService = get_gap_service_dep,
     pdf_service: PdfService = get_pdf_service_dep,
     documents: DocumentService = get_document_service_dep,
-    tenant_id: int = tenant_id_dep,
+    tenant_id: TenantId = tenant_id_dep,
 ) -> GapReportOut:
     """Analyse a stored posting and persist the gap report.
 

@@ -27,6 +27,7 @@ from services.portfolio.documents.document_service import (
 )
 from services.portfolio.matching.baseline import BaselineError, validate_bank_payload
 from services.portfolio.settings import settings
+from services.portfolio.tenancy import TenantId
 
 
 logger = logging.getLogger(__name__)
@@ -74,7 +75,7 @@ def _validate(kind: str, payload: dict[str, Any]) -> None:
 @router.get("")
 async def list_documents(
     service: DocumentService = get_document_service_dep,
-    tenant_id: int = tenant_id_dep,
+    tenant_id: TenantId = tenant_id_dep,
 ) -> dict[str, Any]:
     """Report which of this tenant's documents are stored, and at which version.
 
@@ -90,7 +91,7 @@ async def list_documents(
 async def read_document(
     kind: str = kind_path,
     service: DocumentService = get_document_service_dep,
-    tenant_id: int = tenant_id_dep,
+    tenant_id: TenantId = tenant_id_dep,
 ) -> dict[str, Any]:
     """Read this tenant's document — from the DB, or its file fallback."""
     payload = await service.read(
@@ -108,7 +109,7 @@ async def write_document(
     payload: dict[str, Any],
     kind: str = kind_path,
     service: DocumentService = get_document_service_dep,
-    tenant_id: int = tenant_id_dep,
+    tenant_id: TenantId = tenant_id_dep,
 ) -> dict[str, Any]:
     """Replace this tenant's document. Validated before storing."""
     _validate(kind, payload)
@@ -124,7 +125,7 @@ async def write_document(
 async def revert_document(
     kind: str = kind_path,
     service: DocumentService = get_document_service_dep,
-    tenant_id: int = tenant_id_dep,
+    tenant_id: TenantId = tenant_id_dep,
 ) -> dict[str, Any]:
     """Drop the stored document, reverting reads to the shipped JSON file.
 

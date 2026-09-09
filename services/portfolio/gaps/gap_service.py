@@ -44,6 +44,7 @@ from services.portfolio.gaps.phrase_cluster_row import (
 from services.portfolio.matching.baseline import BaselineError, parse_baseline
 from services.portfolio.matching.gap import GapReport, detect_gaps, parse_vocabulary
 from services.portfolio.settings import settings
+from services.portfolio.tenancy import TenantId
 
 
 if TYPE_CHECKING:
@@ -682,7 +683,7 @@ def _report_from_result(result: dict[str, Any]) -> GapReport:
 async def load_analysis_inputs(
     documents: DocumentService,
     *,
-    tenant_id: int,
+    tenant_id: TenantId,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     """Load the bank, deferred pool and vocabulary, or fail loudly.
 

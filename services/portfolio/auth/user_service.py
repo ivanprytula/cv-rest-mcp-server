@@ -20,6 +20,7 @@ from services.portfolio.auth.user import (
 from services.portfolio.auth.user_repository import UserRepository
 from services.portfolio.auth.user_row import UserRow
 from services.portfolio.settings import settings
+from services.portfolio.tenancy import TenantId
 
 
 # Timing-attack hygiene (borrowed from the template's `authenticate`): an unknown
@@ -115,7 +116,7 @@ class UserService:
         return created.to_domain()
 
 
-async def resolve_operator_tenant_id(service: UserService) -> int | None:
+async def resolve_operator_tenant_id(service: UserService) -> TenantId | None:
     """The tenant that owns install-wide work: the configured first admin.
 
     Gap analysis and the ATS refresh run for the installation, not for a
@@ -124,7 +125,7 @@ async def resolve_operator_tenant_id(service: UserService) -> int | None:
     themselves tenant-scoped (a later phase), that is the operator's.
     """
     user = await service.get_by_username(settings.first_admin_username)
-    return user.id if user else None
+    return TenantId(user.id) if user else None
 
 
 async def seed_first_admin_from_settings(service: UserService) -> None:
