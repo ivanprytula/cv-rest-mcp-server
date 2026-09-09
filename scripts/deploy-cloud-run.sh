@@ -227,7 +227,6 @@ bootstrap_database_url() {
 
     # database_name/database_user match modules/cloud_sql/variables.tf defaults
     # (cv_portfolio/cv_app) — update both places together if either changes.
-    local instance_name="cv-postgres"
     local database_name="cv_portfolio"
     local database_user="cv_app"
 

@@ -62,6 +62,12 @@ get_refresh_token_service_dep = Depends(get_refresh_token_service)
 # app.<apex> to api.<apex>.
 _COOKIE_PATH = "/"
 
+# One refresh cookie per origin, and rotation treats a re-presented token as
+# a replay (revoking the family). Two tabs in the same browser therefore
+# cannot hold two logins: they share the cookie, and the second refresh
+# revokes both. Signing in as two different users at once — an admin and a
+# tenant, say — means two cookie jars: a normal window and a private one.
+
 
 def _refresh_cookie_name() -> str:
     return (

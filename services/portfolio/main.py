@@ -81,6 +81,7 @@ from services.portfolio.revisions.revision_repository import (
 from services.portfolio.revisions.revision_service import RevisionService
 from services.portfolio.routes import router
 from services.portfolio.settings import settings
+from services.portfolio.tenancy import verify_rls_enforced
 
 
 # Cloud Run maps stderr -> ERROR for every line; default logging writes to
@@ -324,6 +325,10 @@ async def lifespan(app):
     await upgrade_head(settings.sync_database_url)
     engine = build_engine(settings.database_url)
     session_factory = build_session_factory(engine)
+    # Migrations connect as the superuser; the app must not. Checked here
+    # rather than repaired, because a role that bypasses the tenant policy
+    # fails silently — every query succeeds and returns too many rows.
+    await verify_rls_enforced(session_factory)
 
     user_repo = SqlAlchemyUserRepository(session_factory)
     user_service = UserService(user_repo)

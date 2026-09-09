@@ -49,6 +49,7 @@ dev-db:
     else
         docker run -d --name cv-postgres-dev \
             -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=cv_portfolio \
+            -v "$PWD/scripts/postgres-init:/docker-entrypoint-initdb.d:ro" \
             -p 5432:5432 postgres:17-alpine
     fi
     until docker exec cv-postgres-dev pg_isready -U postgres >/dev/null 2>&1; do sleep 0.5; done
