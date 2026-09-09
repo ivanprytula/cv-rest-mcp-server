@@ -7,9 +7,14 @@
 #   3. bootstrap-secrets  Create empty Secret Manager secrets (you add the values)
 #   4. (Run: terraform apply)  Terraform deploys IAM, Org Policies, Cloud Run services,
 #                          Cloud SQL (Phase 2, enable_cloud_sql=true)
-#   5. bootstrap-database-url  Compose+store cv-database-url from the Cloud SQL
-#                          connection name + cv-db-password (needs step 4's instance
-#                          to exist; re-run terraform apply once to pick up the secret)
+#   5. bootstrap-database-url  Compose+store cv-database-url (app role) and
+#                          cv-migration-database-url (superuser) from the Cloud
+#                          SQL connection name (needs step 4's instance to
+#                          exist; re-run terraform apply once to pick up the
+#                          secrets). Requires POSTGRES_PASSWORD to be set.
+#   5b. bootstrap-app-role Strip BYPASSRLS/SUPERUSER from cv_app so row-level
+#                          security actually applies to it (Cloud SQL grants
+#                          it by default via cloudsqlsuperuser membership).
 #   6. upload-cv           Publish data/cv.json to GCS (application data)
 #   7. verify              Health check + smoke test URLs (optional, manual verification)
 #
@@ -159,7 +164,7 @@ bootstrap_secrets() {
     log "STEP 3: Create Secret Manager secrets (empty containers)"
 
     log "  3a. Creating secrets"
-    for secret in cv-jwt-signing-key cv-refresh-token-pepper cv-first-admin-password cv-db-password cv-database-url; do
+    for secret in cv-jwt-signing-key cv-refresh-token-pepper cv-first-admin-password cv-db-password cv-database-url cv-migration-database-url; do
         if gcloud secrets describe "$secret" --project "$GCP_PROJECT" >/dev/null 2>&1; then
             echo "    $secret exists, skipping create"
         else
@@ -168,7 +173,8 @@ bootstrap_secrets() {
         fi
     done
 
-    log "  3b. IAM: runtime SA read access is granted by terraform (modules/iam_secrets)"
+    log "  3b. IAM: runtime SA read access is granted by terraform (modules/iam_secrets) —
+       add each new secret id to api_core_secret_ids in terraform.tfvars"
     warn "Secret values are NEVER set by this script. Add them yourself below."
 
     cat <<EOF
@@ -187,10 +193,11 @@ bootstrap_secrets() {
     gcloud secrets versions add cv-db-password \\
       --project $GCP_PROJECT --data-file=-
 
-  cv-database-url is NOT filled in here — it's composed from cv-db-password
-  + the Cloud SQL connection name (only known after terraform apply creates
-  the instance). Run scripts/deploy-cloud-run.sh bootstrap-database-url
-  once step 4 (terraform apply) has created the instance.
+  cv-database-url and cv-migration-database-url are NOT filled in here —
+  they're composed from cv-db-password / POSTGRES_PASSWORD + the Cloud SQL
+  connection name (only known after terraform apply creates the instance).
+  Run scripts/deploy-cloud-run.sh bootstrap-database-url once step 4
+  (terraform apply) has created the instance.
 
   Or generate a strong random value without it touching your shell history:
 
@@ -223,42 +230,159 @@ EOF
 # ─────────────────────────────────────────────────────────────────────────────
 bootstrap_database_url() {
     require_project
-    log "STEP 5: Compose cv-database-url from Cloud SQL connection name + cv-db-password"
+    log "STEP 5: Compose Cloud SQL DB URLs and set the postgres superuser password"
 
     # database_name/database_user match modules/cloud_sql/variables.tf defaults
     # (cv_portfolio/cv_app) — update both places together if either changes.
     local database_name="cv_portfolio"
     local database_user="cv_app"
+    local instance_name="${CLOUDSQL_INSTANCE:-cv-postgres}"
+    local postgres_password="${POSTGRES_PASSWORD:-}"
+
+    if [[ -z "$postgres_password" ]]; then
+        die "Set POSTGRES_PASSWORD to your Cloud SQL postgres superuser password before running bootstrap-database-url. Example: export POSTGRES_PASSWORD=<your-postgres-superuser-password>"
+    fi
+    # Composed into a connection URL below without percent-encoding, and
+    # bootstrap-app-role parses it back out the same way — so it cannot
+    # contain any of the URL's own delimiter characters.
+    if [[ "$postgres_password" == *[@#/?]* ]]; then
+        die "POSTGRES_PASSWORD must not contain '@', '#', '/', or '?' — these are not percent-encoded when composing the connection URL."
+    fi
 
     local connection_name
     connection_name="$(gcloud sql instances describe "$instance_name" \
         --project "$GCP_PROJECT" --format 'value(connectionName)')" \
         || die "Cloud SQL instance '$instance_name' not found — run terraform apply first (STEP 4)."
 
-    local password
-    password="$(gcloud secrets versions access latest --secret=cv-db-password --project "$GCP_PROJECT")" \
+    log "  Setting the Cloud SQL postgres password for instance $instance_name"
+    gcloud sql users set-password postgres \
+        --project "$GCP_PROJECT" \
+        --instance "$instance_name" \
+        --password "$postgres_password" >/dev/null
+
+    local app_password
+    app_password="$(gcloud secrets versions access latest --secret=cv-db-password --project "$GCP_PROJECT")" \
         || die "cv-db-password has no version yet — run: gcloud secrets versions add cv-db-password --project $GCP_PROJECT --data-file=-"
 
     log "  Composing DATABASE_URL (asyncpg, Auth Proxy Unix-socket path)"
     printf 'postgresql+asyncpg://%s:%s@/%s?host=/cloudsql/%s' \
-        "$database_user" "$password" "$database_name" "$connection_name" \
+        "$database_user" "$app_password" "$database_name" "$connection_name" \
         | gcloud secrets versions add cv-database-url --project "$GCP_PROJECT" --data-file=-
+
+    log "  Composing cv-migration-database-url (superuser, same database, same Cloud SQL instance)"
+    printf 'postgresql+asyncpg://postgres:%s@/%s?host=/cloudsql/%s' \
+        "$postgres_password" "$database_name" "$connection_name" \
+        | gcloud secrets versions add cv-migration-database-url --project "$GCP_PROJECT" --data-file=-
 
     cat <<EOF
 
-✓ STEP 5 complete. cv-database-url now points at $instance_name.
+✓ STEP 5 complete. cv-database-url (app role) and cv-migration-database-url
+  (superuser) are stored.
 
-  api-core reads it via the DATABASE_URL secret binding (terraform.tfvars
-  services.api-core.secrets — needs api_core_secret_ids to include
-  "cv-database-url" too, or the runtime SA can't read it). The next
-  api-core revision (terraform apply, or the next deploy-app.yml release)
-  runs \`alembic upgrade head\` automatically at startup (main.py lifespan,
+  Runtime SA read access for both is granted by terraform — add
+  "cv-migration-database-url" to api_core_secret_ids in terraform.tfvars
+  (see terraform.tfvars.example) if it is not already there, then
+  terraform apply.
+
+  api-core reads DATABASE_URL / MIGRATION_DATABASE_URL via the secret
+  bindings (terraform.tfvars services.api-core.secrets). The next api-core
+  revision (terraform apply, or the next deploy-app.yml release) runs
+  \`alembic upgrade head\` automatically at startup (main.py lifespan,
   ADR-023) — no separate manual migration step.
 
   Force a restart now instead of waiting for the next release:
 
     gcloud run services update api-core --project $GCP_PROJECT --region $GCP_REGION \\
-      --update-secrets DATABASE_URL=cv-database-url:latest
+      --update-secrets DATABASE_URL=cv-database-url:latest,MIGRATION_DATABASE_URL=cv-migration-database-url:latest
+
+Next: STEP 5b (bootstrap-app-role), then STEP 6 (upload-cv)
+
+EOF
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 5b: Strip BYPASSRLS from cv_app (after bootstrap-database-url)
+# ─────────────────────────────────────────────────────────────────────────────
+# Cloud SQL grants every google_sql_user membership of cloudsqlsuperuser,
+# which carries BYPASSRLS — so cv_app starts out able to bypass row-level
+# security. api-core's verify_rls_enforced() refuses to start against such a
+# role (services/portfolio/tenancy.py), so this step is required, not optional.
+#
+# Connects through the Cloud SQL Auth Proxy using the postgres superuser
+# credentials already stored in cv-migration-database-url by STEP 5, and runs
+# the same statements documented in scripts/postgres-init/10-app-role.sql
+# (the local-dev equivalent, run automatically there via docker-entrypoint-initdb.d).
+bootstrap_app_role() {
+    require_project
+    log "STEP 5b: Strip BYPASSRLS/SUPERUSER from cv_app on Cloud SQL"
+
+    command -v psql >/dev/null 2>&1 \
+        || die "psql not found — install the postgresql client (e.g. 'brew install libpq' or 'apt install postgresql-client')."
+
+    local instance_name="${CLOUDSQL_INSTANCE:-cv-postgres}"
+    local proxy_port="${CLOUDSQL_PROXY_PORT:-5433}"
+    local connection_name
+    connection_name="$(gcloud sql instances describe "$instance_name" \
+        --project "$GCP_PROJECT" --format 'value(connectionName)')" \
+        || die "Cloud SQL instance '$instance_name' not found — run terraform apply first (STEP 4)."
+
+    # postgresql+asyncpg://postgres:<password>@/<database>?host=/cloudsql/<connection>
+    # Neither this parse nor bootstrap-database-url's construction of the URL
+    # percent-encodes the password, so POSTGRES_PASSWORD must not contain
+    # '@', '#', '/', or '?' — the same constraint cv-db-password already had.
+    local migration_url postgres_password database_name
+    migration_url="$(gcloud secrets versions access latest --secret=cv-migration-database-url --project "$GCP_PROJECT")" \
+        || die "cv-migration-database-url has no version yet — run bootstrap-database-url first (STEP 5)."
+    postgres_password="$(printf '%s' "$migration_url" | sed -E 's#^[^:]+://postgres:([^@]+)@.*#\1#')"
+    database_name="$(printf '%s' "$migration_url" | sed -E 's#.*/([^/?]+)\?.*#\1#')"
+    [[ -n "$postgres_password" && -n "$database_name" ]] \
+        || die "Could not parse the postgres password/database out of cv-migration-database-url."
+
+    log "  Starting the Cloud SQL Auth Proxy on 127.0.0.1:$proxy_port"
+    docker run --rm -d --name cv-sql-proxy-bootstrap \
+        --user "$(id -u):$(id -g)" \
+        -v "$HOME/.config/gcloud:/config/gcloud:ro" \
+        -e GOOGLE_APPLICATION_CREDENTIALS=/config/gcloud/application_default_credentials.json \
+        -p "127.0.0.1:${proxy_port}:5432" \
+        gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.14.0 \
+        "$connection_name" --address 0.0.0.0 >/dev/null
+    trap 'docker rm -f cv-sql-proxy-bootstrap >/dev/null 2>&1 || true' EXIT
+
+    log "  Waiting for the proxy to accept connections"
+    local attempt
+    for attempt in $(seq 1 30); do
+        PGPASSWORD="$postgres_password" psql -h 127.0.0.1 -p "$proxy_port" -U postgres \
+            -d "$database_name" -tAc 'SELECT 1' >/dev/null 2>&1 && break
+        [ "$attempt" -eq 30 ] && die "Cloud SQL Auth Proxy never became ready on 127.0.0.1:$proxy_port"
+        sleep 1
+    done
+
+    log "  Applying ALTER ROLE / GRANT statements to cv_app"
+    PGPASSWORD="$postgres_password" psql -h 127.0.0.1 -p "$proxy_port" -U postgres -d "$database_name" <<'SQL'
+ALTER ROLE cv_app NOSUPERUSER NOBYPASSRLS;
+REVOKE cloudsqlsuperuser FROM cv_app;
+
+GRANT USAGE ON SCHEMA public TO cv_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO cv_app;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO cv_app;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO cv_app;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+    GRANT USAGE, SELECT ON SEQUENCES TO cv_app;
+SQL
+
+    log "  Verifying"
+    local verify_row
+    verify_row="$(PGPASSWORD="$postgres_password" psql -h 127.0.0.1 -p "$proxy_port" -U postgres -d "$database_name" \
+        -tAc "SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = 'cv_app'")"
+    [ "$verify_row" = "f|f" ] \
+        || die "cv_app still has rolsuper/rolbypassrls set (got: $verify_row) — check for a lingering cloudsqlsuperuser grant."
+
+    cat <<EOF
+
+✓ STEP 5b complete. cv_app has neither SUPERUSER nor BYPASSRLS — row-level
+  security now applies to it. api-core's verify_rls_enforced() will accept
+  it at startup.
 
 Next: STEP 6 (upload-cv)
 
@@ -278,11 +402,11 @@ EOF
 # After terraform apply succeeds, continue to STEP 5.
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STEP 5: Upload CV data — publish cv.json to GCS
+# STEP 6: Upload CV data — publish cv.json to GCS
 # ─────────────────────────────────────────────────────────────────────────────
 upload_cv() {
     require_project
-    log "STEP 5: Upload CV data (after terraform apply)"
+    log "STEP 6: Upload CV data (after terraform apply)"
 
     [ -f data/cv.json ] || die "data/cv.json not found"
     log "  Publishing data/cv.json to gs://$CV_BUCKET/cv.json"
@@ -338,6 +462,7 @@ case "$1" in
     bootstrap-state)  bootstrap_state ;;
     bootstrap-secrets) bootstrap_secrets ;;
     bootstrap-database-url) bootstrap_database_url ;;
+    bootstrap-app-role) bootstrap_app_role ;;
     upload-cv)        upload_cv ;;
     verify)           verify ;;
     *)                sed -n '2,30p' "$0"; exit 1 ;;
