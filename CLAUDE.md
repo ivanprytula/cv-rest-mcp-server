@@ -75,16 +75,21 @@ cd terraform && terraform plan
 terraform apply
 
 # STEP 5: Cloud SQL only (Phase 2, enable_cloud_sql=true) — compose
-# cv-database-url from the instance's connection name + cv-db-password,
-# then terraform apply again to wire DATABASE_URL into api-core.
+# cv-database-url (app role) and cv-migration-database-url (superuser) from
+# the instance's connection name, then terraform apply again to wire
+# DATABASE_URL/MIGRATION_DATABASE_URL into api-core. Requires
+# POSTGRES_PASSWORD to be set (the Cloud SQL postgres superuser password).
+export POSTGRES_PASSWORD=<your-postgres-superuser-password>
 just deploy bootstrap-database-url
 terraform apply
 
-# STEP 5b: Strip BYPASSRLS from cv_app — Cloud SQL grants every
+# STEP 5b: Strip BYPASSRLS/SUPERUSER from cv_app — Cloud SQL grants every
 # google_sql_user cloudsqlsuperuser, which bypasses row-level security, so
-# the tenant policy would be silently inert. Statements are in
-# scripts/postgres-init/10-app-role.sql; run them via `just db-proxy`.
+# the tenant policy would be silently inert. Connects via the Cloud SQL
+# Auth Proxy using cv-migration-database-url and runs the same statements
+# as scripts/postgres-init/10-app-role.sql (the local-dev equivalent).
 # api-core refuses to start without this, so it fails loudly if skipped.
+just deploy bootstrap-app-role
 
 # STEP 6: Upload CV data to GCS
 just deploy upload-cv
