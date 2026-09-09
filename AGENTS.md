@@ -163,7 +163,7 @@ check failure — the fix is always the same: rebuild locally and commit.
 
 FastAPI + FastMCP CV rendering service. PDFs via WeasyPrint. Templates in `templates/`, themes in `services/portfolio/themes/`.
 
-Deployed to **GCP Cloud Run** (internet-facing). CV data comes from GCS via `CV_DATA_GCS_URI`. The operator is the sole content author — there is no untrusted user input path.
+Deployed to **GCP Cloud Run** (internet-facing). CV data comes from GCS via `CV_DATA_GCS_URI`.
 
 ## Codebase Map
 

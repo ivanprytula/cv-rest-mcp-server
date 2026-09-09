@@ -21,6 +21,9 @@ export default function AdminShell() {
           <NavLink to="/" end className={navLinkClass}>
             Revisions
           </NavLink>
+          <NavLink to="/cv/import" className={navLinkClass}>
+            Import CV
+          </NavLink>
           <NavLink to="/roadmap" className={navLinkClass}>
             Roadmap
           </NavLink>

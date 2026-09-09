@@ -164,7 +164,7 @@ bootstrap_secrets() {
     log "STEP 3: Create Secret Manager secrets (empty containers)"
 
     log "  3a. Creating secrets"
-    for secret in cv-jwt-signing-key cv-refresh-token-pepper cv-first-admin-password cv-db-password cv-database-url cv-migration-database-url; do
+    for secret in cv-jwt-signing-key cv-refresh-token-pepper cv-first-admin-password cv-db-password cv-database-url cv-migration-database-url cv-anthropic-api-key; do
         if gcloud secrets describe "$secret" --project "$GCP_PROJECT" >/dev/null 2>&1; then
             echo "    $secret exists, skipping create"
         else
@@ -192,6 +192,11 @@ bootstrap_secrets() {
 
     gcloud secrets versions add cv-db-password \\
       --project $GCP_PROJECT --data-file=-
+
+    gcloud secrets versions add cv-anthropic-api-key \\
+      --project $GCP_PROJECT --data-file=-
+  (optional — leave the secret with no version if CV-intake extraction is
+   not enabled yet; api-core boots fine either way)
 
   cv-database-url and cv-migration-database-url are NOT filled in here —
   they're composed from cv-db-password / POSTGRES_PASSWORD + the Cloud SQL

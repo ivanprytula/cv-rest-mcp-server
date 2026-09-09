@@ -594,6 +594,22 @@ async def test_api_v1_options_preflight_not_gated(auth_client):
     assert resp.status_code != 401
 
 
+async def test_jwt_denial_carries_a_cors_header(auth_client):
+    # Regression: JWTAuthMiddleware._deny sends its response directly via
+    # `send`, bypassing CORSMiddleware entirely (registered inside JWTAuth in
+    # the stack). Without its own CORS header, a cross-origin caller's
+    # fetch() sees an opaque network failure instead of a readable 401/403 —
+    # found live via the SPA's CV-save flow after a token expired: the
+    # browser reported "Failed to fetch," not a 401 the refresh-retry logic
+    # could act on.
+    resp = await auth_client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": "", "Origin": "https://app.example.com"},
+    )
+    assert resp.status_code == 401
+    assert resp.headers.get("access-control-allow-origin") == "*"
+
+
 # ---------------------------------------------------------------------------
 # routes: revisions list
 # ---------------------------------------------------------------------------

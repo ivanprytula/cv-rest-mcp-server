@@ -10,11 +10,20 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi import APIRouter, Depends, HTTPException, Path, Request
 
 from services.portfolio.constants import API_V1_PREFIX
 from services.portfolio.cv_data import validate_cv_payload
-from services.portfolio.dependencies import get_document_service, get_tenant_id
+from services.portfolio.cv_extraction import (
+    MAX_RESUME_TEXT_CHARS,
+    CVExtractionError,
+    CVExtractionService,
+)
+from services.portfolio.dependencies import (
+    get_cv_extraction_service,
+    get_document_service,
+    get_tenant_id,
+)
 from services.portfolio.documents.document_row import (
     DOCUMENT_KINDS,
     KIND_CV,
@@ -24,6 +33,10 @@ from services.portfolio.documents.document_row import (
 from services.portfolio.documents.document_service import (
     DocumentService,
     document_sources,
+)
+from services.portfolio.job_posting_input import (
+    PayloadTooLargeError,
+    parse_job_posting_input,
 )
 from services.portfolio.matching.baseline import BaselineError, validate_bank_payload
 from services.portfolio.settings import settings
@@ -36,6 +49,7 @@ router = APIRouter(prefix=f"{API_V1_PREFIX}/documents", tags=["documents"])
 
 get_document_service_dep = Depends(get_document_service)
 tenant_id_dep = Depends(get_tenant_id)
+get_cv_extraction_service_dep = Depends(get_cv_extraction_service)
 
 # Derived from DOCUMENT_KINDS, never duplicated: a hand-written pattern here
 # would silently reject a kind added to that tuple.
@@ -119,6 +133,61 @@ async def write_document(
             status_code=503, detail=f"Could not store the {kind} document"
         )
     return {"kind": kind, "version": version}
+
+
+_RAW_UPLOAD_REQUEST_BODY = {
+    "content": {
+        media_type: {"schema": {"type": "string", "format": "binary"}}
+        for media_type in (
+            "application/pdf",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "text/plain",
+            "text/markdown",
+            "application/json",
+        )
+    }
+}
+
+
+@router.post("/cv/extract", openapi_extra={"requestBody": _RAW_UPLOAD_REQUEST_BODY})
+async def extract_cv_draft(
+    request: Request,
+    extraction: CVExtractionService = get_cv_extraction_service_dep,
+) -> dict[str, Any]:
+    """Draft a CV document from an uploaded resume file.
+
+    Accepts the same formats as job-posting intake (JSON, PDF, DOCX, text,
+    Markdown). Returns the extracted draft for review — it is never written
+    to this tenant's document store here; the caller reviews/edits it and
+    then PUTs `/documents/cv` themselves to save it. Requires no tenant_id
+    of its own: `cv:manage` (checked by the middleware) is the whole gate,
+    since nothing is persisted by this route.
+    """
+    try:
+        parsed = parse_job_posting_input(
+            await request.body(), request.headers.get("content-type", "")
+        )
+    except PayloadTooLargeError as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from None
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    if not parsed.posting_text:
+        raise HTTPException(status_code=422, detail="Uploaded file has no text")
+    if len(parsed.posting_text) > MAX_RESUME_TEXT_CHARS:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Extracted text exceeds {MAX_RESUME_TEXT_CHARS:,} characters",
+        )
+
+    try:
+        draft = await extraction.extract(parsed.posting_text)
+    except CVExtractionError as exc:
+        # The raw message can carry upstream API internals (request/response
+        # detail from anthropic.APIError) — logged, never returned to the
+        # client, same as every other service-internal failure in this app.
+        logger.warning("CV extraction failed: %s", exc)
+        raise HTTPException(status_code=502, detail="CV extraction failed") from None
+    return draft
 
 
 @router.delete("/{kind}")
