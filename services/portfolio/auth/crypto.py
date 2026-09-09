@@ -48,8 +48,17 @@ def _jwt_secret() -> str:
     return key
 
 
-def sign_access_token(subject: str, scopes: list[str], *, role: str) -> str:
-    """Issue a short-lived HS256 access token for *subject* with *scopes* + *role*."""
+def sign_access_token(
+    subject: str, scopes: list[str], *, role: str, user_id: int | None = None
+) -> str:
+    """Issue a short-lived HS256 access token for *subject* with *scopes* + *role*.
+
+    `user_id` becomes the `uid` claim — the tenant a request owns. It is the
+    numeric key, not `sub` (a username, which the operator can change), so a
+    rename never reassigns someone's documents. Optional because tokens
+    minted before tenancy carry no `uid`; callers resolving a tenant must
+    handle its absence rather than assume it.
+    """
     import time
 
     now = int(time.time())
@@ -62,6 +71,8 @@ def sign_access_token(subject: str, scopes: list[str], *, role: str) -> str:
         "exp": now + settings.access_token_ttl_minutes * 60,
         "scope": " ".join(scopes),
     }
+    if user_id is not None:
+        payload["uid"] = user_id
     return jwt.encode(payload, _jwt_secret(), algorithm=_REQUIRED_SCHEME)
 
 

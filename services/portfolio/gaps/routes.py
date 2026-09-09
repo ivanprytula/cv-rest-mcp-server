@@ -15,6 +15,7 @@ from services.portfolio.dependencies import (
     get_document_service,
     get_gap_service,
     get_pdf_service,
+    get_tenant_id,
 )
 from services.portfolio.documents.document_row import KIND_CV
 from services.portfolio.documents.document_service import (
@@ -51,10 +52,11 @@ router = APIRouter(prefix=f"{API_V1_PREFIX}/gaps", tags=["gaps"])
 get_gap_service_dep = Depends(get_gap_service)
 get_pdf_service_dep = Depends(get_pdf_service)
 get_document_service_dep = Depends(get_document_service)
+tenant_id_dep = Depends(get_tenant_id)
 
 
 async def _analysis_inputs(
-    documents: DocumentService,
+    documents: DocumentService, tenant_id: int
 ) -> tuple[list[dict], list[dict], list[dict]]:
     """Route-layer wrapper: translates a loader failure into a 500.
 
@@ -63,7 +65,7 @@ async def _analysis_inputs(
     FastAPI's `HTTPException`.
     """
     try:
-        return await load_analysis_inputs(documents)
+        return await load_analysis_inputs(documents, tenant_id=tenant_id)
     except BaselineError as exc:
         logger.warning("Gap analysis inputs unavailable: %s", exc)
         raise HTTPException(
@@ -128,15 +130,18 @@ async def analyze_job_posting(
     gap_service: GapService = get_gap_service_dep,
     pdf_service: PdfService = get_pdf_service_dep,
     documents: DocumentService = get_document_service_dep,
+    tenant_id: int = tenant_id_dep,
 ) -> GapReportOut:
     """Analyse a stored posting and persist the gap report.
 
     Idempotent: re-analyzing at the same analyzer version overwrites the
     previous result rather than accumulating rows.
     """
-    bank, deferred, vocabulary = await _analysis_inputs(documents)
+    bank, deferred, vocabulary = await _analysis_inputs(documents, tenant_id)
     live_cv = await documents.read(
-        KIND_CV, fallback_path=document_sources(settings).get(KIND_CV)
+        KIND_CV,
+        tenant_id=tenant_id,
+        fallback_path=document_sources(settings).get(KIND_CV),
     )
     report = await gap_service.analyze_posting(
         posting_id,

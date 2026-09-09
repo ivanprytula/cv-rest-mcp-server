@@ -39,15 +39,16 @@ class DocumentService:
         self._repo = repo
 
     async def read(
-        self, kind: str, *, fallback_path: Path | None = None
+        self, kind: str, *, tenant_id: int, fallback_path: Path | None = None
     ) -> dict[str, Any] | None:
-        """Return a document: the DB row, else the file, else None.
+        """Return one tenant's document: the DB row, else the file, else None.
 
         A DB error is logged and treated as a miss — the file answer is
-        better than an exception.
+        better than an exception. The file fallback is tenant-agnostic: it
+        is the shipped seed data, served when a tenant has no row yet.
         """
         try:
-            row = await self._repo.get(kind)
+            row = await self._repo.get(kind, tenant_id=tenant_id)
         except Exception:
             logger.warning("Document %s unreadable from Postgres", kind, exc_info=True)
             row = None
@@ -66,16 +67,18 @@ class DocumentService:
             )
             return None
 
-    async def write(self, kind: str, payload: dict[str, Any]) -> int | None:
-        """Store a document, returning its new version (None on failure)."""
+    async def write(
+        self, kind: str, payload: dict[str, Any], *, tenant_id: int
+    ) -> int | None:
+        """Store a tenant's document, returning its new version (None on failure)."""
         try:
-            row = await self._repo.put(kind=kind, payload=payload)
+            row = await self._repo.put(kind=kind, payload=payload, tenant_id=tenant_id)
         except Exception:
             logger.warning("Failed to write document %s", kind, exc_info=True)
             return None
         return row.version
 
-    async def revert_to_file(self, kind: str) -> bool:
+    async def revert_to_file(self, kind: str, *, tenant_id: int) -> bool:
         """Drop the stored document so reads fall back to the shipped file.
 
         Named for the effect, not the mechanism: the document does not
@@ -83,21 +86,23 @@ class DocumentService:
         undo for a bad edit, without hand-restoring the previous payload.
         """
         try:
-            return await self._repo.delete(kind)
+            return await self._repo.delete(kind, tenant_id=tenant_id)
         except Exception:
             logger.warning("Failed to revert document %s", kind, exc_info=True)
             return False
 
-    async def versions(self) -> dict[str, int]:
-        """Current version per stored document kind."""
+    async def versions(self, *, tenant_id: int) -> dict[str, int]:
+        """Current version per stored document kind, for one tenant."""
         try:
-            rows = await self._repo.list_all()
+            rows = await self._repo.list_all(tenant_id=tenant_id)
         except Exception:
             logger.warning("Failed to list documents", exc_info=True)
             return {}
         return {row.kind: row.version for row in rows}
 
-    async def seed_from_files(self, sources: dict[str, Path]) -> None:
+    async def seed_from_files(
+        self, sources: dict[str, Path], *, tenant_id: int
+    ) -> None:
         """Import each file into the DB if that document has no row yet.
 
         Idempotent: an existing row is never overwritten, so a redeploy does
@@ -106,7 +111,7 @@ class DocumentService:
         """
         for kind, path in sources.items():
             try:
-                if await self._repo.get(kind) is not None:
+                if await self._repo.get(kind, tenant_id=tenant_id) is not None:
                     continue
                 payload = json.loads(path.read_text(encoding="utf-8"))
             except OSError, json.JSONDecodeError:
@@ -117,7 +122,7 @@ class DocumentService:
                     "Could not check document %s for seeding", kind, exc_info=True
                 )
                 continue
-            if await self.write(kind, payload) is not None:
+            if await self.write(kind, payload, tenant_id=tenant_id) is not None:
                 logger.info("Seeded document %s from %s", kind, path)
 
 

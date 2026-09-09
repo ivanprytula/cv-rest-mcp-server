@@ -105,6 +105,12 @@ test-ui:
     uv run playwright install chromium
     uv run pytest services/portfolio/tests/ -m e2e --no-cov
 
+# Print the access-control matrix (who may call which route), derived from
+# the middleware itself rather than hand-maintained. Pipe to a file or paste
+# into a review when the auth rules change: `just access-matrix`.
+access-matrix:
+    @uv run python -c "from services.portfolio.tests.test_access_matrix import render_matrix; print(render_matrix())"
+
 # Firestore adapter tests against Google's emulator; excluded from `just
 # test` by default (needs Docker, pulls a ~1GB image). The rest of the
 # suite uses the in-memory fake, so run this after touching

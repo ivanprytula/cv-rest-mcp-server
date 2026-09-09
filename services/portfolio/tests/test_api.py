@@ -69,6 +69,7 @@ async def test_openapi_declares_bearer_auth_on_every_protected_api_v1_route(clie
                 continue
             if path in (
                 "/api/v1/auth/token",
+                "/api/v1/auth/register",
                 "/api/v1/auth/refresh",
                 "/api/v1/auth/logout",
             ):

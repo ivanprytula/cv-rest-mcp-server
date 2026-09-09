@@ -31,6 +31,7 @@ from services.portfolio.auth.refresh_token_service import RefreshTokenService
 from services.portfolio.auth.user_repository import SqlAlchemyUserRepository
 from services.portfolio.auth.user_service import (
     UserService,
+    resolve_operator_tenant_id,
     seed_first_admin_from_settings,
 )
 from services.portfolio.constants import (
@@ -358,7 +359,15 @@ async def lifespan(app):
     # the JSON files, so local dev works with no database at all.
     document_service = DocumentService(SqlAlchemyDocumentRepository(session_factory))
     app.state.document_service = document_service
-    await document_service.seed_from_files(document_sources(settings))
+    # Seeds into the operator's tenant, so the shipped JSON becomes their
+    # documents rather than belonging to nobody. Skipped when no operator
+    # exists yet (no FIRST_ADMIN_PASSWORD configured): the files still serve
+    # every read through the fallback, and the next boot seeds them.
+    operator_tenant_id = await resolve_operator_tenant_id(user_service)
+    if operator_tenant_id is not None:
+        await document_service.seed_from_files(
+            document_sources(settings), tenant_id=operator_tenant_id
+        )
 
     async with mcp_app.lifespan(app):
         yield

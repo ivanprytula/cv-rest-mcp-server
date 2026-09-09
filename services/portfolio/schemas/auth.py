@@ -1,6 +1,6 @@
 """Pydantic schemas for the auth endpoints."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr, Field
 
 
 class LoginRequest(BaseModel):
@@ -12,6 +12,31 @@ class LoginRequest(BaseModel):
 
     username: str
     password: str
+
+
+class RegisterRequest(BaseModel):
+    """Self-service signup body.
+
+    Bounds are validation, not policy: an unbounded username or password is
+    a free write-amplification and bcrypt-CPU lever for an unauthenticated
+    caller. bcrypt itself truncates beyond 72 bytes.
+    """
+
+    username: str = Field(min_length=3, max_length=64, pattern=r"^[A-Za-z0-9._-]+$")
+    email: EmailStr
+    password: str = Field(min_length=12, max_length=128)
+
+
+class RegisteredUser(BaseModel):
+    """What signup returns: identity only, never a token.
+
+    Registering does not sign you in — the client posts to /auth/token
+    afterwards, so there is exactly one path that mints credentials.
+    """
+
+    id: int
+    username: str
+    email: EmailStr
 
 
 class TokenPair(BaseModel):

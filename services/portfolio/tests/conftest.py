@@ -475,3 +475,15 @@ async def auth_client(user_service, override_pdf_service):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
+
+
+@pytest.fixture
+async def operator_tenant_id(user_service) -> int:
+    """The seeded operator's id — the tenant its documents belong to.
+
+    Resolved rather than hardcoded: ids come from a sequence on a throwaway
+    database, so a literal would pass or fail depending on test order.
+    """
+    user = await user_service.get_by_username("operator")
+    assert user is not None, "operator not seeded"
+    return user.id

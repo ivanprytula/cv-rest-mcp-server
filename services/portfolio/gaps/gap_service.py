@@ -681,6 +681,8 @@ def _report_from_result(result: dict[str, Any]) -> GapReport:
 
 async def load_analysis_inputs(
     documents: DocumentService,
+    *,
+    tenant_id: int,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     """Load the bank, deferred pool and vocabulary, or fail loudly.
 
@@ -699,10 +701,12 @@ async def load_analysis_inputs(
     """
     sources = document_sources(settings)
     bank_payload = await documents.read(
-        KIND_SKILL_BANK, fallback_path=sources[KIND_SKILL_BANK]
+        KIND_SKILL_BANK, tenant_id=tenant_id, fallback_path=sources[KIND_SKILL_BANK]
     )
     vocab_payload = await documents.read(
-        KIND_JD_VOCABULARY, fallback_path=sources[KIND_JD_VOCABULARY]
+        KIND_JD_VOCABULARY,
+        tenant_id=tenant_id,
+        fallback_path=sources[KIND_JD_VOCABULARY],
     )
     if bank_payload is None or vocab_payload is None:
         raise BaselineError("skill bank or JD vocabulary is unavailable")

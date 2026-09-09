@@ -11,7 +11,12 @@ from __future__ import annotations
 
 import bcrypt
 
-from services.portfolio.auth.user import ROLE_ADMIN, PasswordHasher, User
+from services.portfolio.auth.user import (
+    ROLE_ADMIN,
+    ROLE_USER,
+    PasswordHasher,
+    User,
+)
 from services.portfolio.auth.user_repository import UserRepository
 from services.portfolio.auth.user_row import UserRow
 from services.portfolio.settings import settings
@@ -57,6 +62,34 @@ class UserService:
             return None
         return row.to_domain()
 
+    async def register(
+        self, *, username: str, email: str, password: str
+    ) -> User | None:
+        """Create a self-service account, or None if the username is taken.
+
+        Always `ROLE_USER`: registering can never mint an admin. The new
+        user owns their own tenant — their id — and `cv:manage` lets them
+        edit only their own documents.
+
+        None means "username taken", the one failure a caller must render
+        differently; a repository error still raises, since a failed write
+        that reports success would leave the user unable to log in.
+        """
+        if not password:
+            return None
+        if await self._repo.get_by_username(username) is not None:
+            return None
+        created = await self._repo.create(
+            user=UserRow(
+                username=username,
+                email=email,
+                hashed_password=self._hasher.hash(password),
+                is_active=True,
+                role=ROLE_USER,
+            )
+        )
+        return created.to_domain()
+
     async def seed_first_admin(
         self, *, username: str, email: str, password: str, role: str = ROLE_ADMIN
     ) -> User | None:
@@ -80,6 +113,18 @@ class UserService:
             )
         )
         return created.to_domain()
+
+
+async def resolve_operator_tenant_id(service: UserService) -> int | None:
+    """The tenant that owns install-wide work: the configured first admin.
+
+    Gap analysis and the ATS refresh run for the installation, not for a
+    caller — the scheduler has no request and no token — so they need a
+    tenant chosen by configuration rather than by a JWT. Until gap rows are
+    themselves tenant-scoped (a later phase), that is the operator's.
+    """
+    user = await service.get_by_username(settings.first_admin_username)
+    return user.id if user else None
 
 
 async def seed_first_admin_from_settings(service: UserService) -> None:

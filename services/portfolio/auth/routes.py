@@ -19,7 +19,7 @@ Only the refresh endpoint accepts credentials cross-origin via
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 
 from services.portfolio.auth.crypto import (
@@ -36,7 +36,13 @@ from services.portfolio.dependencies import (
     get_refresh_token_service,
     get_user_service,
 )
-from services.portfolio.schemas.auth import LoginRequest, MeResponse, TokenPair
+from services.portfolio.schemas.auth import (
+    LoginRequest,
+    MeResponse,
+    RegisteredUser,
+    RegisterRequest,
+    TokenPair,
+)
 from services.portfolio.settings import settings
 
 
@@ -104,6 +110,33 @@ def _get_auth_claims(request: Request) -> dict:
 
 
 @auth_router.post(
+    "/register",
+    response_model=RegisteredUser,
+    status_code=status.HTTP_201_CREATED,
+    responses={409: {"description": "Username already taken"}},
+)
+async def register(
+    body: RegisterRequest,
+    user_service: UserService = get_user_service_dep,
+) -> RegisteredUser:
+    """Create an account, which owns its own tenant.
+
+    Always a plain user: registering cannot mint an admin. No token is
+    returned — the client posts to `/auth/token` next, keeping one path
+    that issues credentials.
+    """
+    user = await user_service.register(
+        username=body.username, email=body.email, password=body.password
+    )
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="That username is taken",
+        )
+    return RegisteredUser(id=user.id, username=user.username, email=user.email)
+
+
+@auth_router.post(
     "/token",
     response_model=TokenPair,
     status_code=status.HTTP_200_OK,
@@ -130,7 +163,9 @@ async def token(
         # Generic message; never reveal whether credentials or auth are valid.
         return JSONResponse({"detail": "Invalid credentials"}, status_code=401)
 
-    access_token = sign_access_token(user.username, user.scopes, role=user.role)
+    access_token = sign_access_token(
+        user.username, user.scopes, role=user.role, user_id=user.id
+    )
     refresh_token = generate_refresh_token()
     refresh_hash = hash_refresh_token(refresh_token)
     await refresh_tokens.create_family(refresh_hash, user.username)
@@ -188,7 +223,9 @@ async def refresh(
             status_code=401,
         )
 
-    access_token = sign_access_token(user.username, user.scopes, role=user.role)
+    access_token = sign_access_token(
+        user.username, user.scopes, role=user.role, user_id=user.id
+    )
     response = JSONResponse(
         TokenPair(
             access_token=access_token,
