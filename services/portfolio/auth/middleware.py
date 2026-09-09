@@ -71,9 +71,10 @@ _READ_SCOPED_PATH = "/cv/html"
 _READ_SCOPED_API_PATHS = {f"{API_V1_PREFIX}/cv", f"{API_V1_PREFIX}/cv/pdf"}
 
 # Read-scoped GET *subtrees*. Exact-path matching cannot express a route with
-# a path parameter (`/gaps/postings/{id}`), so these are prefix-matched.
+# a path parameter (`/postings/{id}`), so these are prefix-matched.
 _READ_SCOPED_API_PREFIXES = (
     f"{API_V1_PREFIX}/gaps",
+    f"{API_V1_PREFIX}/postings",
     f"{API_V1_PREFIX}/documents",
     f"{API_V1_PREFIX}/tracked-boards",
 )
@@ -82,15 +83,15 @@ _READ_SCOPED_API_PREFIXES = (
 # live here; a set so adding the next one is data, not a code change.
 _ADMIN_ROUTES = {
     (_TAILOR_MUTATION_METHOD, _TAILOR_MUTATION_PATH),
-    ("POST", f"{API_V1_PREFIX}/gaps"),
+    ("POST", f"{API_V1_PREFIX}/postings"),
     ("POST", f"{API_V1_PREFIX}/tracked-boards"),
 }
 
 # Admin-gated (method, prefix) subtrees, for mutations whose route carries a
-# path parameter (`/gaps/postings/{id}/analyze`, `/documents/{kind}`) and so
+# path parameter (`/postings/{id}/analyze`, `/documents/{kind}`) and so
 # cannot be matched exactly.
 _ADMIN_PREFIXES = (
-    ("POST", f"{API_V1_PREFIX}/gaps/postings"),
+    ("POST", f"{API_V1_PREFIX}/postings"),
     ("PUT", f"{API_V1_PREFIX}/documents"),
     ("DELETE", f"{API_V1_PREFIX}/documents"),
     ("PATCH", f"{API_V1_PREFIX}/tracked-boards"),

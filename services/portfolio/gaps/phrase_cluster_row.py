@@ -42,7 +42,7 @@ class PhraseClusterRow(Base):
 
     Re-clustering a posting (new threshold, more phrases) replaces its prior
     row rather than accumulating runs — nothing here is aggregated across
-    postings the way `jd_analyses` feeds the roadmap, so there is no
+    postings the way `posting_analyses` feeds the roadmap, so there is no
     versioning concern to preserve history for.
     """
 

@@ -39,7 +39,7 @@ class TrackedBoardRepository(Protocol):
 class SqlAlchemyTrackedBoardRepository:
     """Async SQLAlchemy tracked-board repository (Postgres, `asyncpg`).
 
-    Takes the shared `async_sessionmaker` built once in `main.py`'s lifespan,
+    Takes the shared `async_sessionmaker` built once in the app's lifespan,
     not its own engine — same rationale as `SqlAlchemyGapRepository`.
     """
 

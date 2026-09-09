@@ -39,13 +39,23 @@ uv run <command>
 - Follow EAFP: handle the exception rather than pre-checking the condition
 - Validate request bodies with Pydantic models
 - Prefer idiomatic Python: comprehensions, generators, decorators, context managers, memory efficient data structures.
-- **Avoid hardcoding file paths or line numbers in comments/docstrings.** A
-  path or line reference goes stale the moment the referenced code moves —
-  this repo has already had a rename (`app/` → `services/portfolio/`) break
-  several such references across docs and docstrings. Prefer naming the
-  function/class/fixture instead (e.g. "see the `auth_settings` fixture" or
-  "see the `app.add_middleware(...)` block", not "see conftest.py:240" or
-  "main.py:166-188"). If a path must be named, don't pin a line range.
+- **Avoid hardcoding file paths or line numbers in comments, docstrings, and
+  `.md` documentation.** A path or line reference goes stale the moment the
+  referenced code moves — this repo has already had a rename (`app/` →
+  `services/portfolio/`) break several such references across docs and
+  docstrings. Prefer naming the function/class/fixture instead (e.g. "see the
+  `auth_settings` fixture" or "see the `app.add_middleware(...)` block", not
+  "see conftest.py:240" or "main.py:166-188"). If a path must be named, don't
+  pin a line range. Applies to `AGENTS.md`, `CLAUDE.md`, `README.md`, `docs/`,
+  and plan files too.
+- **Don't name a module or package inside its own docstring, or point at a
+  sibling module by filename.** A module docstring saying "Job-posting
+  document store (`job_posting_document_store.py`)" or "Mirrors
+  `revisions/revision.py`'s layout" is a rename waiting to lie — the
+  `jd_*` → `job_posting_*` rename left exactly these stale. The file already
+  states its own name; describe what it does instead, and refer to other code
+  by the class/function it exports (e.g. "the same shape as `Revision`", not
+  "same as `revisions/revision.py`").
 
 ## Code Validation Rules (Beyond Linting & Tests)
 

@@ -1,0 +1,63 @@
+name: Firestore Emulator Tests
+
+# Manual only: `gh workflow run firestore-tests.yml`.
+#
+# Not on push/PR by design — the Firestore surface is one small adapter
+# (`FirestoreJobPostingDocumentStore`: save/get) that rarely changes, and
+# these tests need Google's emulator image (~0.45 GB compressed to pull,
+# 1.13 GB on disk; comfortable on a runner's ~14 GB, but the dominant cost
+# of the job). Paying that per PR buys nothing when the rest of the suite
+# already covers the Protocol through the in-memory fake. Run it after
+# touching the adapter, the document-store Protocol, or the image pin.
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  firestore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: "3.14"
+      - name: Install dependencies
+        run: uv sync --group dev
+      # The image tag lives in the test file; read it here so the pin has
+      # exactly one source of truth and the cache key tracks it.
+      - name: Resolve the emulator image
+        id: image
+        run: |
+          IMAGE=$(grep -oP '_EMULATOR_IMAGE = "\K[^"]+' \
+            services/portfolio/tests/test_firestore_store.py)
+          echo "ref=$IMAGE" >> "$GITHUB_OUTPUT"
+          echo "key=${IMAGE//[^A-Za-z0-9._-]/-}" >> "$GITHUB_OUTPUT"
+      - name: Restore the emulator image
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/emulator-image.tar
+          key: firestore-emulator-${{ steps.image.outputs.key }}
+      # Pulled explicitly rather than lazily inside the test: a cold pull is
+      # slow enough to look like a hang, and failing here names the real
+      # cause (bad tag, registry outage) instead of surfacing as a timeout.
+      - name: Pull the emulator image
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          docker pull "${{ steps.image.outputs.ref }}"
+          mkdir -p ~/.cache
+          docker save "${{ steps.image.outputs.ref }}" -o ~/.cache/emulator-image.tar
+      - name: Load the cached emulator image
+        if: steps.cache.outputs.cache-hit == 'true'
+        run: docker load -i ~/.cache/emulator-image.tar
+      # Mirrors `just test-firestore` (no `just` on the runner, matching the
+      # other workflows, which all call uv directly).
+      - name: Run Firestore adapter tests
+        run: >
+          uv run pytest services/portfolio/tests/test_firestore_store.py
+          -m firestore --no-cov

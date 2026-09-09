@@ -22,7 +22,7 @@ All of this requires an operator JWT (log in via the SPA, or send
 **1. Store a posting**
 
 ```bash
-curl -X POST "$API/api/v1/gaps?title=Senior%20Backend%20Engineer&company=Acme" \
+curl -X POST "$API/api/v1/postings?title=Senior%20Backend%20Engineer&company=Acme" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: text/plain" \
   --data-binary @posting.txt
@@ -37,7 +37,7 @@ Response: `{"id": 42, "content_hash": "...", "duplicate": false}`.
 **2. Analyze it**
 
 ```bash
-curl -X POST "$API/api/v1/gaps/postings/42/analyze" \
+curl -X POST "$API/api/v1/postings/42/analyze" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -49,7 +49,7 @@ posting overwrites the previous result rather than piling up duplicates.
 **3. Read it back later**
 
 ```bash
-curl "$API/api/v1/gaps/postings/42" -H "Authorization: Bearer $TOKEN"
+curl "$API/api/v1/postings/42" -H "Authorization: Bearer $TOKEN"
 ```
 
 Same shape as step 2, minus `unrecognized` — that field is only computed
@@ -61,7 +61,7 @@ live at analyze time, not stored.
 curl "$API/api/v1/gaps/roadmap" -H "Authorization: Bearer $TOKEN"
 ```
 
-Every gap term across every analyzed posting, ranked by `jd_count`
+Every gap term across every analyzed posting, ranked by `posting_count`
 descending. The first row is the answer: *"Kubernetes — wanted by 12 of 20
 postings — learn this first."* Everything past the top few rows is
 supporting detail.

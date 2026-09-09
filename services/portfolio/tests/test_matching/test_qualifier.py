@@ -1,6 +1,9 @@
 """Tests for qualifier-aware mention extraction (app.matching.parser)."""
 
-from services.portfolio.matching.parser import extract_mentions, extract_skills_from_jd
+from services.portfolio.matching.parser import (
+    extract_mentions,
+    extract_skills_from_posting,
+)
 from services.portfolio.matching.taxonomy import build_skill_index, normalize_skill
 
 
@@ -131,9 +134,9 @@ class TestExtractMentions:
         assert mentions[0].raw.lower() == "solid experience with python"
         assert "solid" in mentions[0].raw.lower()
 
-    def test_extract_skills_from_jd_still_finds_all(self):
+    def test_extract_skills_from_posting_still_finds_all(self):
         jd = "Solid experience with Python and FastAPI. Familiarity with Redis."
-        skills = extract_skills_from_jd(jd, INDEX)
+        skills = extract_skills_from_posting(jd, INDEX)
         assert "python" in skills
         assert "fastapi" in skills
         assert "redis" in skills
@@ -166,5 +169,5 @@ class TestUkUsSpellings:
 
     def test_uk_spelling_surfaces_in_plain_skill_scan(self):
         index = self._index("Data visualisation")
-        skills = extract_skills_from_jd("Required: data visualization", index)
+        skills = extract_skills_from_posting("Required: data visualization", index)
         assert "data visualization" in skills

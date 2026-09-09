@@ -24,10 +24,10 @@ from services.portfolio.gaps.job_posting import JobPosting
 class JobPostingRow(Base):
     """The relational skeleton of one job description.
 
-    Deliberately holds no JD text or per-portal payload — those live in
-    Firestore (`jd_document_store.py`), keyed by `content_hash`. This row is
-    everything Postgres needs to relate a posting to its analyses, dedup it,
-    and answer "is this board still open": ids, hashes, timestamps.
+    Deliberately holds no posting text or per-portal payload — those live in
+    Firestore, keyed by `content_hash`. This row is everything Postgres needs
+    to relate a posting to its analyses, dedup it, and answer "is this board
+    still open": ids, hashes, timestamps.
 
     ``first_seen_at``/``last_seen_at`` are the whole "market shift over
     time" model: "new this week" is a filter on the former, "still open" is
@@ -68,21 +68,16 @@ class JobPostingRow(Base):
         DateTime(timezone=True), nullable=True
     )
 
-    def to_domain(self, *, jd_text: str) -> JobPosting:
-        """Build the domain model, given the raw text fetched from Firestore.
-
-        `jd_text` is no longer a Postgres column (see `jd_document_store.py`)
-        — the caller (`GapService.get_posting`) is responsible for fetching
-        it by `content_hash` and passing it in here, so every consumer of
-        `JobPosting.jd_text` keeps seeing a plain required `str`.
-        """
+    def to_domain(self, *, posting_text: str) -> JobPosting:
+        """Build the domain model. `posting_text` lives in Firestore, so the
+        caller (`GapService.get_posting`) fetches it and passes it in."""
         return JobPosting(
             id=self.id,
             source=self.source,
             company=self.company,
             title=self.title,
             url=self.url,
-            jd_text=jd_text,
+            posting_text=posting_text,
             content_hash=self.content_hash,
             first_seen_at=self.first_seen_at,
             last_seen_at=self.last_seen_at,
@@ -90,7 +85,7 @@ class JobPostingRow(Base):
         )
 
 
-class JdAnalysisRow(Base):
+class PostingAnalysisRow(Base):
     """A gap analysis of one posting at one analyzer version.
 
     ``analyzer_version`` earns its place: the vocabulary and extractor will
@@ -100,10 +95,10 @@ class JdAnalysisRow(Base):
     upsert on (posting_id, analyzer_version), so it is idempotent.
     """
 
-    __tablename__ = "jd_analyses"
+    __tablename__ = "posting_analyses"
     __table_args__ = (
         UniqueConstraint(
-            "posting_id", "analyzer_version", name="uq_jd_analyses_posting_version"
+            "posting_id", "analyzer_version", name="uq_posting_analyses_posting_version"
         ),
     )
 

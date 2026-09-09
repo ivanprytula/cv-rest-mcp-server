@@ -14,7 +14,7 @@ class TrustedProxySchemeMiddleware:
     the app sees the truth.
 
     It only touches the scheme, never `scope["client"]` (the caller's IP) —
-    that's a separate trust decision handled elsewhere (rate_limiter.py) and
+    that's a separate trust decision handled by the rate limiter and
     left alone on purpose. Only runs when TRUST_PROXY is on, i.e. only in
     real deployments, never in local dev.
     """

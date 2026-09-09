@@ -361,7 +361,7 @@ async def user_service(auth_settings, _fresh_postgres_url, monkeypatch):
     Postgres database.
 
     Builds one shared engine/session-factory against a throwaway database on
-    the shared testcontainers Postgres instance (mirrors main.py's lifespan —
+    the shared testcontainers Postgres instance (mirrors the app lifespan —
     one engine for every repository, not one per repository), migrates it to
     head via the same Alembic path the app lifespan uses, seeds the first
     admin (username=`operator`, password=`correct-password`, role=`admin`),
@@ -395,7 +395,9 @@ async def user_service(auth_settings, _fresh_postgres_url, monkeypatch):
     from services.portfolio.documents.document_service import DocumentService
     from services.portfolio.gaps.gap_repository import SqlAlchemyGapRepository
     from services.portfolio.gaps.gap_service import GapService
-    from services.portfolio.gaps.jd_document_store import InMemoryJdDocumentStore
+    from services.portfolio.gaps.job_posting_document_store import (
+        InMemoryJobPostingDocumentStore,
+    )
     from services.portfolio.gaps.tracked_board_repository import (
         SqlAlchemyTrackedBoardRepository,
     )
@@ -425,7 +427,7 @@ async def user_service(auth_settings, _fresh_postgres_url, monkeypatch):
         SqlAlchemyRefreshTokenRepository(session_factory)
     )
     gap_service = GapService(
-        SqlAlchemyGapRepository(session_factory), InMemoryJdDocumentStore()
+        SqlAlchemyGapRepository(session_factory), InMemoryJobPostingDocumentStore()
     )
     document_service = DocumentService(SqlAlchemyDocumentRepository(session_factory))
     tracked_board_service = TrackedBoardService(

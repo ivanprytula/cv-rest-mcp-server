@@ -176,7 +176,7 @@ Content-Type works). Format is chosen by:
 
 | Content-Type                          | Format                            |
 | ------------------------------------- | --------------------------------- |
-| `application/json`                    | `{"jd_text": "...", "title": ""}` |
+| `application/json`                    | `{"posting_text": "...", "title": ""}` |
 | `application/pdf`                     | PDF bytes (`pypdf`)               |
 | `...wordprocessingml.document` (DOCX) | ZIP bytes (`python-docx`)         |
 | `text/plain`, `.txt`                  | JD raw text                       |
@@ -205,7 +205,7 @@ payload wins for the JSON format).
 - `403 Forbidden` — token is valid but does not carry the required `admin` role.
 - `413 Payload Too Large` — body exceeds the 10 MB cap.
 - `422 Unprocessable Entity` — malformed JSON, corrupt/undecodable PDF/DOCX, or
-  empty `jd_text`.
+  empty `posting_text`.
 - `429 Too Many Requests` — rate limit exceeded (see table above).
 - `500 Internal Server Error` — unexpected tailoring failure (sanitized; no
   internals leaked), or the skill bank is missing/malformed (a broken bank aborts
@@ -227,7 +227,7 @@ curl -s -X POST "https://<origin>/api/v1/cv/tailor" \
 curl -s -X POST "https://<origin>/api/v1/cv/tailor" \
   -H "authorization: Bearer $TOKEN" \
   -H "content-type: application/json" \
-  -d '{"jd_text": "Required: Python, FastAPI", "title": ""}'
+  -d '{"posting_text": "Required: Python, FastAPI", "title": ""}'
 
 # PDF / DOCX
 curl -s -X POST "https://<origin>/api/v1/cv/tailor" \

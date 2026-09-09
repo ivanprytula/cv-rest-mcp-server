@@ -18,7 +18,7 @@ import re
 
 import numpy as np
 
-from services.portfolio.matching.normalize import normalize_jd_text
+from services.portfolio.matching.normalize import normalize_posting_text
 
 
 _SEGMENT_BREAK = re.compile(r"[\n]+")
@@ -42,15 +42,15 @@ _MIN_WORDS = 5
 _MAX_WORDS = 40
 
 
-def segment_phrases(jd_text: str) -> list[str]:
+def segment_phrases(posting_text: str) -> list[str]:
     """Split a JD into responsibility-sentence candidates.
 
     Splits on newlines (bullets are already stripped by
-    :func:`normalize_jd_text`), keeps 5-40 word segments, and drops segments
+    :func:`normalize_posting_text`), keeps 5-40 word segments, and drops segments
     with no verb-ish token — filtering section headers ("Requirements") and
     fragments ("3+ years") that would otherwise pollute the embedding set.
     """
-    normalized = normalize_jd_text(jd_text)
+    normalized = normalize_posting_text(posting_text)
     segments = []
     for raw_segment in _SEGMENT_BREAK.split(normalized):
         segment = raw_segment.strip().strip(".,;:")

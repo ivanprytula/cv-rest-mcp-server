@@ -42,8 +42,8 @@ LIVE_CV = {
 }
 
 
-def _report(jd_text):
-    return detect_gaps(jd_text, BANK, DEFERRED, VOCAB, LIVE_CV)
+def _report(posting_text):
+    return detect_gaps(posting_text, BANK, DEFERRED, VOCAB, LIVE_CV)
 
 
 class TestTierAssignment:

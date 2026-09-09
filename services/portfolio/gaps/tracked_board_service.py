@@ -1,6 +1,6 @@
 """Tracked-board application service.
 
-Constructed once in `main.py`'s lifespan (`app.state.tracked_board_service`),
+Constructed once in the app's lifespan (`app.state.tracked_board_service`),
 reached by routes via `dependencies.get_tracked_board_service`.
 
 Degrade-don't-crash (mirrors `GapService`/`DocumentService`): a Postgres

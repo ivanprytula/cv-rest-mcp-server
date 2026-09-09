@@ -105,6 +105,13 @@ test-ui:
     uv run playwright install chromium
     uv run pytest services/portfolio/tests/ -m e2e --no-cov
 
+# Firestore adapter tests against Google's emulator; excluded from `just
+# test` by default (needs Docker, pulls a ~1GB image). The rest of the
+# suite uses the in-memory fake, so run this after touching
+# FirestoreJobPostingDocumentStore or the document-store Protocol.
+test-firestore:
+    uv run pytest services/portfolio/tests/test_firestore_store.py -m firestore --no-cov
+
 # Browser e2e tests for the games service (services/games/). Run separately
 # from test-ui — see the comment above for why.
 test-ui-games:

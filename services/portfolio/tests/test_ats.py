@@ -47,8 +47,8 @@ class TestFetchGreenhouse:
         (posting,) = result.postings
         assert posting.external_id == "12345"
         assert posting.title == "Backend Engineer"
-        assert "Kubernetes" in posting.jd_text
-        assert "<p>" not in posting.jd_text
+        assert "Kubernetes" in posting.posting_text
+        assert "<p>" not in posting.posting_text
         assert posting.url.endswith("/12345")
         assert result.etag == '"gh-etag"'
 
@@ -86,8 +86,8 @@ class TestFetchLever:
         assert result.postings is not None
         (posting,) = result.postings
         assert posting.external_id == "abc-123"
-        assert "Postgres" in posting.jd_text
-        assert "Terraform" in posting.jd_text
+        assert "Postgres" in posting.posting_text
+        assert "Terraform" in posting.posting_text
 
     async def test_http_error_raises_fetch_error(self):
         client = _client_returning([], status_code=404)
@@ -118,7 +118,7 @@ class TestFetchAshby:
         assert result.postings is not None
         (posting,) = result.postings
         assert posting.external_id == "xyz-789"
-        assert "Kafka" in posting.jd_text
+        assert "Kafka" in posting.posting_text
 
     async def test_falls_back_to_html_description(self):
         client = _client_returning(
@@ -136,8 +136,8 @@ class TestFetchAshby:
         result = await fetch_ashby("acme", client=client)
         assert result.postings is not None
         (posting,) = result.postings
-        assert "Redis" in posting.jd_text
-        assert "<p>" not in posting.jd_text
+        assert "Redis" in posting.posting_text
+        assert "<p>" not in posting.posting_text
 
     async def test_304_returns_none_postings(self):
         client = _client_returning_304()

@@ -4,7 +4,7 @@ export interface RoadmapItem {
   term: string
   tier: string
   group_id: string
-  jd_count: number
+  posting_count: number
   strongest_level_asked: string | null
   note: string | null
 }
@@ -68,12 +68,12 @@ export async function fetchRoadmap(): Promise<RoadmapItem[]> {
 }
 
 export async function listPostings(): Promise<PostingSummary[]> {
-  const { postings } = await apiJson<PostingsResponse>('/api/v1/gaps/postings')
+  const { postings } = await apiJson<PostingsResponse>('/api/v1/postings')
   return postings
 }
 
 export async function fetchGapReport(postingId: number): Promise<GapReport> {
-  return apiJson<GapReport>(`/api/v1/gaps/postings/${postingId}`)
+  return apiJson<GapReport>(`/api/v1/postings/${postingId}`)
 }
 
 // Stores a pasted JD as plain text (same parser as /api/v1/cv/tailor — PDF,
@@ -88,7 +88,7 @@ export async function storePosting(
   if (options.title) params.set('title', options.title)
   if (options.company) params.set('company', options.company)
   const query = params.toString()
-  const res = await apiFetch(`/api/v1/gaps${query ? `?${query}` : ''}`, {
+  const res = await apiFetch(`/api/v1/postings${query ? `?${query}` : ''}`, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain' },
     body: text,
@@ -98,21 +98,21 @@ export async function storePosting(
 }
 
 export async function analyzePosting(postingId: number): Promise<GapReport> {
-  return apiJson<GapReport>(`/api/v1/gaps/postings/${postingId}/analyze`, {
+  return apiJson<GapReport>(`/api/v1/postings/${postingId}/analyze`, {
     method: 'POST',
   })
 }
 
 export async function fetchClusters(postingId: number): Promise<PhraseCluster[]> {
   const { clusters } = await apiJson<PhraseClusters>(
-    `/api/v1/gaps/postings/${postingId}/clusters`,
+    `/api/v1/postings/${postingId}/clusters`,
   )
   return clusters
 }
 
 export async function clusterPosting(postingId: number): Promise<PhraseCluster[]> {
   const { clusters } = await apiJson<PhraseClusters>(
-    `/api/v1/gaps/postings/${postingId}/cluster`,
+    `/api/v1/postings/${postingId}/cluster`,
     { method: 'POST' },
   )
   return clusters

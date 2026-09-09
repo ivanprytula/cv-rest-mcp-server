@@ -1,6 +1,6 @@
 """User application service (ADR-022, ADR-023).
 
-Construction happens once in `main.py`'s lifespan (`app.state.user_service`),
+Construction happens once in the app's lifespan (`app.state.user_service`),
 not as a module-level singleton — routes reach it via FastAPI's `Depends`
 (`services.portfolio.dependencies.get_user_service`), matching the existing
 `PdfService`/`get_pdf_service` pattern. Tests override the same dependency

@@ -47,14 +47,14 @@ def company_slug(name: str) -> str:
     return slug.strip("_")
 
 
-def extract_company(jd_text: str) -> str:
+def extract_company(posting_text: str) -> str:
     """Best-effort extraction of the company name from a JD.
 
     Looks for common patterns: "at Acme Corp", "Company: Acme",
     "Acme is hiring", etc.  Returns empty string if nothing confidence-
     inspiring is found.
     """
-    if not jd_text:
+    if not posting_text:
         return ""
 
     # Pattern: "at <Company>" after "work at" / "join" / line start.
@@ -64,13 +64,13 @@ def extract_company(jd_text: str) -> str:
         r"(?:the\s+|a\s+|an\s+)?"
         r"([A-Z][A-Za-z0-9.&]{2,40}"
         r"(?:\s+[A-Z][A-Za-z0-9.&]{2,40}){0,2})",
-        jd_text,
+        posting_text,
     )
     if m:
         return m.group(1).strip()
 
     # Pattern: "Company: <Name>" or "Company name: <Name>".
-    m = re.search(r"(?:Company|Employer)\s*[:]\s*(.+)", jd_text, re.IGNORECASE)
+    m = re.search(r"(?:Company|Employer)\s*[:]\s*(.+)", posting_text, re.IGNORECASE)
     if m:
         raw = re.split(r"[\n\r]", m.group(1))[0].strip()
         return raw[:60]
@@ -79,7 +79,7 @@ def extract_company(jd_text: str) -> str:
 
 
 def _fuzzy_candidates(
-    jd_text: str, atom_index: dict[str, dict[str, Any]], threshold: float
+    posting_text: str, atom_index: dict[str, dict[str, Any]], threshold: float
 ) -> list[dict[str, Any]]:
     """Typo/paraphrase fallback: fuzzy-match unclaimed JD words to atoms.
 
@@ -89,7 +89,7 @@ def _fuzzy_candidates(
     (``fuzz.ratio`` / ``partial_ratio`` ≥ *threshold*). Such matches carry no
     qualifier, so they impose no level constraint.
     """
-    words = re.findall(r"[a-z][a-z0-9+#.]{2,30}", jd_text.lower())
+    words = re.findall(r"[a-z][a-z0-9+#.]{2,30}", posting_text.lower())
     unclaimed: list[str] = []
     for word in words:
         # The word regex includes ".", so "Redis." surfaces as "redis." and
@@ -261,27 +261,27 @@ def _group_atoms(
 
 
 def tailor_cv(
-    jd_text: str,
+    posting_text: str,
     baseline_atoms: list[dict[str, Any]],
     live_cv: dict[str, Any],
     *,
     title: str = "",
     threshold: float = 0.8,
 ) -> dict[str, Any]:
-    """Build a tailored copy of *live_cv* from *jd_text* + the skill bank.
+    """Build a tailored copy of *live_cv* from *posting_text* + the skill bank.
 
     Thin wrapper over :func:`tailor_with_gaps` keeping the tailored document
-    as the sole return value — the shape ``routes.py`` and the ``match_jd``
-    MCP tool consume.
+    as the sole return value — the shape the tailor route and the
+    ``match_job_posting`` MCP tool consume.
     """
     tailored, _ = tailor_with_gaps(
-        jd_text, baseline_atoms, live_cv, title=title, threshold=threshold
+        posting_text, baseline_atoms, live_cv, title=title, threshold=threshold
     )
     return tailored
 
 
 def tailor_with_gaps(
-    jd_text: str,
+    posting_text: str,
     baseline_atoms: list[dict[str, Any]],
     live_cv: dict[str, Any],
     *,
@@ -315,7 +315,7 @@ def tailor_with_gaps(
 
     # Required level per atom canonical (strongest mention wins).
     required: dict[str, str | None] = {}
-    for mention in extract_mentions(jd_text, atom_index):
+    for mention in extract_mentions(posting_text, atom_index):
         atom = atom_index[mention.skill]
         canonical = normalize_skill(atom["atom"])
         if canonical not in required:
@@ -335,7 +335,7 @@ def tailor_with_gaps(
             candidates.setdefault(canonical, atom)
 
     # Fuzzy fallback: unclaimed JD words impose no level constraint.
-    for atom in _fuzzy_candidates(jd_text, atom_index, threshold):
+    for atom in _fuzzy_candidates(posting_text, atom_index, threshold):
         candidates.setdefault(normalize_skill(atom["atom"]), atom)
 
     live_index = build_skill_index(

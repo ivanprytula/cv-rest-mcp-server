@@ -22,7 +22,7 @@ from typing import Any
 
 import httpx
 
-from services.portfolio.matching.normalize import normalize_jd_text
+from services.portfolio.matching.normalize import normalize_posting_text
 
 
 logger = logging.getLogger(__name__)
@@ -37,7 +37,7 @@ class RawPosting:
 
     external_id: str
     title: str
-    jd_text: str
+    posting_text: str
     url: str
     raw_payload: dict[str, Any] = field(default_factory=dict)
 
@@ -140,7 +140,9 @@ async def fetch_greenhouse(
             RawPosting(
                 external_id=str(job["id"]),
                 title=job.get("title", ""),
-                jd_text=normalize_jd_text(_html_to_text(job.get("content", ""))),
+                posting_text=normalize_posting_text(
+                    _html_to_text(job.get("content", ""))
+                ),
                 url=job.get("absolute_url", ""),
                 raw_payload=job,
             )
@@ -193,7 +195,7 @@ async def fetch_lever(
                 RawPosting(
                     external_id=str(posting["id"]),
                     title=posting.get("text", ""),
-                    jd_text=normalize_jd_text(
+                    posting_text=normalize_posting_text(
                         "\n\n".join(p for p in description_parts if p)
                     ),
                     url=posting.get("hostedUrl", ""),
@@ -234,7 +236,7 @@ async def fetch_ashby(
             RawPosting(
                 external_id=str(job["id"]),
                 title=job.get("title", ""),
-                jd_text=normalize_jd_text(
+                posting_text=normalize_posting_text(
                     job.get("descriptionPlain")
                     or _html_to_text(job.get("descriptionHtml", ""))
                 ),

@@ -1,7 +1,7 @@
 """Tracked-board domain entity — no framework or DB imports.
 
-Mirrors `job_posting.py`'s layering: a plain Pydantic model the service layer
-returns, built from the ORM row via `to_domain()`.
+A plain Pydantic model the service layer returns, built from the ORM row via
+`to_domain()`.
 """
 
 from __future__ import annotations

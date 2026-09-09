@@ -1,7 +1,7 @@
 """Gap repository — port (Protocol) + the one concrete adapter.
 
 `GapService` depends on the `GapRepository` Protocol, not the SQLAlchemy
-adapter, mirroring `revisions/revision_repository.py`.
+adapter.
 """
 
 from __future__ import annotations
@@ -17,8 +17,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from services.portfolio.gaps.job_posting_row import (
     AtsBoardRow,
-    JdAnalysisRow,
     JobPostingRow,
+    PostingAnalysisRow,
 )
 from services.portfolio.gaps.phrase_cluster_row import (
     PhraseClusterRow,
@@ -35,7 +35,7 @@ _ROADMAP_SQL = text("""
         gap->>'term'                              AS term,
         gap->>'tier'                              AS tier,
         COALESCE(gap->>'group_id', '')            AS group_id,
-        COUNT(DISTINCT a.posting_id)              AS jd_count,
+        COUNT(DISTINCT a.posting_id)              AS posting_count,
         -- Rank by level STRENGTH, not alphabetically: a plain MAX() over
         -- basic/expert/middle returns 'middle', so a JD demanding expert
         -- would be reported as middle.
@@ -48,12 +48,12 @@ _ROADMAP_SQL = text("""
                 END)
         ]                                         AS strongest_level_asked,
         MAX(gap->>'note')                         AS note
-    FROM jd_analyses AS a
+    FROM posting_analyses AS a
     CROSS JOIN LATERAL jsonb_array_elements(a.result->'gaps') AS gap
     WHERE a.analyzer_version = :version
       AND gap->>'tier' = ANY(:tiers)
     GROUP BY 1, 2, 3
-    ORDER BY jd_count DESC, term ASC
+    ORDER BY posting_count DESC, term ASC
 """)
 
 
@@ -70,10 +70,12 @@ class GapRepository(Protocol):
     async def close_missing_postings(
         self, *, source: str, company_slug: str, seen_external_ids: set[str]
     ) -> int: ...
-    async def save_analysis(self, *, analysis: JdAnalysisRow) -> JdAnalysisRow: ...
+    async def save_analysis(
+        self, *, analysis: PostingAnalysisRow
+    ) -> PostingAnalysisRow: ...
     async def get_analysis(
         self, posting_id: int, analyzer_version: str
-    ) -> JdAnalysisRow | None: ...
+    ) -> PostingAnalysisRow | None: ...
     async def aggregate_roadmap(
         self, *, analyzer_version: str, tiers: list[str]
     ) -> list[dict[str, Any]]: ...
@@ -94,7 +96,7 @@ class GapRepository(Protocol):
 class SqlAlchemyGapRepository:
     """Async SQLAlchemy gap repository (Postgres, `asyncpg`).
 
-    Takes the shared `async_sessionmaker` built once in `main.py`'s lifespan,
+    Takes the shared `async_sessionmaker` built once in the app's lifespan,
     not its own engine — same rationale as `SqlAlchemyRevisionRepository`.
     """
 
@@ -238,7 +240,7 @@ class SqlAlchemyGapRepository:
         matching_ids_stmt = text("""
             SELECT DISTINCT p.id
             FROM job_postings AS p
-            JOIN jd_analyses AS a ON a.posting_id = p.id
+            JOIN posting_analyses AS a ON a.posting_id = p.id
             CROSS JOIN LATERAL jsonb_array_elements(a.result->'gaps') AS gap
             WHERE a.analyzer_version = :version
               AND lower(gap->>'term') = lower(:term)
@@ -257,10 +259,12 @@ class SqlAlchemyGapRepository:
             )
             return list(result.scalars().all())
 
-    async def save_analysis(self, *, analysis: JdAnalysisRow) -> JdAnalysisRow:
+    async def save_analysis(
+        self, *, analysis: PostingAnalysisRow
+    ) -> PostingAnalysisRow:
         """Store an analysis, replacing any prior run at the same version."""
         stmt = (
-            insert(JdAnalysisRow)
+            insert(PostingAnalysisRow)
             .values(
                 posting_id=analysis.posting_id,
                 analyzer_version=analysis.analyzer_version,
@@ -268,10 +272,10 @@ class SqlAlchemyGapRepository:
                 created_at=analysis.created_at,
             )
             .on_conflict_do_update(
-                constraint="uq_jd_analyses_posting_version",
+                constraint="uq_posting_analyses_posting_version",
                 set_={"result": analysis.result, "created_at": analysis.created_at},
             )
-            .returning(JdAnalysisRow)
+            .returning(PostingAnalysisRow)
         )
         async with self._session_factory() as session:
             row = (await session.execute(stmt)).scalar_one()
@@ -280,13 +284,13 @@ class SqlAlchemyGapRepository:
 
     async def get_analysis(
         self, posting_id: int, analyzer_version: str
-    ) -> JdAnalysisRow | None:
+    ) -> PostingAnalysisRow | None:
         async with self._session_factory() as session:
             return (
                 await session.execute(
-                    select(JdAnalysisRow).where(
-                        JdAnalysisRow.posting_id == posting_id,
-                        JdAnalysisRow.analyzer_version == analyzer_version,
+                    select(PostingAnalysisRow).where(
+                        PostingAnalysisRow.posting_id == posting_id,
+                        PostingAnalysisRow.analyzer_version == analyzer_version,
                     )
                 )
             ).scalar_one_or_none()

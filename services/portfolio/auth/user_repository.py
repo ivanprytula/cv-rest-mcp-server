@@ -24,7 +24,7 @@ class UserRepository(Protocol):
 class SqlAlchemyUserRepository:
     """Async SQLAlchemy user repository (Postgres, `asyncpg`).
 
-    Takes a shared `async_sessionmaker` (built once in `main.py`'s lifespan
+    Takes a shared `async_sessionmaker` (built once in the app's lifespan
     from one app-wide engine — see `services.portfolio.db`), not its own
     `db_url`/engine: engine lifecycle (open, dispose) is owned by whoever
     builds it, not by any one repository. Schema is Alembic-migrated, not

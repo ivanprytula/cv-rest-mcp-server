@@ -1,8 +1,7 @@
-"""Gap-analysis endpoints.
+"""Job-posting and gap-analysis endpoints.
 
-Kept in the `gaps/` package rather than the shared `routes.py`: this is a
-self-contained feature with its own service, and `routes.py` is already the
-CV-rendering surface.
+Two routers: postings are their own REST resource under `/postings`, while
+`/gaps` keeps the analysis output that aggregates across them (the roadmap).
 """
 
 from __future__ import annotations
@@ -27,7 +26,10 @@ from services.portfolio.gaps.gap_service import (
     GapService,
     load_analysis_inputs,
 )
-from services.portfolio.jd_input import PayloadTooLargeError, parse_jd_input
+from services.portfolio.job_posting_input import (
+    PayloadTooLargeError,
+    parse_job_posting_input,
+)
 from services.portfolio.matching.baseline import BaselineError
 from services.portfolio.matching.gap import report_unrecognized
 from services.portfolio.pdf_generator import PdfService
@@ -43,6 +45,7 @@ from services.portfolio.settings import settings
 
 logger = logging.getLogger(__name__)
 
+postings_router = APIRouter(prefix=f"{API_V1_PREFIX}/postings", tags=["postings"])
 router = APIRouter(prefix=f"{API_V1_PREFIX}/gaps", tags=["gaps"])
 
 get_gap_service_dep = Depends(get_gap_service)
@@ -68,7 +71,7 @@ async def _analysis_inputs(
         ) from None
 
 
-@router.post("", response_model=PostingCreated, status_code=201)
+@postings_router.post("", response_model=PostingCreated, status_code=201)
 async def store_job_posting(
     request: Request,
     gap_service: GapService = get_gap_service_dep,
@@ -76,11 +79,11 @@ async def store_job_posting(
     """Store a job posting for later analysis.
 
     Accepts the same formats as `/api/v1/cv/tailor` (JSON, PDF, DOCX, text,
-    Markdown) via the shared `parse_jd_input`. Re-posting identical text
+    Markdown) via the shared `parse_job_posting_input`. Re-posting identical text
     returns the existing posting with `duplicate: true`.
     """
     try:
-        jd = parse_jd_input(
+        parsed = parse_job_posting_input(
             await request.body(),
             request.headers.get("content-type", ""),
             title=request.query_params.get("title", ""),
@@ -89,12 +92,12 @@ async def store_job_posting(
         raise HTTPException(status_code=413, detail=str(exc)) from None
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
-    if not jd.jd_text:
-        raise HTTPException(status_code=422, detail="jd_text is required")
+    if not parsed.posting_text:
+        raise HTTPException(status_code=422, detail="posting_text is required")
 
     posting, duplicate = await gap_service.store_posting(
-        jd_text=jd.jd_text,
-        title=jd.title,
+        posting_text=parsed.posting_text,
+        title=parsed.title,
         company=request.query_params.get("company", ""),
         url=request.query_params.get("url", ""),
     )
@@ -105,7 +108,7 @@ async def store_job_posting(
     )
 
 
-@router.get("/postings", response_model=PostingList)
+@postings_router.get("", response_model=PostingList)
 async def list_job_postings(
     mentions: str | None = None,
     gap_service: GapService = get_gap_service_dep,
@@ -119,7 +122,7 @@ async def list_job_postings(
     return PostingList(postings=await gap_service.list_postings(mentions_term=mentions))
 
 
-@router.post("/postings/{posting_id}/analyze", response_model=GapReportOut)
+@postings_router.post("/{posting_id}/analyze", response_model=GapReportOut)
 async def analyze_job_posting(
     posting_id: int,
     gap_service: GapService = get_gap_service_dep,
@@ -146,7 +149,10 @@ async def analyze_job_posting(
         raise HTTPException(status_code=404, detail="Job posting not found")
     posting = await gap_service.get_posting(posting_id)
     unrecognized = (
-        [token for token, _count in report_unrecognized(posting.jd_text, vocabulary)]
+        [
+            token
+            for token, _count in report_unrecognized(posting.posting_text, vocabulary)
+        ]
         if posting is not None
         else []
     )
@@ -158,7 +164,7 @@ async def analyze_job_posting(
     )
 
 
-@router.get("/postings/{posting_id}", response_model=GapReportOut)
+@postings_router.get("/{posting_id}", response_model=GapReportOut)
 async def read_gap_report(
     posting_id: int,
     gap_service: GapService = get_gap_service_dep,
@@ -174,7 +180,7 @@ async def read_gap_report(
     )
 
 
-@router.post("/postings/{posting_id}/cluster", response_model=PhraseClustersOut)
+@postings_router.post("/{posting_id}/cluster", response_model=PhraseClustersOut)
 async def cluster_job_posting(
     posting_id: int,
     gap_service: GapService = get_gap_service_dep,
@@ -192,7 +198,7 @@ async def cluster_job_posting(
     return PhraseClustersOut(posting_id=posting_id, clusters=clusters)
 
 
-@router.get("/postings/{posting_id}/clusters", response_model=PhraseClustersOut)
+@postings_router.get("/{posting_id}/clusters", response_model=PhraseClustersOut)
 async def read_phrase_clusters(
     posting_id: int,
     gap_service: GapService = get_gap_service_dep,

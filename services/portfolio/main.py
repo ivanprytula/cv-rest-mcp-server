@@ -54,9 +54,10 @@ from services.portfolio.documents.routes import router as documents_router
 from services.portfolio.failban import register_violation_from_request
 from services.portfolio.gaps.gap_repository import SqlAlchemyGapRepository
 from services.portfolio.gaps.gap_service import GapService
-from services.portfolio.gaps.jd_document_store import (
-    build_jd_document_store_from_settings,
+from services.portfolio.gaps.job_posting_document_store import (
+    build_job_posting_document_store_from_settings,
 )
+from services.portfolio.gaps.routes import postings_router
 from services.portfolio.gaps.routes import router as gaps_router
 from services.portfolio.gaps.tracked_board_repository import (
     SqlAlchemyTrackedBoardRepository,
@@ -269,7 +270,7 @@ async def generate_cv_pdf_tool(theme: str) -> str:
 
 
 @mcp.tool
-def match_jd(jd_text: str, title: str = "") -> dict:
+def match_job_posting(posting_text: str, title: str = "") -> dict:
     """Match a job description against the skill bank and return a tailored version.
 
     The tailored CV's skills are built from bank atoms whose level meets the
@@ -278,7 +279,7 @@ def match_jd(jd_text: str, title: str = "") -> dict:
     none.
 
     Args:
-        jd_text: Full text of the job description.
+        posting_text: Full text of the job description.
         title: Optional override for the CV title field.
     """
     enforce_mcp_read_limit()
@@ -294,7 +295,7 @@ def match_jd(jd_text: str, title: str = "") -> dict:
         logger.warning("Skill bank unavailable: %s", exc)
         raise ToolError("CV tailoring failed") from exc
     try:
-        return tailor_cv(jd_text, baseline_atoms, pdf_service.cv_data, title=title)
+        return tailor_cv(posting_text, baseline_atoms, pdf_service.cv_data, title=title)
     except Exception:
         logger.exception("MCP JD tailoring failed")
         raise ToolError("CV tailoring failed") from None
@@ -328,9 +329,8 @@ async def lifespan(app):
     app.state.user_service = user_service
     await seed_first_admin_from_settings(user_service)
 
-    # Revision store: additive (ADR-023 PR4). routes.py degrades to the
-    # file-glob path on any RevisionService error rather than 500ing the
-    # tailoring endpoint.
+    # Revision store: additive (ADR-023 PR4). The tailor route degrades to
+    # the file-glob path on any RevisionService error rather than 500ing.
     revision_repo = SqlAlchemyRevisionRepository(session_factory)
     app.state.revision_service = RevisionService(revision_repo)
 
@@ -340,11 +340,11 @@ async def lifespan(app):
     app.state.refresh_token_service = RefreshTokenService(refresh_token_repo)
 
     # Gap analysis: stores job postings and ranks what to learn next.
-    # Raw JD text/payload live in Firestore (jd_document_store.py), not
+    # Raw posting text/payload live in Firestore, not
     # Postgres — gap_repo only ever sees the relational skeleton.
     gap_repo = SqlAlchemyGapRepository(session_factory)
-    jd_docs = build_jd_document_store_from_settings()
-    app.state.gap_service = GapService(gap_repo, jd_docs)
+    posting_docs = build_job_posting_document_store_from_settings()
+    app.state.gap_service = GapService(gap_repo, posting_docs)
 
     # Tracked-board registry: what the ATS refresh trigger polls. Independent
     # of AtsBoardRow (gap_repo's fetch-cache) — this is the operator-editable
@@ -373,6 +373,7 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR))
 app.include_router(router)
 app.include_router(auth_router)
 app.include_router(gaps_router)
+app.include_router(postings_router)
 app.include_router(documents_router)
 app.include_router(tracked_boards_router)
 
@@ -386,7 +387,7 @@ _TAILOR_REQUEST_BODY = {
     "required": True,
     "description": (
         "Job description in any supported format (max 10 MB): raw text, "
-        'Markdown, JSON ({"jd_text": ..., "title": ...}), PDF, or DOCX. '
+        'Markdown, JSON ({"posting_text": ..., "title": ...}), PDF, or DOCX. '
         "For PDF/DOCX set Content-Type accordingly and send the binary body; "
         "anything else is read as plain text."
     ),
@@ -400,7 +401,7 @@ _TAILOR_REQUEST_BODY = {
                 },
                 "json": {
                     "summary": "JSON payload",
-                    "value": '{"jd_text": "Required: Python, FastAPI", "title": ""}',
+                    "value": '{"posting_text": "Required: Python, FastAPI", "title": ""}',
                 },
                 "markdown": {
                     "summary": "Markdown JD",
