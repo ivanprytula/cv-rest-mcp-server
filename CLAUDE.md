@@ -80,6 +80,12 @@ terraform apply
 just deploy bootstrap-database-url
 terraform apply
 
+# STEP 5b: Strip BYPASSRLS from cv_app — Cloud SQL grants every
+# google_sql_user cloudsqlsuperuser, which bypasses row-level security, so
+# the tenant policy would be silently inert. Statements are in
+# scripts/postgres-init/10-app-role.sql; run them via `just db-proxy`.
+# api-core refuses to start without this, so it fails loudly if skipped.
+
 # STEP 6: Upload CV data to GCS
 just deploy upload-cv
 

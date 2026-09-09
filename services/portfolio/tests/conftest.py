@@ -29,6 +29,7 @@ from services.portfolio.cv_source import CvSource
 from services.portfolio.dependencies import get_pdf_service, get_user_service
 from services.portfolio.main import app
 from services.portfolio.pdf_generator import PdfService
+from services.portfolio.tenancy import APP_ROLE
 
 
 # Synthetic CV content so tests never depend on data/cv.json wording.
@@ -324,6 +325,63 @@ def _fresh_postgres_url(_make_fresh_postgres_url):
     return _make_fresh_postgres_url()
 
 
+# Throwaway, and never leaves this process: the role exists only for the
+# lifetime of a test database that is dropped at session end.
+_APP_ROLE_PASSWORD = "rls-test-only"
+
+
+def as_app_role(admin_url: str) -> str:
+    """Rewrite an admin URL to connect as the non-superuser app role.
+
+    Tests run under row-level security, like production, because the policy
+    is invisible otherwise: `postgres` bypasses RLS entirely, so a tenant
+    filter dropped from a query would keep passing here and fail only once
+    deployed. Connecting as the app role makes that a failing test.
+
+    Provisioned here because nothing else does it for a throwaway database:
+    production gets the role from Terraform and local dev from
+    `scripts/postgres-init/`, neither of which runs for a test container.
+    The statements mirror that init script — if they drift, tests stop
+    resembling the thing they are meant to protect.
+    """
+    import psycopg
+    from psycopg import sql
+    from sqlalchemy.engine import make_url
+
+    url = make_url(admin_url)
+    with psycopg.connect(
+        host=url.host,
+        port=url.port,
+        user=url.username,
+        password=url.password,
+        dbname=url.database,
+        autocommit=True,
+    ) as conn:
+        role = sql.Identifier(APP_ROLE)
+        # Roles are cluster-wide, so the first test database creates it and
+        # every later one finds it already there. Grants are per-database and
+        # must run every time.
+        try:
+            conn.execute(
+                sql.SQL(
+                    "CREATE ROLE {role} LOGIN PASSWORD {password} "
+                    "NOSUPERUSER NOBYPASSRLS"
+                ).format(role=role, password=sql.Literal(_APP_ROLE_PASSWORD))
+            )
+        except psycopg.errors.DuplicateObject:
+            pass
+        for statement in (
+            "GRANT USAGE ON SCHEMA public TO {role}",
+            "GRANT SELECT, INSERT, UPDATE, DELETE "
+            "ON ALL TABLES IN SCHEMA public TO {role}",
+            "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO {role}",
+        ):
+            conn.execute(sql.SQL(statement).format(role=role))
+    return url.set(username=APP_ROLE, password=_APP_ROLE_PASSWORD).render_as_string(
+        hide_password=False
+    )
+
+
 @pytest.fixture
 def auth_settings(synthetic_baseline_path, tmp_path, monkeypatch):
     """Configure the auth module for a test: signing key + JWT knobs.
@@ -408,9 +466,14 @@ async def user_service(auth_settings, _fresh_postgres_url, monkeypatch):
     from services.portfolio.revisions.revision_service import RevisionService
     from services.portfolio.settings import settings
 
+    # Migrations run as the superuser (DDL); the app then connects as the
+    # non-superuser role, so every test below runs under the same row-level
+    # security as production. Order matters: the grants below cover tables
+    # that exist, so they must follow the migrations.
     await upgrade_head(_fresh_postgres_url.replace("+asyncpg", "+psycopg"))
+    app_url = as_app_role(_fresh_postgres_url)
 
-    engine = build_engine(_fresh_postgres_url)
+    engine = build_engine(app_url)
     session_factory = build_session_factory(engine)
 
     repo = SqlAlchemyUserRepository(session_factory)
@@ -434,7 +497,7 @@ async def user_service(auth_settings, _fresh_postgres_url, monkeypatch):
         SqlAlchemyTrackedBoardRepository(session_factory)
     )
 
-    monkeypatch.setattr(settings, "database_url", _fresh_postgres_url)
+    monkeypatch.setattr(settings, "database_url", app_url)
     app.dependency_overrides[get_user_service] = lambda: service
     app.dependency_overrides[get_revision_service] = lambda: revision_service
     app.dependency_overrides[get_refresh_token_service] = lambda: refresh_token_service
@@ -442,6 +505,7 @@ async def user_service(auth_settings, _fresh_postgres_url, monkeypatch):
     app.dependency_overrides[get_document_service] = lambda: document_service
     app.dependency_overrides[get_tracked_board_service] = lambda: tracked_board_service
     app.state.user_service = service
+    app.state.db_session_factory = session_factory
     app.state.document_service = document_service
     app.state.revision_service = revision_service
     app.state.refresh_token_service = refresh_token_service
@@ -455,6 +519,7 @@ async def user_service(auth_settings, _fresh_postgres_url, monkeypatch):
     app.dependency_overrides.pop(get_document_service, None)
     app.dependency_overrides.pop(get_tracked_board_service, None)
     app.state.user_service = None
+    app.state.db_session_factory = None
     app.state.document_service = None
     app.state.revision_service = None
     app.state.refresh_token_service = None
@@ -475,3 +540,25 @@ async def auth_client(user_service, override_pdf_service):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
+
+
+@pytest.fixture
+async def operator_tenant_id(user_service) -> int:
+    """The seeded operator's id — the tenant its documents belong to.
+
+    Resolved rather than hardcoded: ids come from a sequence on a throwaway
+    database, so a literal would pass or fail depending on test order.
+    """
+    user = await user_service.get_by_username("operator")
+    assert user is not None, "operator not seeded"
+    return user.id
+
+
+@pytest.fixture
+def session_factory(user_service):
+    """The session factory the app's repositories use.
+
+    Taken from the app rather than rebuilt so tests observe the real
+    connection — the app role, with row-level security in force.
+    """
+    return app.state.db_session_factory

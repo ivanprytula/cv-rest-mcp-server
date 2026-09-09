@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 from fastapi import HTTPException, Request, status
 
 from services.portfolio.pdf_generator import PdfService
+from services.portfolio.tenancy import TenantId
 
 
 if TYPE_CHECKING:
@@ -100,3 +101,30 @@ async def get_refresh_token_service(request: Request) -> RefreshTokenService:
             detail="Refresh token service not initialized",
         )
     return service
+
+
+async def get_tenant_id(request: Request) -> TenantId:
+    """The tenant this request acts on: the `uid` claim of its access token.
+
+    One seam, so "which tenant is this?" has a single answer instead of each
+    route inventing one. `uid` is the numeric user id rather than `sub` (a
+    username, which can be changed), so a rename never reassigns documents.
+
+    A verified token with no `uid` is one issued before tenancy existed. It
+    is refused rather than guessed at: picking a tenant for it would mean
+    handing someone another tenant's documents, and re-logging in mints a
+    token that carries the claim.
+    """
+    claims = request.scope.get("auth")
+    if not claims:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+        )
+    uid = claims.get("uid")
+    if not isinstance(uid, int):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Access token predates tenant support; sign in again",
+        )
+    return TenantId(uid)

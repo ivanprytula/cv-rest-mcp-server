@@ -51,9 +51,12 @@ class Settings(BaseSettings):
     refresh_token_pepper: str = ""
     # Postgres connection string, asyncpg driver (e.g.
     # "postgresql+asyncpg://user:pass@host:5432/dbname"). No default: the
-    # app lifespan (main.py) and Alembic (db_migrations.py, alembic/env.py)
-    # both fail fast if this is unset rather than silently running against
-    # nothing.
+    # app lifespan and Alembic both fail fast if this is unset rather than
+    # silently running against nothing.
+    #
+    # Connect as the application role, never a superuser: row-level security
+    # does not apply to one, so the tenant policy would be inert. Startup
+    # refuses such a role outright (`verify_rls_enforced`).
     database_url: str = ""
     first_admin_username: str = "operator"
     first_admin_email: str = "operator@example.com"
@@ -73,19 +76,32 @@ class Settings(BaseSettings):
     # to use the real Firestore-backed store.
     firestore_project: str = ""
 
+    # Migrations connect as a more privileged role: they issue DDL, which the
+    # app deliberately cannot. Two URLs rather than one connection that
+    # switches role on the fly, because `SET ROLE` is reversible — a superuser
+    # session that drops to the app role can `RESET ROLE` back, so a bug or an
+    # injection undoes the isolation. A genuine app-role connection is refused
+    # the escalation by Postgres ("permission denied to set role"), which is
+    # what makes the boundary real.
+    #
+    # Empty means "same credentials as database_url", for a deployment whose
+    # app role may legitimately migrate.
+    migration_database_url: str = ""
+
     @property
     def sync_database_url(self) -> str:
-        """`database_url` with the async driver swapped for a sync one.
+        """The migration URL, with a sync driver.
 
-        Alembic runs migrations synchronously, so it (and anything else that
-        needs a blocking connection, e.g. a throwaway per-test database setup)
-        uses this instead of the asyncpg URL the running app connects with.
-        Single place this swap happens — nothing else should string-replace
-        `database_url` by hand.
+        Alembic runs synchronously, so it (and anything else needing a
+        blocking connection, e.g. a throwaway per-test database) uses this
+        rather than the app's asyncpg URL. Single place the swap happens —
+        nothing else should string-replace a URL by hand.
+
+        Falls back to `database_url` when no migration URL is configured, so
+        an install where one role does both keeps working unchanged.
         """
-        return self.database_url.replace(
-            "postgresql+asyncpg://", "postgresql+psycopg://"
-        )
+        url = self.migration_database_url or self.database_url
+        return url.replace("postgresql+asyncpg://", "postgresql+psycopg://")
 
 
 settings = Settings()

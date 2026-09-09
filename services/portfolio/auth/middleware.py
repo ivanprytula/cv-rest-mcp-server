@@ -49,6 +49,7 @@ logger = logging.getLogger(__name__)
 # through so they can run unauthenticated — they carry their own auth material
 # (password / httpOnly refresh cookie), not a bearer access token.
 _TOKEN_PATH = f"{API_V1_PREFIX}/auth/token"
+_REGISTER_PATH = f"{API_V1_PREFIX}/auth/register"
 _REFRESH_PATH = f"{API_V1_PREFIX}/auth/refresh"
 _LOGOUT_PATH = f"{API_V1_PREFIX}/auth/logout"
 
@@ -92,13 +93,22 @@ _ADMIN_ROUTES = {
 # cannot be matched exactly.
 _ADMIN_PREFIXES = (
     ("POST", f"{API_V1_PREFIX}/postings"),
-    ("PUT", f"{API_V1_PREFIX}/documents"),
-    ("DELETE", f"{API_V1_PREFIX}/documents"),
     ("PATCH", f"{API_V1_PREFIX}/tracked-boards"),
     ("DELETE", f"{API_V1_PREFIX}/tracked-boards"),
 )
 
+# Mutations gated by the `cv:manage` scope rather than the admin role: a
+# document belongs to one tenant, and the route only ever touches the
+# caller's own (the tenant comes from the token, never from the path), so
+# "may write documents" is the whole question. Which documents is settled by
+# the tenant filter and the row-level policy, not here.
+_MANAGE_PREFIXES = (
+    ("PUT", f"{API_V1_PREFIX}/documents"),
+    ("DELETE", f"{API_V1_PREFIX}/documents"),
+)
+
 _SCOPE_READ = "cv:read"
+_SCOPE_MANAGE = "cv:manage"
 
 _ROLE_ADMIN = "admin"
 
@@ -135,7 +145,12 @@ def _is_protected(scope: Scope) -> bool:
     if method == "OPTIONS":
         return False
     if path.startswith(API_V1_PREFIX):
-        return path not in {_TOKEN_PATH, _REFRESH_PATH, _LOGOUT_PATH}
+        return path not in {
+            _TOKEN_PATH,
+            _REGISTER_PATH,
+            _REFRESH_PATH,
+            _LOGOUT_PATH,
+        }
     return _is_tailored_read(scope)
 
 
@@ -154,6 +169,7 @@ def api_v1_route_requires_bearer(path: str) -> bool:
     """
     return path.startswith(API_V1_PREFIX) and path not in {
         _TOKEN_PATH,
+        _REGISTER_PATH,
         _REFRESH_PATH,
         _LOGOUT_PATH,
     }
@@ -272,9 +288,19 @@ class JWTAuthMiddleware:
         )
 
     @staticmethod
+    def _requires_manage_scope(scope: Scope) -> bool:
+        method, path = scope.get("method"), scope.get("path", "")
+        return any(
+            method == manage_method and path.startswith(f"{prefix}/")
+            for manage_method, prefix in _MANAGE_PREFIXES
+        )
+
+    @staticmethod
     def _required_scope(scope: Scope) -> str | None:
         if JWTAuthMiddleware._requires_admin(scope):
             return None  # role-gated, not scope-gated
+        if JWTAuthMiddleware._requires_manage_scope(scope):
+            return _SCOPE_MANAGE
         if _is_tailored_read(scope) or JWTAuthMiddleware._is_read_scoped_api_path(
             scope
         ):

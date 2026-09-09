@@ -26,6 +26,11 @@ from contextlib import asynccontextmanager
 import uvicorn
 from fastapi import FastAPI
 
+from services.portfolio.auth.user_repository import SqlAlchemyUserRepository
+from services.portfolio.auth.user_service import (
+    UserService,
+    resolve_operator_tenant_id,
+)
 from services.portfolio.db import build_engine, build_session_factory
 from services.portfolio.documents.document_repository import (
     SqlAlchemyDocumentRepository,
@@ -70,6 +75,8 @@ async def lifespan(app: FastAPI):
     app.state.tracked_board_service = TrackedBoardService(
         SqlAlchemyTrackedBoardRepository(session_factory)
     )
+    # Only to resolve which tenant's documents this run reads.
+    app.state.user_service = UserService(SqlAlchemyUserRepository(session_factory))
     yield
     await engine.dispose()
 
@@ -123,14 +130,23 @@ async def trigger_refresh(group: str | None = None) -> dict[str, object]:
         logger.info("No ATS boards configured")
         return {"boards": {}}
 
+    # No request, so no token to read a tenant from: this runs for the
+    # installation, on the operator's documents.
+    tenant_id = await resolve_operator_tenant_id(app.state.user_service)
+    if tenant_id is None:
+        logger.warning("No operator user; skipping refresh")
+        return {"boards": {}}
+
     try:
-        analysis_inputs = await load_analysis_inputs(documents)
+        analysis_inputs = await load_analysis_inputs(documents, tenant_id=tenant_id)
     except BaselineError as exc:
         logger.warning("Skipping analysis this run: %s", exc)
         analysis_inputs = None
 
     live_cv = await documents.read(
-        KIND_CV, fallback_path=document_sources(settings).get(KIND_CV)
+        KIND_CV,
+        tenant_id=tenant_id,
+        fallback_path=document_sources(settings).get(KIND_CV),
     )
 
     results = await gap_service.refresh_all_boards(

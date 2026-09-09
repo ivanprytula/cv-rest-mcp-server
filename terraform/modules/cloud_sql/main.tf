@@ -102,6 +102,19 @@ data "google_secret_manager_secret_version" "db_password" {
   project = var.project
 }
 
+# Cloud SQL grants every google_sql_user membership of cloudsqlsuperuser,
+# which carries BYPASSRLS. Row-level security is then NOT enforced for this
+# role, and the tenant policy on operator_documents is silently inert — every
+# query succeeds and returns other tenants' rows.
+#
+# Terraform cannot express role attributes (google_sql_user has no field for
+# them), so stripping the bypass is a SQL statement that must run once against
+# the instance, after this user exists — see the header of
+# scripts/postgres-init/10-app-role.sql.
+#
+# The application refuses to start if it connects with a role that still has
+# superuser or BYPASSRLS (see services/portfolio/tenancy.py), so a skipped
+# step fails loudly at deploy rather than leaking data quietly.
 resource "google_sql_user" "app" {
   name     = var.database_user
   project  = var.project

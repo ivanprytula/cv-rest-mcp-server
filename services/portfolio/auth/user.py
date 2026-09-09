@@ -45,8 +45,12 @@ class User(BaseModel):
 
     @property
     def scopes(self) -> list[str]:
-        """role → scopes. Admin gets manage on top of the base read scope."""
-        base = [SCOPE_READ]
-        if self.role == ROLE_ADMIN:
-            base.append(SCOPE_MANAGE)
-        return base
+        """role → scopes. Both roles manage documents; the role decides whose.
+
+        `cv:manage` is the right to mutate documents you own, so every user
+        carries it. What separates the roles is reach: a `user` may write
+        only their own tenant's documents, while an `admin` may write any
+        tenant's. Ownership is enforced per request against the `uid` claim,
+        not by withholding the scope.
+        """
+        return [SCOPE_READ, SCOPE_MANAGE]

@@ -146,20 +146,24 @@ class TestAnalysisUsesStoredDocuments:
 
 class TestSeeding:
     async def test_seed_is_idempotent_and_does_not_clobber(
-        self, admin_client, tmp_path
+        self, admin_client, tmp_path, operator_tenant_id
     ):
         from services.portfolio.documents.document_row import KIND_SKILL_BANK
         from services.portfolio.documents.document_service import DocumentService
         from services.portfolio.main import app
 
         service: DocumentService = app.state.document_service
-        await service.write(KIND_SKILL_BANK, _bank("Edited"))
+        await service.write(
+            KIND_SKILL_BANK, _bank("Edited"), tenant_id=operator_tenant_id
+        )
 
         seed_file = tmp_path / "bank.json"
         seed_file.write_text(json.dumps(_bank("FromFile")), encoding="utf-8")
-        await service.seed_from_files({KIND_SKILL_BANK: seed_file})
+        await service.seed_from_files(
+            {KIND_SKILL_BANK: seed_file}, tenant_id=operator_tenant_id
+        )
 
-        stored = await service.read(KIND_SKILL_BANK)
+        stored = await service.read(KIND_SKILL_BANK, tenant_id=operator_tenant_id)
         assert stored is not None
         assert stored["skills"][0]["atom"] == "Edited"
 
@@ -219,11 +223,20 @@ class TestKindsAreDataDriven:
             assert kind_path.metadata[0].pattern.strip("^$").split("|").count(kind) >= 0
             assert kind in kind_path.metadata[0].pattern
 
-    async def test_kind_without_a_validator_is_stored_as_is(self, admin_client):
+    async def test_kind_without_a_validator_is_stored_as_is(
+        self, admin_client, operator_tenant_id
+    ):
         """A new kind needs no schema — only kinds with one are checked."""
         from services.portfolio.documents.document_service import DocumentService
         from services.portfolio.main import app
 
         service: DocumentService = app.state.document_service
-        assert await service.write("custom_notes", {"anything": [1, 2, 3]}) == 1
-        assert await service.read("custom_notes") == {"anything": [1, 2, 3]}
+        assert (
+            await service.write(
+                "custom_notes", {"anything": [1, 2, 3]}, tenant_id=operator_tenant_id
+            )
+            == 1
+        )
+        assert await service.read("custom_notes", tenant_id=operator_tenant_id) == {
+            "anything": [1, 2, 3]
+        }
