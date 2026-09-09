@@ -41,7 +41,7 @@ export default function Roadmap() {
             <tr key={`${item.term}-${item.tier}`}>
               <td className={th}>{item.term}</td>
               <td className={th}>
-                {item.jd_count} {item.jd_count === 1 ? 'posting' : 'postings'}
+                {item.posting_count} {item.posting_count === 1 ? 'posting' : 'postings'}
               </td>
               <td className={th}>
                 <TierBadge tier={item.tier} label={TIER_LABEL[item.tier] ?? item.tier} />

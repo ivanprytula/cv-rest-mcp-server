@@ -10,6 +10,7 @@ from fastapi import status
 
 
 GAPS = "/api/v1/gaps"
+POSTINGS = "/api/v1/postings"
 
 
 @pytest.fixture
@@ -38,13 +39,13 @@ JD_TERRAFORM = "Platform Engineer. Experience with Terraform and Kubernetes."
 
 
 async def _store(client, text, **params):
-    resp = await client.post(GAPS, content=text.encode(), params=params)
+    resp = await client.post(POSTINGS, content=text.encode(), params=params)
     assert resp.status_code == status.HTTP_201_CREATED, resp.text
     return resp.json()
 
 
 async def _analyze(client, posting_id):
-    resp = await client.post(f"{GAPS}/postings/{posting_id}/analyze")
+    resp = await client.post(f"{POSTINGS}/{posting_id}/analyze")
     assert resp.status_code == status.HTTP_200_OK, resp.text
     return resp.json()
 
@@ -63,25 +64,25 @@ class TestStorePosting:
         assert second["duplicate"] is True
 
     async def test_empty_body_is_rejected(self, admin_client):
-        resp = await admin_client.post(GAPS, content=b"   ")
+        resp = await admin_client.post(POSTINGS, content=b"   ")
         assert resp.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
     async def test_listing_returns_stored_postings(self, admin_client):
         await _store(admin_client, JD_KUBERNETES, company="Acme")
-        resp = await admin_client.get(f"{GAPS}/postings")
+        resp = await admin_client.get(POSTINGS)
         assert resp.status_code == status.HTTP_200_OK
         postings = resp.json()["postings"]
         assert len(postings) == 1
         assert postings[0]["company"] == "Acme"
         # The summary must not carry the full JD text.
-        assert "jd_text" not in postings[0]
+        assert "posting_text" not in postings[0]
 
 
-class TestJdDocumentConsistency:
+class TestPostingDocumentConsistency:
     """The Postgres row and its Firestore document are two writes with no
-    shared transaction (see jd_document_store.py) — these lock in the
-    ordering that keeps a partial failure from producing an unreadable
-    posting, rather than relying on it staying correct by accident.
+    shared transaction — these lock in the ordering that keeps a partial
+    failure from producing an unreadable posting, rather than relying on it
+    staying correct by accident.
     """
 
     async def test_firestore_write_happens_before_the_postgres_row(self, admin_client):
@@ -89,23 +90,23 @@ class TestJdDocumentConsistency:
 
         gap_service = app.state.gap_service
         calls: list[str] = []
-        real_jd_docs_save = gap_service._jd_docs.save
+        real_posting_docs_save = gap_service._posting_docs.save
         real_upsert_posting = gap_service._repo.upsert_posting
 
-        async def spy_jd_docs_save(*args, **kwargs):
+        async def spy_posting_docs_save(*args, **kwargs):
             calls.append("firestore")
-            return await real_jd_docs_save(*args, **kwargs)
+            return await real_posting_docs_save(*args, **kwargs)
 
         async def spy_upsert_posting(*args, **kwargs):
             calls.append("postgres")
             return await real_upsert_posting(*args, **kwargs)
 
-        gap_service._jd_docs.save = spy_jd_docs_save
+        gap_service._posting_docs.save = spy_posting_docs_save
         gap_service._repo.upsert_posting = spy_upsert_posting
         try:
             await _store(admin_client, JD_KUBERNETES)
         finally:
-            gap_service._jd_docs.save = real_jd_docs_save
+            gap_service._posting_docs.save = real_posting_docs_save
             gap_service._repo.upsert_posting = real_upsert_posting
 
         assert calls == ["firestore", "postgres"]
@@ -116,23 +117,44 @@ class TestJdDocumentConsistency:
         from services.portfolio.main import app
 
         gap_service = app.state.gap_service
-        real_jd_docs_save = gap_service._jd_docs.save
+        real_posting_docs_save = gap_service._posting_docs.save
 
         async def failing_save(*args, **kwargs):
             raise RuntimeError("Firestore unavailable")
 
-        gap_service._jd_docs.save = failing_save
+        gap_service._posting_docs.save = failing_save
         try:
-            resp = await admin_client.post(GAPS, content=JD_KUBERNETES.encode())
+            resp = await admin_client.post(POSTINGS, content=JD_KUBERNETES.encode())
         finally:
-            gap_service._jd_docs.save = real_jd_docs_save
+            gap_service._posting_docs.save = real_posting_docs_save
 
         assert resp.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
 
-        listing = await admin_client.get(f"{GAPS}/postings")
+        listing = await admin_client.get(POSTINGS)
         assert listing.json()["postings"] == []
 
-    async def test_a_posting_missing_its_jd_document_is_reported_not_crashed(
+    async def test_restoring_a_posting_with_a_lost_document_repairs_it(
+        self, admin_client
+    ):
+        """Re-storing identical text must rewrite the document, not just
+        dedup to the row. Without this, a row whose document went missing
+        404s on analyze forever — no way to fix it short of a DB edit.
+        """
+        from services.portfolio.main import app
+
+        posting = await _store(admin_client, JD_KUBERNETES)
+        gap_service = app.state.gap_service
+        row = await gap_service._repo.get_posting(posting["id"])
+        gap_service._posting_docs._documents.pop(row.content_hash)
+
+        restored = await _store(admin_client, JD_KUBERNETES)
+        assert restored["id"] == posting["id"]
+        assert restored["duplicate"] is True
+
+        resp = await admin_client.post(f"{POSTINGS}/{posting['id']}/analyze")
+        assert resp.status_code == status.HTTP_200_OK, resp.text
+
+    async def test_a_posting_missing_its_document_is_reported_not_crashed(
         self, admin_client
     ):
         # Simulates the residual risk the docstrings call out: a Postgres
@@ -144,9 +166,9 @@ class TestJdDocumentConsistency:
         posting = await _store(admin_client, JD_KUBERNETES)
         gap_service = app.state.gap_service
         row = await gap_service._repo.get_posting(posting["id"])
-        gap_service._jd_docs._documents.pop(row.content_hash)
+        gap_service._posting_docs._documents.pop(row.content_hash)
 
-        resp = await admin_client.post(f"{GAPS}/postings/{posting['id']}/analyze")
+        resp = await admin_client.post(f"{POSTINGS}/{posting['id']}/analyze")
         assert resp.status_code == status.HTTP_404_NOT_FOUND
 
 
@@ -159,9 +181,7 @@ class TestListingFilteredByTerm:
         await _analyze(admin_client, graphql_only["id"])
         await _analyze(admin_client, terraform_only["id"])
 
-        resp = await admin_client.get(
-            f"{GAPS}/postings", params={"mentions": "GraphQL"}
-        )
+        resp = await admin_client.get(POSTINGS, params={"mentions": "GraphQL"})
         assert resp.status_code == status.HTTP_200_OK
         postings = resp.json()["postings"]
         assert len(postings) == 1
@@ -171,32 +191,28 @@ class TestListingFilteredByTerm:
         posting = await _store(admin_client, JD_KUBERNETES, company="Acme")
         await _analyze(admin_client, posting["id"])
 
-        resp = await admin_client.get(
-            f"{GAPS}/postings", params={"mentions": "graphql"}
-        )
+        resp = await admin_client.get(POSTINGS, params={"mentions": "graphql"})
         assert len(resp.json()["postings"]) == 1
 
     async def test_unanalyzed_posting_is_excluded(self, admin_client):
         await _store(admin_client, JD_KUBERNETES, company="Acme")
         # Never analyzed — the term can neither be confirmed nor denied.
 
-        resp = await admin_client.get(
-            f"{GAPS}/postings", params={"mentions": "GraphQL"}
-        )
+        resp = await admin_client.get(POSTINGS, params={"mentions": "GraphQL"})
         assert resp.json()["postings"] == []
 
     async def test_unmatched_term_returns_empty(self, admin_client):
         posting = await _store(admin_client, JD_KUBERNETES, company="Acme")
         await _analyze(admin_client, posting["id"])
 
-        resp = await admin_client.get(f"{GAPS}/postings", params={"mentions": "Kafka"})
+        resp = await admin_client.get(POSTINGS, params={"mentions": "Kafka"})
         assert resp.json()["postings"] == []
 
     async def test_no_filter_returns_everything(self, admin_client):
         await _store(admin_client, JD_KUBERNETES, company="Acme")
         await _store(admin_client, JD_TERRAFORM, company="Beta", url="https://x/2")
 
-        resp = await admin_client.get(f"{GAPS}/postings")
+        resp = await admin_client.get(POSTINGS)
         assert len(resp.json()["postings"]) == 2
 
 
@@ -223,17 +239,17 @@ class TestAnalysis:
         # time, not persisted — reading the stored report omits it.
         posting = await _store(admin_client, JD_KUBERNETES)
         analyzed = await _analyze(admin_client, posting["id"])
-        resp = await admin_client.get(f"{GAPS}/postings/{posting['id']}")
+        resp = await admin_client.get(f"{POSTINGS}/{posting['id']}")
         assert resp.status_code == status.HTTP_200_OK
         assert resp.json() == {**analyzed, "unrecognized": []}
 
     async def test_missing_posting_is_404(self, admin_client):
-        resp = await admin_client.post(f"{GAPS}/postings/999999/analyze")
+        resp = await admin_client.post(f"{POSTINGS}/999999/analyze")
         assert resp.status_code == status.HTTP_404_NOT_FOUND
 
     async def test_unanalyzed_posting_report_is_404(self, admin_client):
         posting = await _store(admin_client, JD_KUBERNETES)
-        resp = await admin_client.get(f"{GAPS}/postings/{posting['id']}")
+        resp = await admin_client.get(f"{POSTINGS}/{posting['id']}")
         assert resp.status_code == status.HTTP_404_NOT_FOUND
 
 
@@ -250,12 +266,12 @@ class TestRoadmap:
             await _analyze(admin_client, posting["id"])
 
         items = (await admin_client.get(f"{GAPS}/roadmap")).json()["items"]
-        counts = {item["term"]: item["jd_count"] for item in items}
+        counts = {item["term"]: item["posting_count"] for item in items}
         assert counts.get("Terraform") == 2
         assert counts.get("GraphQL") == 1
-        # jd_count descending is the product; assert the ordering holds.
-        assert [i["jd_count"] for i in items] == sorted(
-            (i["jd_count"] for i in items), reverse=True
+        # posting_count descending is the product; assert the ordering holds.
+        assert [i["posting_count"] for i in items] == sorted(
+            (i["posting_count"] for i in items), reverse=True
         )
 
     async def test_covered_terms_are_excluded(self, admin_client):
@@ -274,13 +290,13 @@ class TestRoadmap:
 
         expected: dict[str, int] = {}
         for posting_id in posting_ids:
-            report = (await admin_client.get(f"{GAPS}/postings/{posting_id}")).json()
+            report = (await admin_client.get(f"{POSTINGS}/{posting_id}")).json()
             for gap in report["gaps"]:
                 if gap["tier"] != "covered":
                     expected[gap["term"]] = expected.get(gap["term"], 0) + 1
 
         items = (await admin_client.get(f"{GAPS}/roadmap")).json()["items"]
-        assert {i["term"]: i["jd_count"] for i in items} == expected
+        assert {i["term"]: i["posting_count"] for i in items} == expected
 
     async def test_strongest_level_uses_strength_not_alphabet(self, admin_client):
         """max('basic','expert','middle') is 'middle' alphabetically."""
@@ -301,10 +317,10 @@ class TestAuth:
         ("method", "path"),
         [
             ("GET", f"{GAPS}/roadmap"),
-            ("GET", f"{GAPS}/postings"),
-            ("GET", f"{GAPS}/postings/1"),
+            ("GET", POSTINGS),
+            ("GET", f"{POSTINGS}/1"),
             ("POST", GAPS),
-            ("POST", f"{GAPS}/postings/1/analyze"),
+            ("POST", f"{POSTINGS}/1/analyze"),
         ],
     )
     async def test_unauthenticated_is_401(self, client, method, path):
@@ -325,12 +341,12 @@ class TestTailoringStoresThePosting:
         )
         assert resp.status_code == status.HTTP_200_OK, resp.text
 
-        postings = (await admin_client.get(f"{GAPS}/postings")).json()["postings"]
+        postings = (await admin_client.get(POSTINGS)).json()["postings"]
         assert [p["source"] for p in postings] == ["tailor"]
 
     async def test_stored_posting_is_analyzable(self, admin_client):
         await admin_client.post("/api/v1/cv/tailor", content=JD_KUBERNETES.encode())
-        postings = (await admin_client.get(f"{GAPS}/postings")).json()["postings"]
+        postings = (await admin_client.get(POSTINGS)).json()["postings"]
         report = await _analyze(admin_client, postings[0]["id"])
         assert report["gaps"]
 
@@ -340,16 +356,16 @@ class TestTailoringStoresThePosting:
         from services.portfolio.revisions.revision_service import jd_hash
 
         await admin_client.post("/api/v1/cv/tailor", content=JD_KUBERNETES.encode())
-        postings = (await admin_client.get(f"{GAPS}/postings")).json()["postings"]
-        stored = await admin_client.get(f"{GAPS}/postings/{postings[0]['id']}")
+        postings = (await admin_client.get(POSTINGS)).json()["postings"]
+        stored = await admin_client.get(f"{POSTINGS}/{postings[0]['id']}")
         assert stored.status_code in (status.HTTP_200_OK, status.HTTP_404_NOT_FOUND)
-        # Both digests are SHA-256 of the same normalized JD text.
+        # Both digests are SHA-256 of the same normalized posting text.
         assert jd_hash(JD_KUBERNETES) == content_hash(JD_KUBERNETES)
 
     async def test_tailoring_the_same_jd_twice_stores_one_posting(self, admin_client):
         for _ in range(2):
             await admin_client.post("/api/v1/cv/tailor", content=JD_KUBERNETES.encode())
-        postings = (await admin_client.get(f"{GAPS}/postings")).json()["postings"]
+        postings = (await admin_client.get(POSTINGS)).json()["postings"]
         assert len(postings) == 1
 
 
@@ -390,7 +406,7 @@ class TestPhraseClustering:
         self, admin_client, fake_embeddings
     ):
         posting = await _store(admin_client, JD_TWO_RESPONSIBILITIES)
-        resp = await admin_client.post(f"{GAPS}/postings/{posting['id']}/cluster")
+        resp = await admin_client.post(f"{POSTINGS}/{posting['id']}/cluster")
         assert resp.status_code == status.HTTP_200_OK, resp.text
         clusters = resp.json()["clusters"]
         sizes = sorted(len(c["phrases"]) for c in clusters)
@@ -398,7 +414,7 @@ class TestPhraseClustering:
 
     async def test_cluster_label_is_a_real_phrase(self, admin_client, fake_embeddings):
         posting = await _store(admin_client, JD_TWO_RESPONSIBILITIES)
-        resp = await admin_client.post(f"{GAPS}/postings/{posting['id']}/cluster")
+        resp = await admin_client.post(f"{POSTINGS}/{posting['id']}/cluster")
         clusters = resp.json()["clusters"]
         for cluster in clusters:
             assert cluster["label"] in cluster["phrases"]
@@ -406,31 +422,27 @@ class TestPhraseClustering:
     async def test_stored_clusters_are_readable(self, admin_client, fake_embeddings):
         posting = await _store(admin_client, JD_TWO_RESPONSIBILITIES)
         clustered = (
-            await admin_client.post(f"{GAPS}/postings/{posting['id']}/cluster")
+            await admin_client.post(f"{POSTINGS}/{posting['id']}/cluster")
         ).json()
-        resp = await admin_client.get(f"{GAPS}/postings/{posting['id']}/clusters")
+        resp = await admin_client.get(f"{POSTINGS}/{posting['id']}/clusters")
         assert resp.status_code == status.HTTP_200_OK
         assert resp.json() == clustered
 
     async def test_missing_posting_is_404(self, admin_client):
-        resp = await admin_client.post(f"{GAPS}/postings/999999/cluster")
+        resp = await admin_client.post(f"{POSTINGS}/999999/cluster")
         assert resp.status_code == status.HTTP_404_NOT_FOUND
 
     async def test_unclustered_posting_read_is_404(self, admin_client):
         posting = await _store(admin_client, JD_TWO_RESPONSIBILITIES)
-        resp = await admin_client.get(f"{GAPS}/postings/{posting['id']}/clusters")
+        resp = await admin_client.get(f"{POSTINGS}/{posting['id']}/clusters")
         assert resp.status_code == status.HTTP_404_NOT_FOUND
 
     async def test_reclustering_replaces_the_prior_result(
         self, admin_client, fake_embeddings
     ):
         posting = await _store(admin_client, JD_TWO_RESPONSIBILITIES)
-        first = (
-            await admin_client.post(f"{GAPS}/postings/{posting['id']}/cluster")
-        ).json()
-        second = (
-            await admin_client.post(f"{GAPS}/postings/{posting['id']}/cluster")
-        ).json()
+        first = (await admin_client.post(f"{POSTINGS}/{posting['id']}/cluster")).json()
+        second = (await admin_client.post(f"{POSTINGS}/{posting['id']}/cluster")).json()
         assert first == second
 
     async def test_a_posting_with_no_clusterable_phrases_persists_an_empty_result(
@@ -440,11 +452,11 @@ class TestPhraseClustering:
         # yields nothing, but the empty result must still be stored so a
         # later GET reads it back rather than 404ing on "never analyzed".
         posting = await _store(admin_client, "3+ years\nPython")
-        posted = await admin_client.post(f"{GAPS}/postings/{posting['id']}/cluster")
+        posted = await admin_client.post(f"{POSTINGS}/{posting['id']}/cluster")
         assert posted.status_code == status.HTTP_200_OK, posted.text
         assert posted.json()["clusters"] == []
 
-        read = await admin_client.get(f"{GAPS}/postings/{posting['id']}/clusters")
+        read = await admin_client.get(f"{POSTINGS}/{posting['id']}/clusters")
         assert read.status_code == status.HTTP_200_OK
         assert read.json()["clusters"] == []
 
@@ -458,10 +470,10 @@ class TestPhraseClustering:
         from services.portfolio.gaps import gap_service as gap_service_module
 
         posting = await _store(admin_client, JD_TWO_RESPONSIBILITIES)
-        await admin_client.post(f"{GAPS}/postings/{posting['id']}/cluster")
+        await admin_client.post(f"{POSTINGS}/{posting['id']}/cluster")
 
         monkeypatch.setattr(gap_service_module, "EMBEDDING_MODEL", "a-different-model")
-        resp = await admin_client.post(f"{GAPS}/postings/{posting['id']}/cluster")
+        resp = await admin_client.post(f"{POSTINGS}/{posting['id']}/cluster")
         assert resp.status_code == status.HTTP_200_OK, resp.text
         # Re-clustering succeeded (didn't silently reuse the old-model cache
         # and skip re-embedding); the paraphrase pair still groups together.

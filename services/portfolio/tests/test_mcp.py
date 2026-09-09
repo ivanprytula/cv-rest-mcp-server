@@ -7,7 +7,7 @@ from services.portfolio.main import (
     generate_cv_pdf_tool,
     get_available_themes,
     get_cv,
-    match_jd,
+    match_job_posting,
     mcp,
 )
 
@@ -40,7 +40,7 @@ async def test_mcp_tools_have_descriptions():
         "get_cv",
         "get_available_themes",
         "generate_cv_pdf_tool",
-        "match_jd",
+        "match_job_posting",
     }
     assert all(tool.description for tool in tools)
 
@@ -73,16 +73,16 @@ async def test_mcp_endpoint_redirect(client):
     assert resp.headers["location"].endswith("/mcp/")
 
 
-def test_match_jd_returns_tailored_cv():
+def test_match_job_posting_returns_tailored_cv():
     jd = "Required: Python, FastAPI, PostgreSQL"
-    result = match_jd(jd)
+    result = match_job_posting(jd)
     assert "skills" in result
     assert isinstance(result["skills"], list)
-    # Original CV is not mutated — match_jd should return a new dict
+    # Original CV is not mutated — match_job_posting should return a new dict
     assert result["name"] == "Jane Doe"
 
 
-def test_match_jd_with_title_override():
+def test_match_job_posting_with_title_override():
     jd = "Required: Python"
-    result = match_jd(jd, title="Senior Python Dev")
+    result = match_job_posting(jd, title="Senior Python Dev")
     assert result["title"] == "Senior Python Dev"

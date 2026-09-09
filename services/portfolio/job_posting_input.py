@@ -1,10 +1,10 @@
-"""Normalize job-description request bodies into plain JD text.
+"""Normalize job-posting request bodies into plain posting text.
 
 Each supported format is a *parser* registered in ``_PARSERS`` under its
-media type; unregistered types fall back to raw UTF-8 text, so a pasted JD
-(or ``curl --data-binary @jd.txt``) needs no special header. Binary formats
-that arrive with a generic/unknown content type are detected by magic bytes
-in :func:`_sniff_media_type`.
+media type; unregistered types fall back to raw UTF-8 text, so a pasted
+posting (or ``curl --data-binary @posting.txt``) needs no special header.
+Binary formats that arrive with a generic/unknown content type are detected
+by magic bytes in :func:`_sniff_media_type`.
 
 Supported today: JSON, PDF, DOCX, plain text, Markdown.
 """
@@ -19,51 +19,51 @@ import docx
 from pydantic import ValidationError
 from pypdf import PdfReader
 
-from services.portfolio.matching.normalize import normalize_jd_text
+from services.portfolio.matching.normalize import normalize_posting_text
 from services.portfolio.schemas.tailor import TailorRequest
 
 
 # Uploads larger than this are rejected — jobs, like CVs, are small text.
-MAX_JD_PAYLOAD_BYTES = 10 * 1024 * 1024
+MAX_POSTING_PAYLOAD_BYTES = 10 * 1024 * 1024
 
 
 class PayloadTooLargeError(ValueError):
-    """Body exceeds the JD payload cap; the route maps this to 413."""
+    """Body exceeds the posting payload cap; the route maps this to 413."""
 
 
 @dataclass(frozen=True)
-class JdInput:
-    jd_text: str
+class JobPostingInput:
+    posting_text: str
     title: str = ""
 
 
 def _check_size(body: bytes) -> None:
-    if len(body) > MAX_JD_PAYLOAD_BYTES:
+    if len(body) > MAX_POSTING_PAYLOAD_BYTES:
         raise PayloadTooLargeError(
-            f"Job description exceeds the {MAX_JD_PAYLOAD_BYTES // (1024 * 1024)} MB limit"
+            f"Job posting exceeds the {MAX_POSTING_PAYLOAD_BYTES // (1024 * 1024)} MB limit"
         )
 
 
-def _from_json(body: bytes, title: str) -> JdInput:
+def _from_json(body: bytes, title: str) -> JobPostingInput:
     try:
         payload = TailorRequest.model_validate_json(body)
     except ValidationError:
         raise ValueError(
-            "JSON payload must be an object with a jd_text field"
+            "JSON payload must be an object with a posting_text field"
         ) from None
-    return JdInput(payload.jd_text, payload.title or title)
+    return JobPostingInput(payload.posting_text, payload.title or title)
 
 
-def _from_pdf(body: bytes, title: str) -> JdInput:
+def _from_pdf(body: bytes, title: str) -> JobPostingInput:
     try:
         reader = PdfReader(BytesIO(body))
         text = "\n".join(page.extract_text() or "" for page in reader.pages)
     except Exception as exc:
         raise ValueError(f"Could not read PDF: {exc}") from exc
-    return JdInput(normalize_jd_text(text), title)
+    return JobPostingInput(normalize_posting_text(text), title)
 
 
-def _from_docx(body: bytes, title: str) -> JdInput:
+def _from_docx(body: bytes, title: str) -> JobPostingInput:
     try:
         document = docx.Document(BytesIO(body))
     except Exception as exc:
@@ -72,14 +72,16 @@ def _from_docx(body: bytes, title: str) -> JdInput:
     for table in document.tables:
         for row in table.rows:
             parts.extend(cell.text for cell in row.cells)
-    return JdInput(normalize_jd_text("\n".join(parts)), title)
+    return JobPostingInput(normalize_posting_text("\n".join(parts)), title)
 
 
-def _from_text(body: bytes, title: str) -> JdInput:
-    return JdInput(normalize_jd_text(body.decode("utf-8", errors="replace")), title)
+def _from_text(body: bytes, title: str) -> JobPostingInput:
+    return JobPostingInput(
+        normalize_posting_text(body.decode("utf-8", errors="replace")), title
+    )
 
 
-Parser = Callable[[bytes, str], JdInput]
+Parser = Callable[[bytes, str], JobPostingInput]
 
 _DOCX_MEDIA_TYPE = (
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -111,8 +113,10 @@ def _sniff_media_type(body: bytes) -> str | None:
     return None
 
 
-def parse_jd_input(body: bytes, content_type: str, title: str = "") -> JdInput:
-    """Turn a request body into JD text plus an optional title override.
+def parse_job_posting_input(
+    body: bytes, content_type: str, title: str = ""
+) -> JobPostingInput:
+    """Turn a request body into posting text plus an optional title override.
 
     Explicit media types are honored first; a generic/unknown content type
     (or none) is followed by magic-byte sniffing for binary formats, and

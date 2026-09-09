@@ -1,7 +1,6 @@
 """Document repository — port (Protocol) + the one concrete adapter.
 
-Mirrors `revisions/revision_repository.py`: the service depends on the
-Protocol, not the SQLAlchemy adapter.
+The service depends on the Protocol, not the SQLAlchemy adapter.
 """
 
 from __future__ import annotations
@@ -27,7 +26,7 @@ class DocumentRepository(Protocol):
 class SqlAlchemyDocumentRepository:
     """Async SQLAlchemy document repository (Postgres, `asyncpg`).
 
-    Takes the shared `async_sessionmaker` built once in `main.py`'s lifespan,
+    Takes the shared `async_sessionmaker` built once in the app's lifespan,
     like every other repository here.
     """
 

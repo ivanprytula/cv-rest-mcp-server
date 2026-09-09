@@ -14,7 +14,10 @@ from services.portfolio.dependencies import (
     get_pdf_service,
     get_revision_service,
 )
-from services.portfolio.jd_input import PayloadTooLargeError, parse_jd_input
+from services.portfolio.job_posting_input import (
+    PayloadTooLargeError,
+    parse_job_posting_input,
+)
 from services.portfolio.matching.baseline import BaselineError, get_baseline
 from services.portfolio.matching.tailor import tailor_cv
 from services.portfolio.pdf_generator import ThemeNotFoundError
@@ -410,15 +413,15 @@ async def tailor_cv_endpoint(
     revision_service=get_revision_service_dep,
     gap_service=get_optional_gap_service_dep,
 ):
-    """Match a job description against the skill bank and emit a tailored CV revision.
+    """Match a job posting against the skill bank and emit a tailored CV revision.
 
-    The JD can be sent in several formats (max 10 MB) — a supported
+    The posting can be sent in several formats (max 10 MB) — a supported
     ``Content-Type`` is honored, a generic one is sniffed by magic bytes,
-    and anything unexpected is treated as raw JD text:
+    and anything unexpected is treated as raw posting text:
 
-    * Raw text / txt — the whole body is the JD.
-    * Markdown — the whole body is the JD (syntax left intact for the matcher).
-    * JSON — ``{"jd_text": "...", "title": ""}``.
+    * Raw text / txt — the whole body is the posting.
+    * Markdown — the whole body is the posting (syntax left intact for the matcher).
+    * JSON — ``{"posting_text": "...", "title": ""}``.
     * PDF — ``application/pdf``.
     * DOCX — ``application/vnd.openxmlformats-officedocument.wordprocessingml.document``.
 
@@ -434,7 +437,7 @@ async def tailor_cv_endpoint(
     wins for the JSON format.
     """
     try:
-        jd = parse_jd_input(
+        posting = parse_job_posting_input(
             await request.body(),
             request.headers.get("content-type", ""),
             title=request.query_params.get("title", ""),
@@ -443,8 +446,8 @@ async def tailor_cv_endpoint(
         raise HTTPException(status_code=413, detail=str(exc)) from None
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
-    if not jd.jd_text:
-        raise HTTPException(status_code=422, detail="jd_text is required")
+    if not posting.posting_text:
+        raise HTTPException(status_code=422, detail="posting_text is required")
 
     try:
         baseline_atoms = get_baseline()
@@ -454,14 +457,17 @@ async def tailor_cv_endpoint(
 
     try:
         tailored = tailor_cv(
-            jd.jd_text, baseline_atoms, pdf_service.cv_data, title=jd.title
+            posting.posting_text,
+            baseline_atoms,
+            pdf_service.cv_data,
+            title=posting.title,
         )
     except Exception:
         logger.exception("CV tailoring failed")
         raise HTTPException(status_code=500, detail="CV tailoring failed") from None
 
-    # Keep the JD itself, not just its hash. Tailoring used to discard the
-    # text, so every tailored revision pointed at a job description nobody
+    # Keep the posting itself, not just its hash. Tailoring used to discard
+    # the text, so every tailored revision pointed at a job posting nobody
     # could read back. Storing it here feeds the same corpus the gap roadmap
     # ranks, and `revisions.jd_hash == job_postings.content_hash` (both are
     # SHA-256 of this same normalized text) links the two.
@@ -471,12 +477,15 @@ async def tailor_cv_endpoint(
     # None on any DB error, so neither can fail an otherwise-good tailoring.
     if gap_service is not None:
         await gap_service.store_posting(
-            jd_text=jd.jd_text,
+            posting_text=posting.posting_text,
             source="tailor",
-            title=jd.title,
+            title=posting.title,
         )
 
-    revision = await revision_service.create(jd_text=jd.jd_text, tailored_cv=tailored)
+    # `revisions` keeps its own `jd_*` naming; translated at the boundary.
+    revision = await revision_service.create(
+        jd_text=posting.posting_text, tailored_cv=tailored
+    )
     if revision is not None:
         return {**tailored, "saved_to": str(revision.id)}
 

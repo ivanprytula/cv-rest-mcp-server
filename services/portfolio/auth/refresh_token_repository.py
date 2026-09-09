@@ -1,6 +1,6 @@
 """Refresh-token repository — port (Protocol) + the one concrete adapter.
 
-Mirrors `auth/user_repository.py`: the store depends on the Protocol, not on
+The store depends on the Protocol, not on
 `SqlAlchemyRefreshTokenRepository` directly.
 """
 
@@ -33,7 +33,7 @@ class RefreshTokenRepository(Protocol):
 class SqlAlchemyRefreshTokenRepository:
     """Async SQLAlchemy refresh-token repository (Postgres, `asyncpg`).
 
-    Takes the shared `async_sessionmaker` built once in `main.py`'s lifespan,
+    Takes the shared `async_sessionmaker` built once in the app's lifespan,
     same as `SqlAlchemyUserRepository`. Schema is Alembic-migrated.
     """
 

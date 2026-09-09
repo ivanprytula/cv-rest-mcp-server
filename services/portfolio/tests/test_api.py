@@ -298,7 +298,7 @@ async def test_tailor_cv_endpoint(
 ):
     resp = await client.post(
         "/api/v1/cv/tailor",
-        json={"jd_text": "Required: Python, FastAPI"},
+        json={"posting_text": "Required: Python, FastAPI"},
     )
     assert resp.status_code == status.HTTP_200_OK
     data = resp.json()
@@ -382,7 +382,7 @@ async def test_tailor_cv_falls_back_to_file_on_db_error(
     assert validated["name"] == "Jane Doe"
 
 
-async def test_tailor_cv_missing_jd_text(
+async def test_tailor_cv_missing_posting_text(
     client, override_pdf_service, override_revision_service
 ):
     resp = await client.post(
@@ -392,7 +392,7 @@ async def test_tailor_cv_missing_jd_text(
     )
     assert resp.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
     # our contract detail names the missing field
-    assert "jd_text" in resp.text
+    assert "posting_text" in resp.text
 
 
 async def test_tailor_cv_empty_body(
@@ -448,7 +448,7 @@ async def test_tailor_cv_json_with_literal_newlines_is_422_not_500(
 ):
     # Raw LF inside a JSON string is invalid JSON (JSON spec); the endpoint
     # must reject cleanly (422) instead of crashing (500).
-    body = b'{"jd_text": "The Role\n\nYou will take ownership", "title": ""}'
+    body = b'{"posting_text": "The Role\n\nYou will take ownership", "title": ""}'
     resp = await client.post(
         "/api/v1/cv/tailor",
         content=body,
@@ -517,7 +517,9 @@ async def test_tailor_cv_oversize_body_is_413(
     monkeypatch,
     override_revision_service,
 ):
-    monkeypatch.setattr("services.portfolio.jd_input.MAX_JD_PAYLOAD_BYTES", 100)
+    monkeypatch.setattr(
+        "services.portfolio.job_posting_input.MAX_POSTING_PAYLOAD_BYTES", 100
+    )
     resp = await client.post(
         "/api/v1/cv/tailor",
         content=b"x" * 200,
@@ -533,7 +535,7 @@ async def test_tailor_cv_internal_error_is_500_sanitized(
     monkeypatch,
     override_revision_service,
 ):
-    def boom(jd_text, baseline_atoms, live_cv, *, title=""):
+    def boom(posting_text, baseline_atoms, live_cv, *, title=""):
         raise RuntimeError("secret internal detail")
 
     monkeypatch.setattr("services.portfolio.routes.tailor_cv", boom)

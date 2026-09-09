@@ -175,7 +175,7 @@ class TestRefreshAllBoards:
                     ats.RawPosting(
                         external_id="ok-1",
                         title="Eng",
-                        jd_text="Kubernetes.",
+                        posting_text="Kubernetes.",
                         url="https://x/ok-1",
                     )
                 ],

@@ -57,8 +57,8 @@ def _reverse_contains(item_lower: str, key: str) -> bool:
     )
 
 
-def extract_skills_from_jd(
-    jd_text: str, cv_skill_index: dict[str, dict[str, Any]]
+def extract_skills_from_posting(
+    posting_text: str, cv_skill_index: dict[str, dict[str, Any]]
 ) -> list[str]:
     """Extract skill mentions from a job description.
 
@@ -68,10 +68,10 @@ def extract_skills_from_jd(
 
     Returns a deduplicated list of normalized skill names (lowercase).
     """
-    if not jd_text or not cv_skill_index:
+    if not posting_text or not cv_skill_index:
         return []
 
-    text_lower = jd_text.lower()
+    text_lower = posting_text.lower()
     found: list[str] = []
 
     # Phase 1: match multi-word CV skills as complete phrases (longest first).
@@ -85,7 +85,7 @@ def extract_skills_from_jd(
     # 3.14" item yes; a compound item "GitHub Actions" must not attribute
     # "Git" mid-word; a bare "GCP" item must not surface the "gcp bigquery"
     # compound key (its whole token would otherwise match by containment).
-    for item in _extract_list_items(jd_text):
+    for item in _extract_list_items(posting_text):
         item_lower = item.lower()
         for cv_skill in cv_skill_index:
             if _forward_contains(cv_skill, item_lower) or _reverse_contains(
@@ -272,11 +272,11 @@ def _skills_in_chunk(
 
 
 def extract_mentions(
-    jd_text: str, cv_skill_index: dict[str, dict[str, Any]]
+    posting_text: str, cv_skill_index: dict[str, dict[str, Any]]
 ) -> list[SkillMention]:
     """Extract skill mentions from a JD together with their qualifier level.
 
-    Complements :func:`extract_skills_from_jd` with qualifier awareness:
+    Complements :func:`extract_skills_from_posting` with qualifier awareness:
 
     1. Qualifier phrases (``"Solid experience with X"``, ``"Familiarity with X"``,
        ``"5+ years of X"``) attribute a level — ``expert`` / ``middle`` / ``basic``.
@@ -284,9 +284,9 @@ def extract_mentions(
        ("no constraint"), so the mention list is complete.
 
     A skill found under several phrases keeps the strongest level. ``skill``
-    is the CV index key (the same string :func:`extract_skills_from_jd` returns).
+    is the CV index key (the same string :func:`extract_skills_from_posting` returns).
     """
-    if not jd_text or not cv_skill_index:
+    if not posting_text or not cv_skill_index:
         return []
 
     mentions: dict[str, tuple[int, Level | None, str]] = {}
@@ -298,7 +298,7 @@ def extract_mentions(
             mentions[skill] = (strength, level, raw)
 
     def _phrase_window(end: int) -> str:
-        raw_win = jd_text[end : end + _QUALIFIER_WINDOW]
+        raw_win = posting_text[end : end + _QUALIFIER_WINDOW]
         raw_win = re.split(r"[.;\n]", raw_win, maxsplit=1)[0]
         cut = len(raw_win)
         for pattern in _STOP_PATTERNS:
@@ -309,13 +309,13 @@ def extract_mentions(
 
     # Phase A — qualifier phrases and year counts.
     for pattern, level in _QUALIFIER_HEADS:
-        for match in pattern.finditer(jd_text):
+        for match in pattern.finditer(posting_text):
             window = _phrase_window(match.end())
             for skill in _skills_in_chunk(window, cv_skill_index):
                 raw = f"{match.group(0).strip()} {window.strip()}".strip()
                 _note(skill, level, raw)
 
-    for match in _YEARS_RE.finditer(jd_text):
+    for match in _YEARS_RE.finditer(posting_text):
         level = _years_level(match.group("num"), match.group("unit"))
         window = _phrase_window(match.end())
         for skill in _skills_in_chunk(window, cv_skill_index):
@@ -325,7 +325,7 @@ def extract_mentions(
     # Phase B — unqualified mentions keep level=None, unless an equivalent
     # normalized form already carries a level (e.g. "postgres" vs "postgresql").
     attributed_norm = {normalize_skill(skill) for skill in mentions}
-    for skill in extract_skills_from_jd(jd_text, cv_skill_index):
+    for skill in extract_skills_from_posting(posting_text, cv_skill_index):
         if normalize_skill(skill) not in attributed_norm:
             _note(skill, None, skill)
 

@@ -69,9 +69,11 @@ lines-after-imports = 2
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 pythonpath = ["."]
-addopts = "--timeout=60 --cov -m 'not e2e'"
+addopts = "--timeout=60 --cov -m 'not e2e and not firestore'"
 markers = [
     "e2e: end-to-end browser tests (Playwright); run with `just test-ui`",
+    "firestore: needs the Firestore emulator container; run with `just test-firestore`",
+    "needs_script: shells out to a repo script rather than importing it",
 ]
 
 [tool.coverage.run]

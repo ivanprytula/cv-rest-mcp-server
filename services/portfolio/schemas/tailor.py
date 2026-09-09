@@ -4,7 +4,7 @@ from pydantic import BaseModel
 
 
 class TailorRequest(BaseModel):
-    jd_text: str
+    posting_text: str
     title: str = ""
 
 

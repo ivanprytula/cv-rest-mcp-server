@@ -74,10 +74,10 @@ Operator-only (JWT required — `cv:read` / `cv:manage` scopes, see [AGENTS.md](
 | GET    | `/api/v1/cv/pdf`                       | Operator CV as PDF                              |
 | POST   | `/api/v1/cv/tailor`                    | Tailor the CV against a job description         |
 | GET    | `/api/v1/revisions`                    | List saved tailored revisions                   |
-| POST   | `/api/v1/gaps`                         | Store a job posting                             |
-| GET    | `/api/v1/gaps/postings`                | List stored postings                            |
-| POST   | `/api/v1/gaps/postings/{id}/analyze`   | Run gap analysis on a posting                   |
-| GET    | `/api/v1/gaps/postings/{id}`           | Read a stored gap report                        |
+| POST   | `/api/v1/postings`                     | Store a job posting                             |
+| GET    | `/api/v1/postings`                     | List stored postings                            |
+| POST   | `/api/v1/postings/{id}/analyze`        | Run gap analysis on a posting                   |
+| GET    | `/api/v1/postings/{id}`                | Read a stored gap report                        |
 | GET    | `/api/v1/gaps/roadmap`                 | Ranked "what to learn next" roadmap             |
 | \*     | `/api/v1/tracked-boards*`              | CRUD for ATS boards under continuous monitoring |
 | \*     | `/api/v1/documents/{kind}`             | CRUD for operator documents (CV / skill bank / JD vocabulary) |
@@ -109,7 +109,7 @@ Available tools:
 | `get_cv`               | —                                | JSON object with full CV data           |
 | `get_available_themes` | —                                | `list[str]` of theme names              |
 | `generate_cv_pdf_tool` | `theme: str`                     | Base64-encoded PDF bytes                |
-| `match_jd`             | `jd_text: str`, `title: str = ""` | Tailored CV JSON matched against a JD |
+| `match_job_posting`    | `posting_text: str`, `title: str = ""` | Tailored CV JSON matched against a posting |
 
 ## Themes
 

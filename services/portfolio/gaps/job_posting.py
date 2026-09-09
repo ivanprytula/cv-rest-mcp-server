@@ -1,7 +1,7 @@
 """Job-posting domain entities — no framework or DB imports.
 
-Mirrors `revisions/revision.py`'s layering: plain Pydantic models the
-service layer returns, built from ORM rows via `to_domain()`.
+Plain Pydantic models the service layer returns, built from ORM rows via
+`to_domain()`.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ class JobPosting(BaseModel):
     company: str
     title: str
     url: str
-    jd_text: str
+    posting_text: str
     content_hash: str
     first_seen_at: datetime
     last_seen_at: datetime
@@ -46,14 +46,14 @@ class JobPostingSummary(BaseModel):
 class RoadmapItem(BaseModel):
     """One term, ranked by how many postings demand it.
 
-    ``jd_count`` sorted descending is the product: "Kubernetes — 12 of 20
+    ``posting_count`` sorted descending is the product: "Kubernetes — 12 of 20
     postings — learn first". Everything else is supporting detail.
     """
 
     term: str
     tier: str
     group_id: str
-    jd_count: int
+    posting_count: int
     strongest_level_asked: str | None = None
     note: str | None = None
 

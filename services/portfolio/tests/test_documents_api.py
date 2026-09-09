@@ -122,13 +122,13 @@ class TestAnalysisUsesStoredDocuments:
 
     async def test_edited_vocabulary_changes_the_report(self, admin_client):
         stored = await admin_client.post(
-            "/api/v1/gaps", content=b"We need Rust and Elixir experience."
+            "/api/v1/postings", content=b"We need Rust and Elixir experience."
         )
         posting_id = stored.json()["id"]
 
         # Baseline: neither term is known, so nothing is found.
         before = (
-            await admin_client.post(f"/api/v1/gaps/postings/{posting_id}/analyze")
+            await admin_client.post(f"/api/v1/postings/{posting_id}/analyze")
         ).json()
         assert not any(g["term"] == "Rust" for g in before["gaps"])
 
@@ -138,7 +138,7 @@ class TestAnalysisUsesStoredDocuments:
             json={"terms": [{"term": "Rust", "group_id": "backend"}]},
         )
         after = (
-            await admin_client.post(f"/api/v1/gaps/postings/{posting_id}/analyze")
+            await admin_client.post(f"/api/v1/postings/{posting_id}/analyze")
         ).json()
         rust = next(g for g in after["gaps"] if g["term"] == "Rust")
         assert rust["tier"] == "unknown"

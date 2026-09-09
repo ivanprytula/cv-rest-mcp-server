@@ -33,7 +33,7 @@ from typing import Any, Literal
 
 from services.portfolio.matching.baseline import BaselineError, is_stale
 from services.portfolio.matching.matcher import LEVEL_STRENGTH
-from services.portfolio.matching.normalize import normalize_jd_text
+from services.portfolio.matching.normalize import normalize_posting_text
 from services.portfolio.matching.parser import extract_mentions
 from services.portfolio.matching.taxonomy import build_skill_index, normalize_skill
 
@@ -189,16 +189,16 @@ def _is_stronger(candidate: str | None, current: str | None) -> bool:
 
 
 def detect_gaps(
-    jd_text: str,
+    posting_text: str,
     bank_atoms: list[dict[str, Any]],
     deferred_atoms: list[dict[str, Any]],
     vocabulary: list[dict[str, Any]],
     live_cv: dict[str, Any],
 ) -> GapReport:
-    """Resolve every requirement in *jd_text* to a tier.
+    """Resolve every requirement in *posting_text* to a tier.
 
     Args:
-        jd_text: Raw job-description text; normalised here, so callers need
+        posting_text: Raw job-description text; normalised here, so callers need
             not pre-clean it.
         bank_atoms: The bank's active ``skills`` atoms.
         deferred_atoms: The bank's ``deferred`` atoms.
@@ -210,7 +210,7 @@ def detect_gaps(
         tier (cheapest to close first), then alphabetically.
     """
     index = _tier_index(bank_atoms, deferred_atoms, vocabulary, live_cv)
-    normalized = normalize_jd_text(jd_text)
+    normalized = normalize_posting_text(posting_text)
 
     # Strongest mention wins, in either order: "Kubernetes … expert Kubernetes"
     # and "expert Kubernetes … Kubernetes" both record `expert`.
@@ -294,7 +294,7 @@ _STOPWORDS = frozenset(
 
 
 def report_unrecognized(
-    jd_text: str, vocabulary: list[dict[str, Any]], *, top_n: int = 20
+    posting_text: str, vocabulary: list[dict[str, Any]], *, top_n: int = 20
 ) -> list[tuple[str, int]]:
     """Technical-looking tokens the vocabulary doesn't know, by frequency.
 
@@ -310,7 +310,7 @@ def report_unrecognized(
         for alias in entry.get("aliases", [])
     )
 
-    normalized = normalize_jd_text(jd_text)
+    normalized = normalize_posting_text(posting_text)
     counts: Counter[str] = Counter()
     for match in _TECHNICAL_TOKEN_RE.finditer(normalized):
         token = match.group(0)

@@ -1,6 +1,6 @@
 """Gap analysis application service.
 
-Constructed once in `main.py`'s lifespan (`app.state.gap_service`), reached
+Constructed once in the app's lifespan (`app.state.gap_service`), reached
 by routes via `dependencies.get_gap_service`.
 
 Degrade-don't-crash (mirrors `RevisionService`): a Postgres error logs a
@@ -26,14 +26,17 @@ from services.portfolio.documents.document_row import (
 from services.portfolio.documents.document_service import document_sources
 from services.portfolio.gaps.ats import TIMEOUT_SECONDS, USER_AGENT, fetcher_for
 from services.portfolio.gaps.gap_repository import GapRepository
-from services.portfolio.gaps.jd_document_store import JdDocument, JdDocumentStore
 from services.portfolio.gaps.job_posting import (
     JobPosting,
     JobPostingSummary,
     PhraseCluster,
     RoadmapItem,
 )
-from services.portfolio.gaps.job_posting_row import JdAnalysisRow, JobPostingRow
+from services.portfolio.gaps.job_posting_document_store import (
+    JobPostingDocument,
+    JobPostingDocumentStore,
+)
+from services.portfolio.gaps.job_posting_row import JobPostingRow, PostingAnalysisRow
 from services.portfolio.gaps.phrase_cluster_row import (
     PhraseClusterRow,
     PhraseEmbeddingRow,
@@ -75,30 +78,31 @@ EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
 CLUSTER_THRESHOLD = 0.82
 
 
-def content_hash(jd_text: str) -> str:
-    """SHA-256 hex digest of the JD text, for dedup (not a secret)."""
-    return hashlib.sha256(jd_text.encode("utf-8")).hexdigest()
+def content_hash(posting_text: str) -> str:
+    """SHA-256 hex digest of the posting text, for dedup (not a secret)."""
+    return hashlib.sha256(posting_text.encode("utf-8")).hexdigest()
 
 
 class GapService:
     """Orchestrates posting storage and gap analysis.
 
-    Depends on the `GapRepository` and `JdDocumentStore` Protocols, not
+    Depends on the `GapRepository` and `JobPostingDocumentStore` Protocols, not
     concrete implementations. `repo` (Postgres) holds the relational
-    skeleton of a posting; `jd_docs` (Firestore) holds its raw text and
-    per-portal metadata — see `jd_document_store.py` for why they're split.
-    The analysis itself lives in `matching/gap.py` as pure functions; this
-    service only handles persistence and the domain mapping.
+    skeleton of a posting; `posting_docs` (Firestore) holds its raw text and
+    per-portal metadata. The analysis itself is pure functions elsewhere;
+    this service only handles persistence and the domain mapping.
     """
 
-    def __init__(self, repo: GapRepository, jd_docs: JdDocumentStore) -> None:
+    def __init__(
+        self, repo: GapRepository, posting_docs: JobPostingDocumentStore
+    ) -> None:
         self._repo = repo
-        self._jd_docs = jd_docs
+        self._posting_docs = posting_docs
 
     async def store_posting(
         self,
         *,
-        jd_text: str,
+        posting_text: str,
         source: str = "manual",
         external_id: str | None = None,
         company: str = "",
@@ -126,10 +130,10 @@ class GapService:
         row is never reloaded after INSERT and a client-side default would
         leave `to_domain()` reading `None`.
 
-        Consistency across the two stores (no shared transaction — see
-        `jd_document_store.py`): the Firestore write happens *before* the
-        Postgres write, deliberately. If Firestore fails, nothing is written
-        to Postgres — no row can end up pointing at a missing document. If
+        Consistency across the two stores (no shared transaction): the
+        Firestore write happens *before* the Postgres write, deliberately.
+        If Firestore fails, nothing is written to Postgres — no row can end
+        up pointing at a missing document. If
         Firestore succeeds but the Postgres write then fails, the result is
         an orphaned Firestore document (unreachable, harmless, naturally
         overwritten by a future retry with the same text via `set()`'s
@@ -140,7 +144,7 @@ class GapService:
         still cause it), only made structurally impossible from this method.
         There is no reconciliation job for that residual case today.
         """
-        digest = content_hash(jd_text)
+        digest = content_hash(posting_text)
         if external_id is None:
             try:
                 existing = await self._repo.find_by_content_hash(digest)
@@ -148,18 +152,37 @@ class GapService:
                 logger.warning("Failed to check for duplicate posting", exc_info=True)
                 existing = None
             if existing is not None:
-                # Found by its content_hash, so its text is exactly jd_text
-                # — no Firestore round trip needed to hydrate it.
-                return existing.to_domain(jd_text=jd_text), True
+                # Re-save rather than trust the row: the document may be gone
+                # (killed mid-write, deleted out-of-band), and a row pointing
+                # at a missing document 404s on analyze forever. `set()` is
+                # idempotent and the text is identical by definition of the
+                # hash match, so this is a no-op in the healthy case.
+                try:
+                    await self._posting_docs.save(
+                        JobPostingDocument(
+                            content_hash=digest,
+                            posting_text=posting_text,
+                            raw_payload=raw_payload or {},
+                        )
+                    )
+                except Exception:
+                    logger.warning(
+                        "Failed to refresh document for existing posting %s",
+                        existing.id,
+                        exc_info=True,
+                    )
+                return existing.to_domain(posting_text=posting_text), True
 
         try:
-            await self._jd_docs.save(
-                JdDocument(
-                    content_hash=digest, jd_text=jd_text, raw_payload=raw_payload or {}
+            await self._posting_docs.save(
+                JobPostingDocument(
+                    content_hash=digest,
+                    posting_text=posting_text,
+                    raw_payload=raw_payload or {},
                 )
             )
         except Exception:
-            logger.warning("Failed to store JD document", exc_info=True)
+            logger.warning("Failed to store posting document", exc_info=True)
             return None, False
 
         now = datetime.now(UTC)
@@ -179,7 +202,7 @@ class GapService:
         except Exception:
             logger.warning("Failed to persist job posting", exc_info=True)
             return None, False
-        return stored.to_domain(jd_text=jd_text), False
+        return stored.to_domain(posting_text=posting_text), False
 
     async def sync_ats_posting(
         self,
@@ -187,7 +210,7 @@ class GapService:
         source: str,
         external_id: str,
         company_slug: str,
-        jd_text: str,
+        posting_text: str,
         company: str = "",
         title: str = "",
         url: str = "",
@@ -205,7 +228,7 @@ class GapService:
         Returns `(posting, status)` where status is one of "new", "changed",
         "unchanged", or "error" (posting is `None` only on "error").
         """
-        digest = content_hash(jd_text)
+        digest = content_hash(posting_text)
         try:
             existing = await self._repo.find_by_source_external_id(source, external_id)
         except Exception:
@@ -222,7 +245,7 @@ class GapService:
             status = "new"
 
         posting, _ = await self.store_posting(
-            jd_text=jd_text,
+            posting_text=posting_text,
             source=source,
             external_id=external_id,
             company=company,
@@ -335,7 +358,7 @@ class GapService:
                 source=source,
                 external_id=raw.external_id,
                 company_slug=company_slug,
-                jd_text=raw.jd_text,
+                posting_text=raw.posting_text,
                 title=raw.title,
                 url=raw.url,
                 raw_payload=raw.raw_payload,
@@ -404,7 +427,7 @@ class GapService:
         return results
 
     async def get_posting(self, posting_id: int) -> JobPosting | None:
-        """Read a posting, hydrating its text from the JD document store.
+        """Read a posting, hydrating its text from the document store.
 
         The single seam every caller (analyze/cluster/route handlers) goes
         through — none of them need to know the text lives in Firestore, not
@@ -419,20 +442,22 @@ class GapService:
             return None
 
         try:
-            document = await self._jd_docs.get(row.content_hash)
+            document = await self._posting_docs.get(row.content_hash)
         except Exception:
             logger.warning(
-                "Failed to read JD document for posting %s", posting_id, exc_info=True
+                "Failed to read posting document for posting %s",
+                posting_id,
+                exc_info=True,
             )
             return None
         if document is None:
             logger.warning(
-                "Posting %s has no JD document for content_hash %s",
+                "Posting %s has no document for content_hash %s",
                 posting_id,
                 row.content_hash,
             )
             return None
-        return row.to_domain(jd_text=document.jd_text)
+        return row.to_domain(posting_text=document.posting_text)
 
     async def list_postings(
         self, *, mentions_term: str | None = None
@@ -473,9 +498,9 @@ class GapService:
             return None
 
         report = detect_gaps(
-            posting.jd_text, bank_atoms, deferred_atoms, vocabulary, live_cv
+            posting.posting_text, bank_atoms, deferred_atoms, vocabulary, live_cv
         )
-        row = JdAnalysisRow(
+        row = PostingAnalysisRow(
             posting_id=posting_id,
             analyzer_version=ANALYZER_VERSION,
             result={"gaps": [asdict(gap) for gap in report.gaps]},
@@ -504,7 +529,7 @@ class GapService:
     async def build_roadmap(self) -> list[RoadmapItem]:
         """Rank gap terms by how many postings demand them.
 
-        `jd_count` descending is the product: the first row is what to learn
+        `posting_count` descending is the product: the first row is what to learn
         next.
         """
         try:
@@ -540,7 +565,7 @@ class GapService:
         if posting is None:
             return None
 
-        phrases = segment_phrases(posting.jd_text)
+        phrases = segment_phrases(posting.posting_text)
         if not phrases:
             return await self._save_clusters(posting_id, [], threshold)
 
@@ -660,9 +685,9 @@ async def load_analysis_inputs(
     """Load the bank, deferred pool and vocabulary, or fail loudly.
 
     Framework-free: raises `BaselineError` rather than an HTTP exception, so
-    both the FastAPI route (`gaps/routes.py`) and the standalone refresh
-    trigger process (`refresh_trigger.py`, no FastAPI request in scope) can
-    call this and translate the failure their own way.
+    both the FastAPI route and the standalone refresh trigger process (no
+    FastAPI request in scope) can call this and translate the failure their
+    own way.
 
     Reads through `DocumentService`, so an operator edit made via
     `PUT /api/v1/documents/{kind}` takes effect immediately, and a database

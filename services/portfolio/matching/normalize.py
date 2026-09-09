@@ -1,4 +1,4 @@
-"""Repair extraction artifacts in job-description text before matching.
+"""Repair extraction artifacts in job-posting text before matching.
 
 PDF and job-portal copy-paste introduce damage the skill matcher cannot see
 past: a word split across a line break (``"Kuber-\\nnetes"``) never matches
@@ -29,7 +29,7 @@ _BULLETS = re.compile(r"^[\s]*[•·▪◦‣∙⁃]+[\s]*", re.MULTILINE)
 _BLANK_RUNS = re.compile(r"\n{3,}")
 
 
-def normalize_jd_text(raw: str) -> str:
+def normalize_posting_text(raw: str) -> str:
     """Return *raw* with extraction artifacts repaired.
 
     Applies, in order: NFKC folding (ligatures, smart quotes, full-width

@@ -1,8 +1,7 @@
 """Tailored CV revision domain layer (ADR-023) — no framework/DB imports.
 
 `Revision` is the identity the rest of the system sees; `RevisionRow`
-(persistence) maps onto it via `.to_domain()`. Mirrors `auth/user.py`'s
-layering.
+(persistence) maps onto it via `.to_domain()`.
 """
 
 from __future__ import annotations

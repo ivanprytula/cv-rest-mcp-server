@@ -1,13 +1,13 @@
 """Revision application service (ADR-023).
 
-Construction happens once in `main.py`'s lifespan (`app.state.revision_service`),
+Construction happens once in the app's lifespan (`app.state.revision_service`),
 matching `UserService`/`PdfService`. Routes reach it via FastAPI's `Depends`
 (`services.portfolio.dependencies.get_revision_service`).
 
-Degrade-don't-crash (mirrors `CvSource`): a Postgres error on any operation
-logs a warning and returns `None`/`[]` rather than raising, so a transient DB
-hiccup never 500s the tailoring endpoint — the caller (routes.py) falls back
-to the file-glob path on `None`/empty.
+Degrade-don't-crash: a Postgres error on any operation logs a warning and
+returns `None`/`[]` rather than raising, so a transient DB hiccup never 500s
+the tailoring endpoint — the caller falls back to the file-glob path on
+`None`/empty.
 """
 
 from __future__ import annotations

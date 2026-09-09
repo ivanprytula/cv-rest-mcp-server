@@ -1,7 +1,7 @@
 """Revision repository — port (Protocol) + the one concrete adapter (ADR-023).
 
 `RevisionService` depends on the `RevisionRepository` Protocol, not
-`SqlAlchemyRevisionRepository` directly, mirroring `auth/user_repository.py`.
+`SqlAlchemyRevisionRepository` directly.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ class RevisionRepository(Protocol):
 class SqlAlchemyRevisionRepository:
     """Async SQLAlchemy revision repository (Postgres, `asyncpg`).
 
-    Takes a shared `async_sessionmaker` (built once in `main.py`'s lifespan
+    Takes a shared `async_sessionmaker` (built once in the app's lifespan
     from one app-wide engine — see `services.portfolio.db`), not its own
     `db_url`/engine — same rationale as `SqlAlchemyUserRepository`. Schema
     is Alembic-migrated, not derived from the model via `create_all`.

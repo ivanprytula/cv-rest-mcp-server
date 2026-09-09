@@ -143,7 +143,7 @@ uv run pytest --cov         # Coverage report (96% target)
 uv run pytest tests/test_e2e.py -xvs  # E2E with login flow
 ```
 
-Auth tests use fixture `user_service` (conftest.py:240) with seeded operator/correct-password. Routes reach it via monkeypatch.
+Auth tests use the `user_service` fixture in `tests/conftest.py`, with a seeded operator/correct-password. Routes reach it via monkeypatch.
 
 ## Code Style
 
@@ -154,8 +154,11 @@ tripped over:
 - Type-hint public functions/methods (incl. return types); Google-style docstrings.
 - `pathlib`, not `os.path`. F-strings, not `.format()`/`%`. EAFP over pre-checks.
 - Validate request bodies with Pydantic models.
-- No hardcoded file paths/line numbers in comments or docstrings — name the
-  function/fixture instead. Line refs go stale on the next rename or refactor.
+- No hardcoded file paths/line numbers in comments, docstrings, or `.md` docs —
+  name the function/fixture instead. Line refs go stale on the next rename or
+  refactor.
+- No self-references in docstrings: a module never names its own file/package,
+  and cross-references point at the exported class/function, not the filename.
 - US spelling throughout (e.g. `Normalized`, not `Normalised`; `Color`, not `Colour`).
 
 Follow [ACROSS design principles](https://github.com/your-org/cv-rest-mcp-server/blob/main/ACROSS.md):
