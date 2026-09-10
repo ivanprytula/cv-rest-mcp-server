@@ -48,7 +48,7 @@ create_dns_zone = true
 # read grant — add its secret ID to api_core_secret_ids (root variable, not
 # shown here since it holds no example placeholders worth templating):
 #   api_core_secret_ids = [
-#     "cv-refresh-token-pepper", "cv-first-admin-password", "cv-database-url", "cv-migration-database-url",
+#     "cv-refresh-token-pepper", "cv-first-admin-password", "cv-database-url", "cv-migration-database-url", "cv-anthropic-api-key",
 #   ]
 #   jwt_signing_secret_id = "cv-jwt-signing-key"  # separate var, own IAM binding
 services = {
@@ -88,6 +88,7 @@ services = {
     #   FIRST_ADMIN_PASSWORD = { secret_id = "cv-first-admin-password", version = "latest" }
     #   DATABASE_URL         = { secret_id = "cv-database-url", version = "latest" }
     #   MIGRATION_DATABASE_URL = { secret_id = "cv-migration-database-url", version = "latest" }
+    #   ANTHROPIC_API_KEY    = { secret_id = "cv-anthropic-api-key", version = "latest" }
     # }
     max_instances = 1
     memory        = "512Mi"

@@ -105,6 +105,7 @@ _ADMIN_PREFIXES = (
 _MANAGE_PREFIXES = (
     ("PUT", f"{API_V1_PREFIX}/documents"),
     ("DELETE", f"{API_V1_PREFIX}/documents"),
+    ("POST", f"{API_V1_PREFIX}/documents"),
 )
 
 _SCOPE_READ = "cv:read"
@@ -315,10 +316,17 @@ class JWTAuthMiddleware:
         status_code: int,
         detail: str,
     ) -> None:
+        # Sent directly via `send`, bypassing CORSMiddleware, so we add our
+        # own CORS header here — otherwise a cross-origin fetch() sees an
+        # opaque network error instead of a readable 401/403. A wildcard is
+        # safe: the credentialed paths never reach this deny path.
         response = JSONResponse(
             {"detail": detail},
             status_code=status_code,
-            headers={"WWW-Authenticate": _WWW_AUTHENTICATE},
+            headers={
+                "WWW-Authenticate": _WWW_AUTHENTICATE,
+                "Access-Control-Allow-Origin": "*",
+            },
         )
         await response(scope, receive, send)
 

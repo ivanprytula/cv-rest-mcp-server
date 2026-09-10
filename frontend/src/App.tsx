@@ -3,6 +3,7 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from './auth/AuthContext'
 import RequireAuth from './auth/RequireAuth'
 import AdminShell from './routes/AdminShell'
+import CvIntake from './routes/CvIntake'
 import Login from './routes/Login'
 import NewPosting from './routes/NewPosting'
 import PostingReport from './routes/PostingReport'
@@ -32,6 +33,7 @@ export default function App() {
               >
                 <Route index element={<Revisions />} />
                 <Route path="revisions/:id" element={<RevisionPreview />} />
+                <Route path="cv/import" element={<CvIntake />} />
                 <Route path="roadmap" element={<Roadmap />} />
                 <Route path="postings" element={<Postings />} />
                 <Route path="postings/new" element={<NewPosting />} />

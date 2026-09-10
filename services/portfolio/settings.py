@@ -88,6 +88,11 @@ class Settings(BaseSettings):
     # app role may legitimately migrate.
     migration_database_url: str = ""
 
+    # Anthropic API key for CV-intake extraction (Phase 3b). Empty disables
+    # the extraction route rather than failing startup — uploading a CV file
+    # for extraction is optional; every other feature works without it.
+    anthropic_api_key: str = ""
+
     @property
     def sync_database_url(self) -> str:
         """The migration URL, with a sync driver.

@@ -159,14 +159,14 @@ def test_corrupt_docx_raises_value_error():
 
 def test_oversized_payload_rejected():
     big = b"x" * (MAX_POSTING_PAYLOAD_BYTES + 1)
-    with pytest.raises(ValueError, match="10 MB"):
+    with pytest.raises(ValueError, match="5 MB"):
         parse_job_posting_input(big, "text/plain")
 
 
 def test_oversized_json_rejected():
     huge_jd = {"posting_text": "y" * (MAX_POSTING_PAYLOAD_BYTES + 1)}
     body = f'{{"posting_text": "{huge_jd["posting_text"]}"}}'.encode()
-    with pytest.raises(ValueError, match="10 MB"):
+    with pytest.raises(ValueError, match="5 MB"):
         parse_job_posting_input(body, "application/json")
 
 

@@ -24,7 +24,7 @@ from services.portfolio.schemas.tailor import TailorRequest
 
 
 # Uploads larger than this are rejected — jobs, like CVs, are small text.
-MAX_POSTING_PAYLOAD_BYTES = 10 * 1024 * 1024
+MAX_POSTING_PAYLOAD_BYTES = 5 * 1024 * 1024
 
 
 class PayloadTooLargeError(ValueError):

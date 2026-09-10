@@ -6,6 +6,7 @@ import sys
 from contextlib import asynccontextmanager
 from typing import Any, cast
 
+import anthropic
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -41,6 +42,7 @@ from services.portfolio.constants import (
     STATIC_DIR,
     TEMPLATE_DIR,
 )
+from services.portfolio.cv_extraction import CVExtractionService
 from services.portfolio.cv_source import build_cv_source_from_settings
 from services.portfolio.db import build_engine, build_session_factory
 from services.portfolio.db_migrations import upgrade_head
@@ -113,6 +115,7 @@ app = FastAPI(
         "**MCP** — mount `/mcp` in any MCP client "
         "(config snippet on the landing page)."
     ),
+    swagger_ui_parameters={"persistAuthorization": True},
 )
 app.state.limiter = limiter
 
@@ -149,7 +152,7 @@ _CSP_SCRIPT_HASHES = _compute_csp_hashes()
 _CSP_DIRECTIVE = (
     f"default-src 'none'; "
     f"script-src 'self' {_CSP_SCRIPT_HASHES} "
-    f"'sha256-QOOQu4W1oxGqd2nbXbxiA1Di6OHQOLQD+o+G9oWL8YY=' "
+    f"'sha256-XTvE4/j+4VrcOi0834D9ftRidsHshjIBrS9hnK4HmY0=' "  # pragma: allowlist secret
     f"https://cdn.jsdelivr.net; "
     f"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; "
     f"img-src 'self' data: https://fastapi.tiangolo.com; "
@@ -372,6 +375,14 @@ async def lifespan(app):
     if operator_tenant_id is not None:
         await document_service.seed_from_files(
             document_sources(settings), tenant_id=operator_tenant_id
+        )
+
+    # CV-intake extraction (Phase 3b): optional, unlike every service above.
+    # No API key means the feature is off, not a startup failure — nothing
+    # else in this app depends on it.
+    if settings.anthropic_api_key:
+        app.state.cv_extraction_service = CVExtractionService(
+            anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
         )
 
     async with mcp_app.lifespan(app):

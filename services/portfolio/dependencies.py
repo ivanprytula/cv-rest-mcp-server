@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     # class, only static analysis does.
     from services.portfolio.auth.refresh_token_service import RefreshTokenService
     from services.portfolio.auth.user_service import UserService
+    from services.portfolio.cv_extraction import CVExtractionService
     from services.portfolio.documents.document_service import DocumentService
     from services.portfolio.gaps.gap_service import GapService
     from services.portfolio.gaps.tracked_board_service import TrackedBoardService
@@ -57,6 +58,22 @@ async def get_document_service(request: Request) -> DocumentService:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Document service not initialized",
+        )
+    return service
+
+
+async def get_cv_extraction_service(request: Request) -> CVExtractionService:
+    """The CV extraction service, or 503 when no API key is configured.
+
+    Distinct from get_optional_gap_service's pattern: extraction has no
+    degraded-but-working fallback, so an unconfigured key must reject the
+    request rather than silently skip a step.
+    """
+    service = getattr(request.app.state, "cv_extraction_service", None)
+    if service is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="CV extraction is not configured",
         )
     return service
 
