@@ -293,6 +293,7 @@ def match_job_posting(posting_text: str, title: str = "") -> dict:
         raise RuntimeError("PDF service not initialized")
     from services.portfolio.matching.baseline import BaselineError, get_baseline
     from services.portfolio.matching.tailor import tailor_cv
+    from services.portfolio.matching.taxonomy import build_alias_table
 
     try:
         baseline_atoms = get_baseline()
@@ -300,7 +301,14 @@ def match_job_posting(posting_text: str, title: str = "") -> dict:
         logger.warning("Skill bank unavailable: %s", exc)
         raise ToolError("CV tailoring failed") from exc
     try:
-        return tailor_cv(posting_text, baseline_atoms, pdf_service.cv_data, title=title)
+        aliases = build_alias_table(baseline_atoms)
+        return tailor_cv(
+            posting_text,
+            baseline_atoms,
+            pdf_service.cv_data,
+            title=title,
+            aliases=aliases,
+        )
     except Exception:
         logger.exception("MCP JD tailoring failed")
         raise ToolError("CV tailoring failed") from None

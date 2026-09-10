@@ -203,13 +203,15 @@ def validate_bank_payload(kind: str, payload: Any) -> None:
     parse_baseline(payload, "deferred")
 
 
-def build_atom_index(atoms: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+def build_atom_index(
+    atoms: list[dict[str, Any]], aliases: dict[str, str] | None = None
+) -> dict[str, dict[str, Any]]:
     """Build a normalized lookup from the active atoms.
 
     Keys are canonical forms of the atom and its aliases (lowercase), so a
     JD mention like ``"k8s"`` resolves to the ``Kubernetes`` atom via the
-    static alias map, and a per-atom alias like ``"claude code cli"`` is
-    indexable on its own.
+    tenant's own alias table (see :func:`build_alias_table`), and a per-atom
+    alias like ``"claude code cli"`` is indexable on its own.
 
     Canonical names are inserted FIRST: an atom's own name is authoritative,
     so an alias can never shadow a real atom (e.g. an "API security" atom
@@ -218,12 +220,12 @@ def build_atom_index(atoms: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     """
     index: dict[str, dict[str, Any]] = {}
     for atom in atoms:
-        key = normalize_skill(atom["atom"])
+        key = normalize_skill(atom["atom"], aliases)
         if key:
             index.setdefault(key, atom)
     for atom in atoms:
         for alias in atom.get("aliases", []):
-            key = normalize_skill(alias)
+            key = normalize_skill(alias, aliases)
             if key and key not in index:
                 index[key] = atom
     return index

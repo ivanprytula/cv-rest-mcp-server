@@ -58,7 +58,7 @@ tenant_id_dep = Depends(get_tenant_id)
 
 async def _analysis_inputs(
     documents: DocumentService, tenant_id: TenantId
-) -> tuple[list[dict], list[dict], list[dict]]:
+) -> tuple[list[dict], list[dict], list[dict], dict[str, str]]:
     """Route-layer wrapper: translates a loader failure into a 500.
 
     The loader itself (`load_analysis_inputs`) is framework-free so the
@@ -138,7 +138,7 @@ async def analyze_job_posting(
     Idempotent: re-analyzing at the same analyzer version overwrites the
     previous result rather than accumulating rows.
     """
-    bank, deferred, vocabulary = await _analysis_inputs(documents, tenant_id)
+    bank, deferred, vocabulary, aliases = await _analysis_inputs(documents, tenant_id)
     live_cv = await documents.read(
         KIND_CV,
         tenant_id=tenant_id,
@@ -150,6 +150,7 @@ async def analyze_job_posting(
         deferred_atoms=deferred,
         vocabulary=vocabulary,
         live_cv=live_cv if live_cv is not None else pdf_service.cv_data,
+        aliases=aliases,
     )
     if report is None:
         raise HTTPException(status_code=404, detail="Job posting not found")
@@ -157,7 +158,9 @@ async def analyze_job_posting(
     unrecognized = (
         [
             token
-            for token, _count in report_unrecognized(posting.posting_text, vocabulary)
+            for token, _count in report_unrecognized(
+                posting.posting_text, vocabulary, aliases=aliases
+            )
         ]
         if posting is not None
         else []

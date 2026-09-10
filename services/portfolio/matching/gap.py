@@ -133,6 +133,7 @@ def _tier_index(
     deferred_atoms: list[dict[str, Any]],
     vocabulary: list[dict[str, Any]],
     live_cv: dict[str, Any],
+    aliases: dict[str, str] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Map every known term to exactly one tier.
 
@@ -143,39 +144,41 @@ def _tier_index(
     de-duplication, and no term can be silently double-counted.
     """
     live_index = build_skill_index(
-        live_cv.get("skills", []), live_cv.get("additional_skills")
+        live_cv.get("skills", []), live_cv.get("additional_skills"), aliases
     )
 
     merged: dict[str, dict[str, Any]] = {}
 
     # Widest first, so narrower tiers overwrite: vocabulary < deferred < bank.
     for atom in vocabulary:
-        key = normalize_skill(atom["atom"])
+        key = normalize_skill(atom["atom"], aliases)
         if key:
             merged.setdefault(key, {**atom, "_tier": "unknown"})
 
     for atom in deferred_atoms:
-        for key in _atom_keys(atom):
+        for key in _atom_keys(atom, aliases):
             merged[key] = {**atom, "_tier": "deferred"}
 
     for atom in bank_atoms:
-        if normalize_skill(atom["atom"]) not in live_index:
+        if normalize_skill(atom["atom"], aliases) not in live_index:
             tier = "unvouched"
         else:
             # On the CV — but claiming it and defending it are different
             # things. A skill unused for years is shown to a recruiter while
             # needing nearly as much study as one never learned.
             tier = "stale" if is_stale(atom) else "covered"
-        for key in _atom_keys(atom):
+        for key in _atom_keys(atom, aliases):
             merged[key] = {**atom, "_tier": tier}
 
     return merged
 
 
-def _atom_keys(atom: dict[str, Any]) -> list[str]:
+def _atom_keys(
+    atom: dict[str, Any], aliases: dict[str, str] | None = None
+) -> list[str]:
     """Canonical key plus alias keys for one atom."""
-    keys = [normalize_skill(atom["atom"])]
-    keys.extend(normalize_skill(alias) for alias in atom.get("aliases", []))
+    keys = [normalize_skill(atom["atom"], aliases)]
+    keys.extend(normalize_skill(alias, aliases) for alias in atom.get("aliases", []))
     return [key for key in keys if key]
 
 
@@ -194,6 +197,7 @@ def detect_gaps(
     deferred_atoms: list[dict[str, Any]],
     vocabulary: list[dict[str, Any]],
     live_cv: dict[str, Any],
+    aliases: dict[str, str] | None = None,
 ) -> GapReport:
     """Resolve every requirement in *posting_text* to a tier.
 
@@ -204,18 +208,19 @@ def detect_gaps(
         deferred_atoms: The bank's ``deferred`` atoms.
         vocabulary: JD-side terms from :func:`load_vocabulary`.
         live_cv: The operator's public CV, defining the ``covered`` tier.
+        aliases: The tenant's own alias table, from :func:`build_alias_table`.
 
     Returns:
         A :class:`GapReport` whose gaps are unique by term and ordered by
         tier (cheapest to close first), then alphabetically.
     """
-    index = _tier_index(bank_atoms, deferred_atoms, vocabulary, live_cv)
+    index = _tier_index(bank_atoms, deferred_atoms, vocabulary, live_cv, aliases)
     normalized = normalize_posting_text(posting_text)
 
     # Strongest mention wins, in either order: "Kubernetes … expert Kubernetes"
     # and "expert Kubernetes … Kubernetes" both record `expert`.
     best: dict[str, SkillGap] = {}
-    for mention in extract_mentions(normalized, index):
+    for mention in extract_mentions(normalized, index, aliases):
         entry = index[mention.skill]
         term = entry["atom"]
         existing = best.get(term)
@@ -294,7 +299,11 @@ _STOPWORDS = frozenset(
 
 
 def report_unrecognized(
-    posting_text: str, vocabulary: list[dict[str, Any]], *, top_n: int = 20
+    posting_text: str,
+    vocabulary: list[dict[str, Any]],
+    *,
+    top_n: int = 20,
+    aliases: dict[str, str] | None = None,
 ) -> list[tuple[str, int]]:
     """Technical-looking tokens the vocabulary doesn't know, by frequency.
 
@@ -303,9 +312,9 @@ def report_unrecognized(
     Doubles as the coverage metric: once real JDs come back mostly stopword
     noise, the vocabulary is complete enough to stop hand-curating.
     """
-    known = {normalize_skill(entry["atom"]) for entry in vocabulary}
+    known = {normalize_skill(entry["atom"], aliases) for entry in vocabulary}
     known.update(
-        normalize_skill(alias)
+        normalize_skill(alias, aliases)
         for entry in vocabulary
         for alias in entry.get("aliases", [])
     )
@@ -314,7 +323,7 @@ def report_unrecognized(
     counts: Counter[str] = Counter()
     for match in _TECHNICAL_TOKEN_RE.finditer(normalized):
         token = match.group(0)
-        key = normalize_skill(token)
+        key = normalize_skill(token, aliases)
         if not key or key in known or token.lower() in _STOPWORDS:
             continue
         counts[token] += 1

@@ -79,7 +79,10 @@ def extract_company(posting_text: str) -> str:
 
 
 def _fuzzy_candidates(
-    posting_text: str, atom_index: dict[str, dict[str, Any]], threshold: float
+    posting_text: str,
+    atom_index: dict[str, dict[str, Any]],
+    threshold: float,
+    aliases: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     """Typo/paraphrase fallback: fuzzy-match unclaimed JD words to atoms.
 
@@ -98,7 +101,11 @@ def _fuzzy_candidates(
         # Membership is checked on the normalized key too, so the JD's
         # "postgresql" spelling cannot bypass a level-vetted "postgres" atom.
         key = word.rstrip(".,")
-        if key in atom_index or normalize_skill(key) in atom_index or key in unclaimed:
+        if (
+            key in atom_index
+            or normalize_skill(key, aliases) in atom_index
+            or key in unclaimed
+        ):
             continue
         unclaimed.append(key)
     unclaimed = unclaimed[:_FUZZY_MAX_TOKENS]
@@ -115,7 +122,7 @@ def _fuzzy_candidates(
                 best_score = score
                 best_atom = atom
         if best_score >= threshold and best_atom is not None:
-            canonical = normalize_skill(best_atom["atom"])
+            canonical = normalize_skill(best_atom["atom"], aliases)
             candidates.setdefault(canonical, best_atom)
     return list(candidates.values())
 
@@ -128,7 +135,9 @@ def _qualifies(atom: dict[str, Any], required_level: str | None) -> bool:
 
 
 def _trust_filter(
-    atoms: list[dict[str, Any]], live_cv_index: dict[str, dict[str, Any]]
+    atoms: list[dict[str, Any]],
+    live_cv_index: dict[str, dict[str, Any]],
+    aliases: dict[str, str] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Split matched atoms into those vouched for on the live CV and the rest.
 
@@ -140,7 +149,7 @@ def _trust_filter(
     kept: list[dict[str, Any]] = []
     dropped: list[dict[str, Any]] = []
     for atom in atoms:
-        if normalize_skill(atom["atom"]) in live_cv_index:
+        if normalize_skill(atom["atom"], aliases) in live_cv_index:
             kept.append(atom)
         else:
             dropped.append(atom)
@@ -153,7 +162,9 @@ def _trust_filter(
     return kept, dropped
 
 
-def _canonical_skill_order(live_cv: dict[str, Any]) -> dict[str, Any]:
+def _canonical_skill_order(
+    live_cv: dict[str, Any], aliases: dict[str, str] | None = None
+) -> dict[str, Any]:
     """Map the live CV's skills structure to stable ordering positions.
 
     The operator's public CV is the ordering template for tailored output:
@@ -172,7 +183,7 @@ def _canonical_skill_order(live_cv: dict[str, Any]) -> dict[str, Any]:
             subs[sub.get("name", "")] = {
                 "index": sub_index,
                 "items": {
-                    normalize_skill(item): item_index
+                    normalize_skill(item, aliases): item_index
                     for item_index, item in enumerate(sub.get("items", []))
                 },
             }
@@ -181,7 +192,9 @@ def _canonical_skill_order(live_cv: dict[str, Any]) -> dict[str, Any]:
 
 
 def _group_atoms(
-    atoms: list[dict[str, Any]], canonical: dict[str, Any]
+    atoms: list[dict[str, Any]],
+    canonical: dict[str, Any],
+    aliases: dict[str, str] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Group matched atoms into CV skills/additional_skills structures.
 
@@ -221,7 +234,7 @@ def _group_atoms(
             .get("subs", {})
             .get(sub, {})
             .get("items", {})
-            .get(normalize_skill(atom["atom"]), _UNKNOWN_POS)
+            .get(normalize_skill(atom["atom"], aliases), _UNKNOWN_POS)
         )
 
     def _item_key(pair: tuple[dict[str, Any], int], group: str, sub: str) -> tuple:
@@ -267,6 +280,7 @@ def tailor_cv(
     *,
     title: str = "",
     threshold: float = 0.8,
+    aliases: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Build a tailored copy of *live_cv* from *posting_text* + the skill bank.
 
@@ -275,7 +289,12 @@ def tailor_cv(
     ``match_job_posting`` MCP tool consume.
     """
     tailored, _ = tailor_with_gaps(
-        posting_text, baseline_atoms, live_cv, title=title, threshold=threshold
+        posting_text,
+        baseline_atoms,
+        live_cv,
+        title=title,
+        threshold=threshold,
+        aliases=aliases,
     )
     return tailored
 
@@ -287,6 +306,7 @@ def tailor_with_gaps(
     *,
     title: str = "",
     threshold: float = 0.8,
+    aliases: dict[str, str] | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Tailor *live_cv*, also returning the atoms the trust policy dropped.
 
@@ -311,13 +331,13 @@ def tailor_with_gaps(
     A JD that matches nothing yields empty skill sections — the tailored
     result is a faithful match verdict, not a padded copy of the live CV.
     """
-    atom_index = build_atom_index(baseline_atoms)
+    atom_index = build_atom_index(baseline_atoms, aliases)
 
     # Required level per atom canonical (strongest mention wins).
     required: dict[str, str | None] = {}
-    for mention in extract_mentions(posting_text, atom_index):
+    for mention in extract_mentions(posting_text, atom_index, aliases):
         atom = atom_index[mention.skill]
-        canonical = normalize_skill(atom["atom"])
+        canonical = normalize_skill(atom["atom"], aliases)
         if canonical not in required:
             required[canonical] = mention.level
         elif mention.level is not None:
@@ -335,15 +355,17 @@ def tailor_with_gaps(
             candidates.setdefault(canonical, atom)
 
     # Fuzzy fallback: unclaimed JD words impose no level constraint.
-    for atom in _fuzzy_candidates(posting_text, atom_index, threshold):
-        candidates.setdefault(normalize_skill(atom["atom"]), atom)
+    for atom in _fuzzy_candidates(posting_text, atom_index, threshold, aliases):
+        candidates.setdefault(normalize_skill(atom["atom"], aliases), atom)
 
     live_index = build_skill_index(
-        live_cv.get("skills", []), live_cv.get("additional_skills")
+        live_cv.get("skills", []), live_cv.get("additional_skills"), aliases
     )
-    trusted, dropped = _trust_filter(list(candidates.values()), live_index)
+    trusted, dropped = _trust_filter(list(candidates.values()), live_index, aliases)
 
-    skills, additional = _group_atoms(trusted, _canonical_skill_order(live_cv))
+    skills, additional = _group_atoms(
+        trusted, _canonical_skill_order(live_cv, aliases), aliases
+    )
 
     tailored = dict(live_cv)
     tailored["skills"] = skills
