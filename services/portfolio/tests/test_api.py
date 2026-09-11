@@ -92,7 +92,7 @@ async def test_health(client):
     assert resp.status_code == status.HTTP_200_OK
     body = resp.json()
     assert body["status"] == "ok"
-    assert body["cv_source"] in {"gcs", "file", "placeholder", "unknown"}
+    assert body["cv_source"] in {"database", "file", "unavailable", "unknown"}
 
 
 async def test_get_cv(client, override_pdf_service):

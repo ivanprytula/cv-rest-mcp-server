@@ -10,6 +10,8 @@ from fastapi.responses import HTMLResponse, Response
 
 from services.portfolio.constants import API_V1_PREFIX, CONFIG_DIR
 from services.portfolio.dependencies import (
+    get_document_service,
+    get_operator_tenant_id,
     get_optional_gap_service,
     get_pdf_service,
     get_revision_service,
@@ -18,7 +20,7 @@ from services.portfolio.job_posting_input import (
     PayloadTooLargeError,
     parse_job_posting_input,
 )
-from services.portfolio.matching.baseline import BaselineError, get_baseline
+from services.portfolio.matching.baseline import BaselineError, get_baseline_async
 from services.portfolio.matching.tailor import tailor_cv
 from services.portfolio.matching.taxonomy import build_alias_table
 from services.portfolio.pdf_generator import ThemeNotFoundError
@@ -36,6 +38,8 @@ router = APIRouter()
 get_pdf_service_dep = Depends(get_pdf_service)
 get_revision_service_dep = Depends(get_revision_service)
 get_optional_gap_service_dep = Depends(get_optional_gap_service)
+get_document_service_dep = Depends(get_document_service)
+get_operator_tenant_id_dep = Depends(get_operator_tenant_id)
 
 MCP_CLIENTS_PATH = CONFIG_DIR / "mcp_clients.json"
 
@@ -165,7 +169,7 @@ async def _load_tailored_revision(
     ``saved_to`` (or the literal ``latest``), looked up in Postgres first.
     On any DB error (or a selector predating Postgres — a bare
     ``cv_tailored-<ts>.json`` filename), falls back to the file-glob path
-    (degrade-don't-crash, mirrors ``CvSource``). An empty ``selector`` falls
+    (degrade-don't-crash, mirrors ``DocumentService``). An empty ``selector`` falls
     back to the live CV without ever touching ``revision_service`` — the
     public, untailored surface (most traffic on ``/cv/html`` etc.) must stay
     independent of whether the revision service initialized at all.
@@ -221,7 +225,7 @@ def _client_mcp_configs(mcp_url: str) -> list[dict]:
 @limits("30/minute", "120/hour")
 async def root(request: Request, pdf_service=get_pdf_service_dep):
     """Landing page introducing the CV owner, with ready-to-copy MCP config and PDF download."""
-    cv = pdf_service.cv_data
+    cv = await pdf_service.cv_data()
     mcp_url = str(request.base_url).rstrip("/") + "/mcp"
     html = render_template(
         "landing.html",
@@ -240,11 +244,11 @@ async def root(request: Request, pdf_service=get_pdf_service_dep):
 @router.get("/health", tags=["System"], responses=_responses(429))
 @limiter.limit("60/minute")
 async def health(request: Request):
-    """Liveness probe: returns service status and the active CV source kind (file/GCS)."""
+    """Liveness probe: returns service status and the active CV source kind (database/file)."""
     pdf_service = getattr(request.app.state, "pdf_service", None)
     return {
         "status": "ok",
-        "cv_source": pdf_service.cv_source_kind if pdf_service else "unknown",
+        "cv_source": await pdf_service.cv_source_kind() if pdf_service else "unknown",
     }
 
 
@@ -256,7 +260,7 @@ async def get_cv_json(request: Request, pdf_service=get_pdf_service_dep):
     Public, unauthenticated, live-CV-only — see /api/v1/cv for the
     operator-only tailored equivalent.
     """
-    return pdf_service.cv_data
+    return await pdf_service.cv_data()
 
 
 @router.get(f"{API_V1_PREFIX}/cv", tags=["CV"], responses=_responses(404, 429, 503))
@@ -274,7 +278,7 @@ async def get_tailored_cv_json(
     `latest`. Powers the SPA's revision-preview page.
     """
     return await _load_tailored_revision(
-        tailored, default=pdf_service.cv_data, revision_service=revision_service
+        tailored, default=await pdf_service.cv_data(), revision_service=revision_service
     )
 
 
@@ -303,7 +307,7 @@ async def get_cv_html(
         raise ThemeNotFoundError(theme)
     cv = await _load_tailored_revision(
         tailored,
-        default=pdf_service.cv_data,
+        default=await pdf_service.cv_data(),
         revision_service=getattr(request.app.state, "revision_service", None),
     )
     html = render_html(
@@ -333,9 +337,10 @@ async def preview_cv(
     if theme not in pdf_service.themes:
         raise ThemeNotFoundError(theme)
     kwargs = _consent_kwargs(company, consent)
+    cv = await pdf_service.cv_data()
     html = render_template(
         "preview.html",
-        cv_name=pdf_service.cv_data.get("name", ""),
+        cv_name=cv.get("name", ""),
         theme=theme,
         themes=pdf_service.list_themes(),
         consent=kwargs["consent"],
@@ -374,7 +379,7 @@ async def get_cv_pdf(
     `/api/v1/cv/pdf` for the authenticated, operator-only equivalent.
     """
     return await _render_cv_pdf_response(
-        pdf_service.cv_data, theme, company, consent, pdf_service
+        await pdf_service.cv_data(), theme, company, consent, pdf_service
     )
 
 
@@ -397,7 +402,7 @@ async def get_tailored_cv_pdf(
     `/cv/pdf` never accepts a `tailored` selector.
     """
     cv = await _load_tailored_revision(
-        tailored, default=pdf_service.cv_data, revision_service=revision_service
+        tailored, default=await pdf_service.cv_data(), revision_service=revision_service
     )
     return await _render_cv_pdf_response(cv, theme, company, consent, pdf_service)
 
@@ -413,6 +418,8 @@ async def tailor_cv_endpoint(
     pdf_service=get_pdf_service_dep,
     revision_service=get_revision_service_dep,
     gap_service=get_optional_gap_service_dep,
+    document_service=get_document_service_dep,
+    operator_tenant_id=get_operator_tenant_id_dep,
 ):
     """Match a job posting against the skill bank and emit a tailored CV revision.
 
@@ -451,7 +458,9 @@ async def tailor_cv_endpoint(
         raise HTTPException(status_code=422, detail="posting_text is required")
 
     try:
-        baseline_atoms = get_baseline()
+        baseline_atoms = await get_baseline_async(
+            document_service, tenant_id=operator_tenant_id
+        )
     except BaselineError as exc:
         logger.warning("Skill bank unavailable: %s", exc)
         raise HTTPException(status_code=500, detail="CV tailoring failed") from None
@@ -461,7 +470,7 @@ async def tailor_cv_endpoint(
         tailored = tailor_cv(
             posting.posting_text,
             baseline_atoms,
-            pdf_service.cv_data,
+            await pdf_service.cv_data(),
             title=posting.title,
             aliases=aliases,
         )

@@ -62,6 +62,23 @@ async def get_document_service(request: Request) -> DocumentService:
     return service
 
 
+async def get_operator_tenant_id(request: Request) -> TenantId:
+    """The operator's tenant: whoever owns the install-wide public CV surface.
+
+    Backs the unauthenticated public routes (`/cv*`, `/mcp`) and the MCP tool
+    surface, neither of which carries a JWT to derive a tenant from — see
+    `auth.middleware._is_protected`. Resolved once at lifespan startup from
+    `settings.first_admin_username`, same as `resolve_operator_tenant_id`.
+    """
+    tenant_id = getattr(request.app.state, "operator_tenant_id", None)
+    if tenant_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="No operator configured",
+        )
+    return tenant_id
+
+
 async def get_cv_extraction_service(request: Request) -> CVExtractionService:
     """The CV extraction service, or 503 when no API key is configured.
 

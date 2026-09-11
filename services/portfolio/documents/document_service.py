@@ -8,7 +8,7 @@ unreachable.
 That fallback is the point, not a nicety: without it `just dev-local` would
 need Postgres running to render a CV at all, and a transient DB error would
 take down CV rendering entirely. Same degrade-don't-crash posture as
-`RevisionService` and `CvSource`.
+`RevisionService`.
 """
 
 from __future__ import annotations

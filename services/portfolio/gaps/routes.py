@@ -149,7 +149,7 @@ async def analyze_job_posting(
         bank_atoms=bank,
         deferred_atoms=deferred,
         vocabulary=vocabulary,
-        live_cv=live_cv if live_cv is not None else pdf_service.cv_data,
+        live_cv=live_cv if live_cv is not None else await pdf_service.cv_data(),
         aliases=aliases,
     )
     if report is None:

@@ -14,9 +14,14 @@ import logging
 import re
 from datetime import date
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from services.portfolio.matching.taxonomy import normalize_skill
+
+
+if TYPE_CHECKING:
+    from services.portfolio.documents.document_service import DocumentService
+    from services.portfolio.tenancy import TenantId
 
 
 logger = logging.getLogger(__name__)
@@ -240,7 +245,7 @@ def get_baseline(path: Path | None = None, key: str = "skills") -> list[dict[str
     The resolved path follows ``settings.cv_baseline_path``. Memoization is
     keyed by (path, key, size, mtime_ns), so editing the bank file is picked
     up on the next tailoring call without a server restart — the same
-    generation-checked hot-reload spirit as CvSource. ``key`` is part of the
+    generation-checked hot-reload spirit as DocumentService. ``key`` is part of the
     cache key so ``"skills"`` and ``"deferred"`` never alias each other.
     """
     if path is None:
@@ -258,3 +263,21 @@ def get_baseline(path: Path | None = None, key: str = "skills") -> list[dict[str
         cached = load_baseline(path, key)
         _cache[cache_key] = cached
     return cached
+
+
+async def get_baseline_async(
+    documents: DocumentService, *, tenant_id: TenantId, key: str = "skills"
+) -> list[dict[str, Any]]:
+    """Tenant-scoped equivalent of :func:`get_baseline`: reads through
+    `DocumentService` (DB row, else the shipped file) instead of the file
+    directly, so an operator edit made via the API takes effect immediately.
+    """
+    from services.portfolio.documents.document_row import KIND_SKILL_BANK
+    from services.portfolio.settings import settings
+
+    raw = await documents.read(
+        KIND_SKILL_BANK, tenant_id=tenant_id, fallback_path=settings.cv_baseline_path
+    )
+    if raw is None:
+        raise BaselineError("skill bank is unavailable")
+    return parse_baseline(raw, key)
