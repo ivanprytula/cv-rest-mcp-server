@@ -6,8 +6,10 @@ import AdminShell from './routes/AdminShell'
 import CvIntake from './routes/CvIntake'
 import Login from './routes/Login'
 import NewPosting from './routes/NewPosting'
+import Onboarding from './routes/Onboarding'
 import PostingReport from './routes/PostingReport'
 import Postings from './routes/Postings'
+import Register from './routes/Register'
 import RevisionPreview from './routes/RevisionPreview'
 import Revisions from './routes/Revisions'
 import Roadmap from './routes/Roadmap'
@@ -23,6 +25,7 @@ export default function App() {
           <BrowserRouter>
             <Routes>
               <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
               <Route
                 path="/"
                 element={
@@ -32,6 +35,7 @@ export default function App() {
                 }
               >
                 <Route index element={<Revisions />} />
+                <Route path="onboarding" element={<Onboarding />} />
                 <Route path="revisions/:id" element={<RevisionPreview />} />
                 <Route path="cv/import" element={<CvIntake />} />
                 <Route path="roadmap" element={<Roadmap />} />
