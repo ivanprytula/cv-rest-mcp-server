@@ -548,3 +548,24 @@ async def list_tailored_revisions(
         reverse=True,
     )
     return {"revisions": [_revision_summary_from_file(p) for p in files]}
+
+
+@router.delete(
+    f"{API_V1_PREFIX}/revisions/{{revision_id}}",
+    status_code=204,
+    tags=["CV"],
+    responses=_responses(404, 429),
+)
+@limits("30/minute", "300/hour")
+async def delete_tailored_revision(
+    request: Request, revision_id: int, revision_service=get_revision_service_dep
+):
+    """Admin-only: permanently remove a tailored CV revision.
+
+    Only removes Postgres-backed revisions — the legacy file-glob fallback
+    (served when Postgres has no rows) has no delete path; it's a read-only
+    dev-mode fallback, not a store this endpoint manages.
+    """
+    deleted = await revision_service.delete(revision_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Revision not found")

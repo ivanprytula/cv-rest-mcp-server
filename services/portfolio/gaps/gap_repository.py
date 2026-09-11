@@ -9,6 +9,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
+from sqlalchemy import delete as sa_delete
 from sqlalchemy import select, text
 from sqlalchemy import true as sa_true
 from sqlalchemy import update as sa_update
@@ -70,6 +71,7 @@ class GapRepository(Protocol):
     async def close_missing_postings(
         self, *, source: str, company_slug: str, seen_external_ids: set[str]
     ) -> int: ...
+    async def delete_posting(self, posting_id: int) -> bool: ...
     async def save_analysis(
         self, *, analysis: PostingAnalysisRow
     ) -> PostingAnalysisRow: ...
@@ -207,6 +209,22 @@ class SqlAlchemyGapRepository:
             closed_ids = result.scalars().all()
             await session.commit()
             return len(closed_ids)
+
+    async def delete_posting(self, posting_id: int) -> bool:
+        """Permanently remove a posting. `ON DELETE CASCADE` on
+        `posting_analyses.posting_id`/`phrase_clusters.posting_id` cleans up
+        its analyses and clusters in the same statement — no explicit
+        child-row cleanup needed here.
+        """
+        async with self._session_factory() as session:
+            result = await session.execute(
+                sa_delete(JobPostingRow)
+                .where(JobPostingRow.id == posting_id)
+                .returning(JobPostingRow.id)
+            )
+            deleted = result.scalars().first() is not None
+            await session.commit()
+            return deleted
 
     async def list_postings(
         self, *, mentions_term: str | None = None, analyzer_version: str = ""

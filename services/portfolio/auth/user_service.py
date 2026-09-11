@@ -102,6 +102,19 @@ class UserService:
         """
         return await self._repo.set_active(username=username, is_active=is_active)
 
+    async def set_role(self, *, username: str, role: str) -> bool:
+        """Change a user's role (`admin`/`user`). Returns False if unknown.
+
+        Takes effect on the user's next login/refresh — the role already on
+        an issued access token is stale until it expires or is refreshed,
+        same statelessness caveat as `set_active`.
+        """
+        return await self._repo.set_role(username=username, role=role)
+
+    async def list_all(self) -> list[User]:
+        rows = await self._repo.list_all()
+        return [row.to_domain() for row in rows]
+
     async def seed_first_admin(
         self, *, username: str, email: str, password: str, role: str = ROLE_ADMIN
     ) -> User | None:

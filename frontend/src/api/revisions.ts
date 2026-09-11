@@ -1,4 +1,4 @@
-import { apiJson } from './client'
+import { apiFetch, apiJson, ApiError } from './client'
 
 export interface RevisionSummary {
   id: string
@@ -14,4 +14,9 @@ interface RevisionsResponse {
 export async function listRevisions(): Promise<RevisionSummary[]> {
   const { revisions } = await apiJson<RevisionsResponse>('/api/v1/revisions')
   return revisions
+}
+
+export async function deleteRevision(id: string): Promise<void> {
+  const res = await apiFetch(`/api/v1/revisions/${id}`, { method: 'DELETE' })
+  if (!res.ok) throw new ApiError(res.status, await res.text())
 }

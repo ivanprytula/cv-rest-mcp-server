@@ -87,3 +87,12 @@ class RevisionService:
             logger.warning("Failed to list revisions from Postgres", exc_info=True)
             return []
         return [row.to_domain() for row in rows]
+
+    async def delete(self, revision_id: int) -> bool:
+        try:
+            return await self._repo.delete(revision_id)
+        except Exception:
+            logger.warning(
+                "Failed to delete revision %s from Postgres", revision_id, exc_info=True
+            )
+            return False

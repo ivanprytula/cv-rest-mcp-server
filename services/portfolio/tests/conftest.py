@@ -202,6 +202,11 @@ class FakeRevisionRepository:
             raise RuntimeError("simulated DB failure")
         return sorted(self._rows.values(), key=lambda r: r.created_at, reverse=True)
 
+    async def delete(self, revision_id: int) -> bool:
+        if self._fail:
+            raise RuntimeError("simulated DB failure")
+        return self._rows.pop(revision_id, None) is not None
+
 
 @pytest.fixture
 def override_revision_service(request):

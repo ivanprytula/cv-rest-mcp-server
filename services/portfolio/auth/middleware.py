@@ -89,6 +89,7 @@ _ADMIN_ROUTES = {
     (_TAILOR_MUTATION_METHOD, _TAILOR_MUTATION_PATH),
     ("POST", f"{API_V1_PREFIX}/postings"),
     ("POST", f"{API_V1_PREFIX}/tracked-boards"),
+    ("GET", _ADMIN_USERS_PREFIX),
 }
 
 # Admin-gated (method, prefix) subtrees, for mutations whose route carries a
@@ -96,8 +97,10 @@ _ADMIN_ROUTES = {
 # cannot be matched exactly.
 _ADMIN_PREFIXES = (
     ("POST", f"{API_V1_PREFIX}/postings"),
+    ("DELETE", f"{API_V1_PREFIX}/postings"),
     ("PATCH", f"{API_V1_PREFIX}/tracked-boards"),
     ("DELETE", f"{API_V1_PREFIX}/tracked-boards"),
+    ("DELETE", f"{API_V1_PREFIX}/revisions"),
     ("POST", _ADMIN_USERS_PREFIX),
 )
 
