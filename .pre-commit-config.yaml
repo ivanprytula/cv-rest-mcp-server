@@ -60,6 +60,12 @@ repos:
         language: system
         types: [python]
         pass_filenames: true
+      - id: frontend-lint
+        name: oxlint (frontend)
+        entry: bash -c 'cd frontend && npm run lint'
+        language: system
+        files: ^frontend/
+        pass_filenames: false
       - id: validate-error-messages
         name: validate error messages and auth middleware
         entry: uv run python scripts/validate_error_messages.py
