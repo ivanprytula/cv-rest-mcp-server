@@ -43,6 +43,7 @@ from services.portfolio.gaps.phrase_cluster_row import (
 )
 from services.portfolio.matching.baseline import BaselineError, parse_baseline
 from services.portfolio.matching.gap import GapReport, detect_gaps, parse_vocabulary
+from services.portfolio.matching.taxonomy import build_alias_table
 from services.portfolio.settings import settings
 from services.portfolio.tenancy import TenantId
 
@@ -290,7 +291,10 @@ class GapService:
         company_slug: str,
         client: httpx.AsyncClient,
         analysis_inputs: tuple[
-            list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]
+            list[dict[str, Any]],
+            list[dict[str, Any]],
+            list[dict[str, Any]],
+            dict[str, str],
         ]
         | None,
         live_cv: dict[str, Any] | None,
@@ -369,13 +373,14 @@ class GapService:
                 continue
             counts[status] += 1
             if status in ("new", "changed") and analysis_inputs is not None:
-                bank, deferred, vocabulary = analysis_inputs
+                bank, deferred, vocabulary, aliases = analysis_inputs
                 await self.analyze_posting(
                     posting.id,
                     bank_atoms=bank,
                     deferred_atoms=deferred,
                     vocabulary=vocabulary,
                     live_cv=live_cv or {},
+                    aliases=aliases,
                 )
 
         closed = await self.close_stale_board_postings(
@@ -391,7 +396,10 @@ class GapService:
         boards: list[tuple[str, str]],
         *,
         analysis_inputs: tuple[
-            list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]
+            list[dict[str, Any]],
+            list[dict[str, Any]],
+            list[dict[str, Any]],
+            dict[str, str],
         ]
         | None,
         live_cv: dict[str, Any] | None,
@@ -487,6 +495,7 @@ class GapService:
         deferred_atoms: list[dict[str, Any]],
         vocabulary: list[dict[str, Any]],
         live_cv: dict[str, Any],
+        aliases: dict[str, str] | None = None,
     ) -> GapReport | None:
         """Analyse a stored posting and persist the result.
 
@@ -499,7 +508,12 @@ class GapService:
             return None
 
         report = detect_gaps(
-            posting.posting_text, bank_atoms, deferred_atoms, vocabulary, live_cv
+            posting.posting_text,
+            bank_atoms,
+            deferred_atoms,
+            vocabulary,
+            live_cv,
+            aliases,
         )
         row = PostingAnalysisRow(
             posting_id=posting_id,
@@ -684,8 +698,10 @@ async def load_analysis_inputs(
     documents: DocumentService,
     *,
     tenant_id: TenantId,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
-    """Load the bank, deferred pool and vocabulary, or fail loudly.
+) -> tuple[
+    list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], dict[str, str]
+]:
+    """Load the bank, deferred pool, vocabulary, and alias table, or fail loudly.
 
     Framework-free: raises `BaselineError` rather than an HTTP exception, so
     both the FastAPI route and the standalone refresh trigger process (no
@@ -699,6 +715,10 @@ async def load_analysis_inputs(
     A missing vocabulary would silently sink every term into the "unknown"
     tier, so this raises rather than degrading — a wrong roadmap is worse
     than an error.
+
+    The alias table is built once here, from this tenant's own bank and
+    vocabulary — never a hardcoded default, so a tenant outside
+    software/DevOps never inherits Python-specific aliasing.
     """
     sources = document_sources(settings)
     bank_payload = await documents.read(
@@ -714,4 +734,5 @@ async def load_analysis_inputs(
     bank = parse_baseline(bank_payload, "skills")
     deferred = parse_baseline(bank_payload, "deferred")
     vocabulary = parse_vocabulary(vocab_payload)
-    return bank, deferred, vocabulary
+    aliases = build_alias_table(bank, deferred, vocabulary)
+    return bank, deferred, vocabulary, aliases

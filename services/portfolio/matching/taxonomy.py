@@ -1,41 +1,17 @@
-"""Skill taxonomy: alias map, normalization, and CV skill index."""
+"""Skill taxonomy: normalization and CV skill index.
+
+Domain-specific aliases (e.g. "k8s" -> "kubernetes") are NOT hardcoded here —
+they live per-tenant in each tenant's own skill bank / JD vocabulary data
+(``aliases`` field on each atom/term), so a tenant outside software/DevOps
+never inherits Python-specific vocabulary. Callers build an alias table with
+:func:`build_alias_table` from that tenant's own data and pass it through.
+"""
 
 from __future__ import annotations
 
 import re
 from typing import Any
 
-
-# Canonical name → set of aliases (all lowercase).
-_ALIASES: dict[str, set[str]] = {
-    "kubernetes": {"k8s"},
-    "javascript": {"js"},
-    "typescript": {"ts"},
-    "postgres": {"postgresql", "psql"},
-    "django rest framework": {"drf"},
-    "amazon web services": {"aws"},
-    "google cloud platform": {"gcp"},
-    "microsoft azure": {"azure"},
-    "continuous integration": {"ci"},
-    "continuous deployment": {"cd"},
-    "ci/cd": {"ci cd", "ci-cd"},
-    "rest api": {"rest apis"},
-    "graphql": {"gql"},
-    "docker": {"docker"},
-    "redis": {"redis"},
-    "celery": {"celery"},
-    "sqlalchemy": {"sa"},
-    "pytest": {"py.test"},
-    "github actions": {"gh actions"},
-    "gitlab ci": {"gitlab ci/cd"},
-}
-
-# Build reverse map: alias (lowercase) → canonical name (lowercase).
-_ALIAS_TO_CANONICAL: dict[str, str] = {}
-for canonical, aliases in _ALIASES.items():
-    _ALIAS_TO_CANONICAL[canonical] = canonical
-    for alias in aliases:
-        _ALIAS_TO_CANONICAL[alias] = canonical
 
 _VERSION_RE = re.compile(r"[\s]*[\d]+(?:\.[\d]+)*[\+]*$")
 _STRIP_RE = re.compile(r"[:;()–—\-/]+$")
@@ -94,17 +70,18 @@ def _us_lookup(match: re.Match[str]) -> str:
     return _UK_TO_US[match.group(0)]
 
 
-def normalize_skill(name: str) -> str:
+def normalize_skill(name: str, aliases: dict[str, str] | None = None) -> str:
     """Normalize a skill name for comparison.
 
     Strips version suffixes, trailing punctuation, and lowercases.
-    Resolves US/UK spelling variants to the US form, then aliases to
-    canonical names. The suffix restrips repeat until stable, so
-    normalization is idempotent (a fixpoint).
+    Resolves US/UK spelling variants to the US form, then *aliases* (a
+    tenant's own alias table, from :func:`build_alias_table`) to canonical
+    names. The suffix restrips repeat until stable, so normalization is
+    idempotent (a fixpoint).
 
     ``"Python 3.14+"`` → ``"python"``
     ``"Grafana)"`` → ``"grafana"``
-    ``"K8s"`` → ``"kubernetes"``
+    ``"K8s"`` → ``"kubernetes"`` (given a table mapping ``"k8s"``)
     ``"FastAPI"`` → ``"fastapi"``
     ``"query optimisation"`` → ``"query optimization"``
     ``"D2"`` → ``"d2"`` (trailing digit kept for tool names)
@@ -119,10 +96,12 @@ def normalize_skill(name: str) -> str:
         if s == prev:
             break
     s = _US_SUB.sub(_us_lookup, s)
-    return _ALIAS_TO_CANONICAL.get(s, s)
+    return (aliases or {}).get(s, s)
 
 
-def extract_skill_tokens(skill_str: str) -> list[str]:
+def extract_skill_tokens(
+    skill_str: str, aliases: dict[str, str] | None = None
+) -> list[str]:
     """Split a compound skill string into individual normalized tokens.
 
     ``"PostgreSQL: schema design, migrations"`` → ``["postgres", "schema design", "migrations"]``
@@ -132,15 +111,47 @@ def extract_skill_tokens(skill_str: str) -> list[str]:
     parts = re.split(r"[:;/,|]", skill_str)
     tokens = []
     for part in parts:
-        t = normalize_skill(part)
+        t = normalize_skill(part, aliases)
         if t:
             tokens.append(t)
     return tokens
 
 
+def build_alias_table(*atom_lists: list[dict[str, Any]]) -> dict[str, str]:
+    """Flatten one or more atom/term lists' own ``aliases`` into one table.
+
+    Each atom already carries its own ``aliases`` (bank atoms, deferred
+    atoms, JD vocabulary terms all share this shape). This collects them
+    into a single alias → canonical map for :func:`normalize_skill`, built
+    once per tenant per request from whichever bank/vocabulary is in scope
+    — never a global default, so a tenant with no data yet gets an empty
+    table and only the domain-neutral rules above apply.
+
+    Canonical names win first: a later atom's alias can never override an
+    earlier atom's own canonical key, mirroring :func:`build_skill_index`.
+    """
+    table: dict[str, str] = {}
+    for atoms in atom_lists:
+        for atom in atoms:
+            canonical = normalize_skill(atom["atom"])
+            if canonical:
+                table[canonical] = canonical
+    for atoms in atom_lists:
+        for atom in atoms:
+            canonical = normalize_skill(atom["atom"])
+            if not canonical:
+                continue
+            for alias in atom.get("aliases", []):
+                key = normalize_skill(alias)
+                if key and key not in table:
+                    table[key] = canonical
+    return table
+
+
 def build_skill_index(
     skills: list[dict[str, Any]],
     additional_skills: list[dict[str, Any]] | None = None,
+    aliases: dict[str, str] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Build a lookup index from CV skill data.
 
@@ -173,11 +184,11 @@ def build_skill_index(
                     if raw_key and raw_key not in index:
                         index[raw_key] = meta
                     # Index individual tokens from compound skills.
-                    for token in extract_skill_tokens(item):
+                    for token in extract_skill_tokens(item, aliases):
                         if token not in index:
                             index[token] = meta
                     # Index under alias targets for bidirectional lookup.
-                    direct = normalize_skill(item)
+                    direct = normalize_skill(item, aliases)
                     if direct and direct not in index:
                         index[direct] = meta
 

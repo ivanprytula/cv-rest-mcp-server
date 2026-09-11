@@ -20,7 +20,11 @@ SAMPLE_SKILLS = [
     },
 ]
 
-INDEX = build_skill_index(SAMPLE_SKILLS)
+# Stands in for a tenant's own alias table (see build_alias_table) — the CV
+# item is "PostgreSQL" but the atom's own aliases include "postgres".
+ALIASES = {"postgresql": "postgres"}
+
+INDEX = build_skill_index(SAMPLE_SKILLS, aliases=ALIASES)
 
 
 class TestExtractSkillsFromJd:
@@ -32,7 +36,7 @@ class TestExtractSkillsFromJd:
 
     def test_comma_separated_list(self):
         jd = "Required: Python, FastAPI, PostgreSQL, Redis"
-        skills = extract_skills_from_posting(jd, INDEX)
+        skills = extract_skills_from_posting(jd, INDEX, ALIASES)
         assert "python" in skills
         assert "fastapi" in skills
         assert "postgres" in skills

@@ -58,7 +58,9 @@ def _reverse_contains(item_lower: str, key: str) -> bool:
 
 
 def extract_skills_from_posting(
-    posting_text: str, cv_skill_index: dict[str, dict[str, Any]]
+    posting_text: str,
+    cv_skill_index: dict[str, dict[str, Any]],
+    aliases: dict[str, str] | None = None,
 ) -> list[str]:
     """Extract skill mentions from a job description.
 
@@ -108,7 +110,7 @@ def extract_skills_from_posting(
         # index key under a different spelling: an item "PostgreSQL" hits the
         # raw key "postgresql" AND the alias-resolved key "postgres". Without
         # this, "PostgreSQL" alone would never report the canonical form.
-        norm = normalize_skill(word)
+        norm = normalize_skill(word, aliases)
         if norm != word and norm in cv_skill_index and norm not in found:
             found.append(norm)
 
@@ -229,7 +231,9 @@ def _years_level(num: str, unit: str) -> Level:
 
 
 def _skills_in_chunk(
-    chunk: str, cv_skill_index: dict[str, dict[str, Any]]
+    chunk: str,
+    cv_skill_index: dict[str, dict[str, Any]],
+    aliases: dict[str, str] | None = None,
 ) -> list[str]:
     """Collect CV skills named inside a qualifier's trailing chunk.
 
@@ -243,7 +247,7 @@ def _skills_in_chunk(
 
     # UK/―US normalize the whole chunk first, so "query optimisation"
     # resolves to the "query optimization" canonical CV key either way.
-    text = normalize_skill(chunk)
+    text = normalize_skill(chunk, aliases)
     found: list[str] = []
 
     # Compound CV items ("REST APIs: OpenAPI contracts, …") are indexed as
@@ -264,7 +268,7 @@ def _skills_in_chunk(
             if word not in found:
                 found.append(word)
         else:
-            norm = normalize_skill(word)
+            norm = normalize_skill(word, aliases)
             if norm in cv_skill_index and norm not in found:
                 found.append(norm)
 
@@ -272,7 +276,9 @@ def _skills_in_chunk(
 
 
 def extract_mentions(
-    posting_text: str, cv_skill_index: dict[str, dict[str, Any]]
+    posting_text: str,
+    cv_skill_index: dict[str, dict[str, Any]],
+    aliases: dict[str, str] | None = None,
 ) -> list[SkillMention]:
     """Extract skill mentions from a JD together with their qualifier level.
 
@@ -311,22 +317,22 @@ def extract_mentions(
     for pattern, level in _QUALIFIER_HEADS:
         for match in pattern.finditer(posting_text):
             window = _phrase_window(match.end())
-            for skill in _skills_in_chunk(window, cv_skill_index):
+            for skill in _skills_in_chunk(window, cv_skill_index, aliases):
                 raw = f"{match.group(0).strip()} {window.strip()}".strip()
                 _note(skill, level, raw)
 
     for match in _YEARS_RE.finditer(posting_text):
         level = _years_level(match.group("num"), match.group("unit"))
         window = _phrase_window(match.end())
-        for skill in _skills_in_chunk(window, cv_skill_index):
+        for skill in _skills_in_chunk(window, cv_skill_index, aliases):
             raw = f"{match.group(0).strip()} {window.strip()}".strip()
             _note(skill, level, raw)
 
     # Phase B — unqualified mentions keep level=None, unless an equivalent
     # normalized form already carries a level (e.g. "postgres" vs "postgresql").
-    attributed_norm = {normalize_skill(skill) for skill in mentions}
-    for skill in extract_skills_from_posting(posting_text, cv_skill_index):
-        if normalize_skill(skill) not in attributed_norm:
+    attributed_norm = {normalize_skill(skill, aliases) for skill in mentions}
+    for skill in extract_skills_from_posting(posting_text, cv_skill_index, aliases):
+        if normalize_skill(skill, aliases) not in attributed_norm:
             _note(skill, None, skill)
 
     return [

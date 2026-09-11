@@ -56,7 +56,7 @@ class TestSyncBoard:
             source="greenhouse",
             company_slug="acme",
             client=client,
-            analysis_inputs=(BANK, [], []),
+            analysis_inputs=(BANK, [], [], {}),
             live_cv=LIVE_CV,
         )
         assert counts["new"] == 1

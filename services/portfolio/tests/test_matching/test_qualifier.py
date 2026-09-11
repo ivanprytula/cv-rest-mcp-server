@@ -26,7 +26,11 @@ SAMPLE_SKILLS = [
     },
 ]
 
-INDEX = build_skill_index(SAMPLE_SKILLS)
+# Stands in for a tenant's own alias table (see build_alias_table) — the CV
+# item is "PostgreSQL" but the atom's own aliases include "postgres".
+ALIASES = {"postgresql": "postgres"}
+
+INDEX = build_skill_index(SAMPLE_SKILLS, aliases=ALIASES)
 
 
 def levels(mentions):
@@ -34,7 +38,7 @@ def levels(mentions):
     merged: dict[str, str | None] = {}
     strength = {None: 0, "basic": 1, "middle": 2, "expert": 3}
     for m in mentions:
-        key = normalize_skill(m.skill)
+        key = normalize_skill(m.skill, ALIASES)
         if strength.get(m.level, 0) >= strength.get(merged.get(key), 0):
             merged[key] = m.level
     return merged

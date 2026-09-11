@@ -2,10 +2,21 @@
 
 from services.portfolio.matching.taxonomy import (
     _UK_TO_US,
+    build_alias_table,
     build_skill_index,
     extract_skill_tokens,
     normalize_skill,
 )
+
+
+# A small table standing in for a tenant's own bank/vocabulary aliases —
+# normalize_skill takes no hardcoded aliases, so every alias-dependent test
+# below passes one explicitly.
+_ALIASES = {
+    "k8s": "kubernetes",
+    "drf": "django rest framework",
+    "postgresql": "postgres",
+}
 
 
 class TestNormalizeSkill:
@@ -16,7 +27,7 @@ class TestNormalizeSkill:
         assert normalize_skill("Python 3.14+") == "python"
 
     def test_strips_trailing_punctuation(self):
-        assert normalize_skill("PostgreSQL:") == "postgres"
+        assert normalize_skill("FastAPI:") == "fastapi"
 
     def test_strips_trailing_parentheses(self):
         # Compound items like "…, Prometheus, Grafana)" leave dangling ")"
@@ -31,26 +42,47 @@ class TestNormalizeSkill:
         assert normalize_skill("S3") == "s3"
         assert normalize_skill("Python 3.14+") == "python"  # versions still strip
 
-    def test_alias_k8s(self):
-        assert normalize_skill("K8s") == "kubernetes"
+    def test_no_aliases_returns_domain_neutral_result(self):
+        # A brand-new tenant with no bank/vocabulary yet: no aliases arg
+        # (or an empty table) means only the domain-neutral rules apply.
+        assert normalize_skill("K8s") == "k8s"
+        assert normalize_skill("DRF") == "drf"
+        assert normalize_skill("PostgreSQL") == "postgresql"
 
-    def test_alias_drf(self):
-        assert normalize_skill("DRF") == "django rest framework"
-
-    def test_alias_aws(self):
-        assert normalize_skill("AWS") == "amazon web services"
-
-    def test_alias_postgresql(self):
-        assert normalize_skill("PostgreSQL") == "postgres"
-
-    def test_alias_rest_apis(self):
-        assert normalize_skill("REST APIs") == "rest api"
+    def test_alias_resolves_via_explicit_table(self):
+        assert normalize_skill("K8s", _ALIASES) == "kubernetes"
+        assert normalize_skill("DRF", _ALIASES) == "django rest framework"
+        assert normalize_skill("PostgreSQL:", _ALIASES) == "postgres"
 
     def test_no_match_returns_lowered(self):
         assert normalize_skill("FastAPI") == "fastapi"
 
     def test_empty_string(self):
         assert normalize_skill("") == ""
+
+
+class TestBuildAliasTable:
+    def test_flattens_atom_aliases(self):
+        bank = [{"atom": "Kubernetes", "aliases": ["K8s", "kubectl"]}]
+        vocab = [{"atom": "PostgreSQL", "aliases": ["Postgres", "psql"]}]
+        table = build_alias_table(bank, vocab)
+        assert table["k8s"] == "kubernetes"
+        assert table["kubectl"] == "kubernetes"
+        assert table["postgres"] == "postgresql"
+        assert table["psql"] == "postgresql"
+
+    def test_canonical_names_win_over_aliases(self):
+        # An atom's own canonical name is never shadowed by another atom's alias.
+        bank = [
+            {"atom": "Casbin", "aliases": []},
+            {"atom": "API security", "aliases": ["Casbin"]},
+        ]
+        table = build_alias_table(bank)
+        assert table["casbin"] == "casbin"
+
+    def test_no_atoms_yields_empty_table(self):
+        assert build_alias_table([]) == {}
+        assert build_alias_table() == {}
 
 
 class TestUkUsSpellings:
@@ -68,7 +100,7 @@ class TestUkUsSpellings:
 
     def test_version_and_punctuation_suffixes_still_apply(self):
         assert normalize_skill("query optimisation 2.0+") == "query optimization"
-        assert normalize_skill("PostgreSQL 16") == "postgres"
+        assert normalize_skill("PostgreSQL 16", _ALIASES) == "postgres"
 
 
 class TestExtractSkillTokens:
@@ -76,7 +108,7 @@ class TestExtractSkillTokens:
         assert extract_skill_tokens("Python") == ["python"]
 
     def test_compound_with_colon(self):
-        tokens = extract_skill_tokens("PostgreSQL: schema design, migrations")
+        tokens = extract_skill_tokens("PostgreSQL: schema design, migrations", _ALIASES)
         assert "postgres" in tokens
 
     def test_slash_separated(self):
@@ -114,7 +146,7 @@ class TestBuildSkillIndex:
         assert "redis" in index
 
     def test_indexes_compound_tokens(self):
-        index = build_skill_index(self.SAMPLE_SKILLS)
+        index = build_skill_index(self.SAMPLE_SKILLS, aliases=_ALIASES)
         assert "postgres" in index  # alias for PostgreSQL
 
     def test_metadata_preserved(self):

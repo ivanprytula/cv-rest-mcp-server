@@ -20,6 +20,7 @@ from services.portfolio.job_posting_input import (
 )
 from services.portfolio.matching.baseline import BaselineError, get_baseline
 from services.portfolio.matching.tailor import tailor_cv
+from services.portfolio.matching.taxonomy import build_alias_table
 from services.portfolio.pdf_generator import ThemeNotFoundError
 from services.portfolio.rate_limiter import limiter, limits
 from services.portfolio.renderer import render_html, render_template
@@ -456,11 +457,13 @@ async def tailor_cv_endpoint(
         raise HTTPException(status_code=500, detail="CV tailoring failed") from None
 
     try:
+        aliases = build_alias_table(baseline_atoms)
         tailored = tailor_cv(
             posting.posting_text,
             baseline_atoms,
             pdf_service.cv_data,
             title=posting.title,
+            aliases=aliases,
         )
     except Exception:
         logger.exception("CV tailoring failed")
