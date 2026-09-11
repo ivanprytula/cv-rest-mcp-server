@@ -6,12 +6,32 @@ interface TokenPair {
   expires_in: number
 }
 
+interface RegisteredUser {
+  id: number
+  username: string
+  email: string
+}
+
 async function throwDetail(res: Response, fallback: string): Promise<never> {
   const detail = await res
     .json()
     .then((body) => (typeof body?.detail === 'string' ? body.detail : fallback))
     .catch(() => fallback)
   throw new Error(detail)
+}
+
+export async function register(
+  username: string,
+  email: string,
+  password: string,
+): Promise<RegisteredUser> {
+  const res = await fetch(`${BASE_URL}/api/v1/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, email, password }),
+  })
+  if (!res.ok) return throwDetail(res, 'Could not create account')
+  return res.json()
 }
 
 export async function login(username: string, password: string): Promise<TokenPair> {
