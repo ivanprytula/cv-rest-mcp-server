@@ -29,8 +29,8 @@ from services.portfolio.auth.crypto import (
     sign_access_token,
 )
 from services.portfolio.auth.refresh_token_service import RefreshTokenService
-from services.portfolio.auth.user import ROLE_USER, User
-from services.portfolio.auth.user_service import UserService
+from services.portfolio.auth.user import ROLE_USER, SetEmailOutcome, User
+from services.portfolio.auth.user_service import UserService, is_placeholder_email
 from services.portfolio.constants import API_V1_PREFIX
 from services.portfolio.dependencies import (
     get_refresh_token_service,
@@ -39,8 +39,10 @@ from services.portfolio.dependencies import (
 from services.portfolio.schemas.auth import (
     LoginRequest,
     MeResponse,
+    ProfileResponse,
     RegisteredUser,
     RegisterRequest,
+    SetEmailRequest,
     SetUserRoleRequest,
     TokenPair,
     UserActiveStatus,
@@ -142,9 +144,7 @@ async def register(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Registration is currently disabled",
         )
-    user = await user_service.register(
-        username=body.username, email=body.email, password=body.password
-    )
+    user = await user_service.register(username=body.username, password=body.password)
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -391,4 +391,73 @@ async def me(request: Request) -> MeResponse:
         subject=claims.get("sub", ""),
         role=claims.get("role", ROLE_USER),
         scopes=scopes,
+    )
+
+
+@auth_router.get(
+    "/profile",
+    response_model=ProfileResponse,
+    status_code=status.HTTP_200_OK,
+    responses={401: {"description": "Missing or invalid access token"}},
+)
+async def get_profile(
+    request: Request,
+    user_service: UserService = get_user_service_dep,
+) -> ProfileResponse:
+    """Return the caller's own account, DB-backed unlike `/me` (claims-only)
+    — the only way to see `email`, which isn't carried on the JWT.
+    """
+    username = _get_auth_claims(request).get("sub", "")
+    user = await user_service.get_by_username(username)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="No such user"
+        )
+    return ProfileResponse(
+        username=user.username,
+        email=user.email,
+        email_is_placeholder=is_placeholder_email(user.email),
+        role=user.role,
+    )
+
+
+@auth_router.patch(
+    "/profile",
+    response_model=ProfileResponse,
+    status_code=status.HTTP_200_OK,
+    responses={
+        401: {"description": "Missing or invalid access token"},
+        409: {"description": "Email already in use by another account"},
+    },
+)
+async def update_profile(
+    request: Request,
+    body: SetEmailRequest,
+    user_service: UserService = get_user_service_dep,
+) -> ProfileResponse:
+    """Self-service: replace the caller's own (possibly placeholder) email.
+
+    `username` always comes from the verified JWT, never a path param —
+    this route can only ever touch the caller's own row, so no admin gate
+    is needed (same reasoning as document writes; see
+    `auth/middleware.py`'s `_MANAGE_PREFIXES` comment).
+    """
+    username = _get_auth_claims(request).get("sub", "")
+    outcome = await user_service.set_email(username=username, email=body.email)
+    if outcome is SetEmailOutcome.USER_NOT_FOUND:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="No such user"
+        )
+    if outcome is SetEmailOutcome.EMAIL_TAKEN:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="That email is already in use",
+        )
+    user = await user_service.get_by_username(username)
+    assert user is not None  # just wrote it; a concurrent delete is not handled
+    return ProfileResponse(
+        username=user.username,
+        email=user.email,
+        email_is_placeholder=False,
+        role=user.role,
     )

@@ -20,10 +20,13 @@ class RegisterRequest(BaseModel):
     Bounds are validation, not policy: an unbounded username or password is
     a free write-amplification and bcrypt-CPU lever for an unauthenticated
     caller. bcrypt itself truncates beyond 72 bytes.
+
+    Email is not collected at signup (the site is pre-launch and this
+    sidesteps PII/GDPR handling until it's actually needed) — a user can
+    set one later from their profile. See `ProfileResponse`.
     """
 
     username: str = Field(min_length=3, max_length=64, pattern=r"^[A-Za-z0-9._-]+$")
-    email: EmailStr
     password: str = Field(min_length=12, max_length=128)
 
 
@@ -31,7 +34,9 @@ class RegisteredUser(BaseModel):
     """What signup returns: identity only, never a token.
 
     Registering does not sign you in — the client posts to /auth/token
-    afterwards, so there is exactly one path that mints credentials.
+    afterwards, so there is exactly one path that mints credentials. `email`
+    is a server-generated placeholder at this point — see
+    `UserService.register` — not one the caller supplied.
     """
 
     id: int
@@ -73,3 +78,27 @@ class UserRoleStatus(BaseModel):
 
     username: str
     role: str
+
+
+class ProfileResponse(BaseModel):
+    """Identity returned by GET /api/v1/auth/profile — DB-backed, unlike
+    /api/v1/auth/me (claims-only), so it can carry `email`. `email` is
+    always present, but `email_is_placeholder` tells the caller whether
+    it's the server-generated one from registration (see
+    `UserService.register`) rather than one the user actually set — the
+    profile page uses this to nudge the user to add a real one.
+    """
+
+    username: str
+    email: EmailStr
+    email_is_placeholder: bool
+    role: str
+
+
+class SetEmailRequest(BaseModel):
+    """Body for the self-service set-email endpoint — replaces the caller's
+    (possibly placeholder) email with a real one. Not nullable: every
+    account always has an email, so there's no "clear it" case.
+    """
+
+    email: EmailStr

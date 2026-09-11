@@ -93,9 +93,7 @@ class TestDeletePosting:
 
     async def test_requires_admin(self, admin_client, user_service):
         posting = await _store(admin_client, JD_KUBERNETES)
-        await user_service.register(
-            username="plainuser", email="plain@example.com", password="correct-password"
-        )
+        await user_service.register(username="plainuser", password="correct-password")
         resp = await admin_client.post(
             "/api/v1/auth/token",
             json={"username": "plainuser", "password": "correct-password"},
@@ -421,9 +419,7 @@ class TestDeleteRevision:
             "/api/v1/cv/tailor", content=JD_KUBERNETES.encode()
         )
         revision_id = tailor_resp.json()["saved_to"]
-        await user_service.register(
-            username="plainuser", email="plain@example.com", password="correct-password"
-        )
+        await user_service.register(username="plainuser", password="correct-password")
         resp = await admin_client.post(
             "/api/v1/auth/token",
             json={"username": "plainuser", "password": "correct-password"},

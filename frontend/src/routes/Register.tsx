@@ -7,7 +7,6 @@ export default function Register() {
   const { login } = useAuth()
   const navigate = useNavigate()
   const [username, setUsername] = useState('')
-  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -17,7 +16,7 @@ export default function Register() {
     setError(null)
     setSubmitting(true)
     try {
-      await register(username, email, password)
+      await register(username, password)
       await login(username, password)
       navigate('/onboarding', { replace: true })
     } catch (err) {
@@ -41,16 +40,6 @@ export default function Register() {
           pattern="[A-Za-z0-9._-]+"
           minLength={3}
           maxLength={64}
-          required
-        />
-        <label htmlFor="email">Email</label>
-        <input
-          id="email"
-          type="email"
-          className="rounded border border-border bg-bg px-2 py-2 text-text"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          autoComplete="email"
           required
         />
         <label htmlFor="password">Password</label>

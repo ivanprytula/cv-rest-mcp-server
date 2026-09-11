@@ -555,11 +555,7 @@ async def test_register_disabled_returns_403(auth_client, monkeypatch):
     monkeypatch.setattr(settings, "registration_enabled", False)
     resp = await auth_client.post(
         "/api/v1/auth/register",
-        json={
-            "username": "newuser",
-            "email": "new@example.com",
-            "password": "correct-password",
-        },
+        json={"username": "newuser", "password": "correct-password"},
     )
     assert resp.status_code == 403
     assert resp.json()["detail"] == "Registration is currently disabled"
@@ -568,13 +564,36 @@ async def test_register_disabled_returns_403(auth_client, monkeypatch):
 async def test_register_enabled_by_default(auth_client):
     resp = await auth_client.post(
         "/api/v1/auth/register",
+        json={"username": "newuser", "password": "correct-password"},
+    )
+    assert resp.status_code == 201
+
+
+async def test_register_does_not_collect_email(auth_client):
+    """The register body has no email field at all — a placeholder is
+    generated server-side (see UserService.register)."""
+    resp = await auth_client.post(
+        "/api/v1/auth/register",
+        json={"username": "newuser", "password": "correct-password"},
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["email"] == "newuser@users.noreply.example.com"
+
+
+async def test_register_ignores_an_email_field_if_sent(auth_client):
+    """A client that still sends `email` (an old build, a curious caller)
+    gets it silently ignored — RegisterRequest has no such field."""
+    resp = await auth_client.post(
+        "/api/v1/auth/register",
         json={
             "username": "newuser",
-            "email": "new@example.com",
+            "email": "attacker-supplied@example.com",
             "password": "correct-password",
         },
     )
     assert resp.status_code == 201
+    assert resp.json()["email"] == "newuser@users.noreply.example.com"
 
 
 # ---------------------------------------------------------------------------
@@ -588,9 +607,7 @@ async def _admin_headers(client) -> dict[str, str]:
 
 
 async def test_disable_user_requires_admin(auth_client, user_service):
-    await user_service.register(
-        username="plainuser", email="plain@example.com", password="correct-password"
-    )
+    await user_service.register(username="plainuser", password="correct-password")
     user_resp = await login(
         auth_client, username="plainuser", password="correct-password"
     )
@@ -604,7 +621,6 @@ async def test_disable_user_requires_admin(auth_client, user_service):
 async def test_disable_user_blocks_future_login(auth_client, user_service):
     await user_service.register(
         username="suspicious",
-        email="suspicious@example.com",
         password="correct-password",
     )
     headers = await _admin_headers(auth_client)
@@ -635,7 +651,6 @@ async def test_disable_user_refuses_self(auth_client):
 async def test_disable_user_revokes_refresh_family(auth_client, user_service):
     await user_service.register(
         username="suspicious",
-        email="suspicious@example.com",
         password="correct-password",
     )
     login_resp = await login(
@@ -663,9 +678,7 @@ async def test_disable_unknown_user_returns_404(auth_client):
 
 
 async def test_enable_user_requires_admin(auth_client, user_service):
-    await user_service.register(
-        username="plainuser", email="plain@example.com", password="correct-password"
-    )
+    await user_service.register(username="plainuser", password="correct-password")
     user_resp = await login(
         auth_client, username="plainuser", password="correct-password"
     )
@@ -679,7 +692,6 @@ async def test_enable_user_requires_admin(auth_client, user_service):
 async def test_enable_user_restores_login(auth_client, user_service):
     await user_service.register(
         username="suspicious",
-        email="suspicious@example.com",
         password="correct-password",
     )
     headers = await _admin_headers(auth_client)
@@ -707,9 +719,7 @@ async def test_enable_unknown_user_returns_404(auth_client):
 
 
 async def test_set_user_role_requires_admin(auth_client, user_service):
-    await user_service.register(
-        username="plainuser", email="plain@example.com", password="correct-password"
-    )
+    await user_service.register(username="plainuser", password="correct-password")
     user_resp = await login(
         auth_client, username="plainuser", password="correct-password"
     )
@@ -721,9 +731,7 @@ async def test_set_user_role_requires_admin(auth_client, user_service):
 
 
 async def test_set_user_role_promotes_to_admin(auth_client, user_service):
-    await user_service.register(
-        username="futureadmin", email="fa@example.com", password="correct-password"
-    )
+    await user_service.register(username="futureadmin", password="correct-password")
     headers = await _admin_headers(auth_client)
     resp = await auth_client.post(
         "/api/v1/auth/users/futureadmin/role", json={"role": "admin"}, headers=headers
@@ -763,9 +771,7 @@ async def test_set_role_unknown_user_returns_404(auth_client):
 
 
 async def test_list_users_requires_admin(auth_client, user_service):
-    await user_service.register(
-        username="plainuser", email="plain@example.com", password="correct-password"
-    )
+    await user_service.register(username="plainuser", password="correct-password")
     user_resp = await login(
         auth_client, username="plainuser", password="correct-password"
     )
@@ -775,12 +781,8 @@ async def test_list_users_requires_admin(auth_client, user_service):
 
 
 async def test_list_users_returns_every_account(auth_client, user_service):
-    await user_service.register(
-        username="alice", email="alice@example.com", password="correct-password"
-    )
-    await user_service.register(
-        username="bob", email="bob@example.com", password="correct-password"
-    )
+    await user_service.register(username="alice", password="correct-password")
+    await user_service.register(username="bob", password="correct-password")
     headers = await _admin_headers(auth_client)
     resp = await auth_client.get("/api/v1/auth/users", headers=headers)
     assert resp.status_code == 200
@@ -985,3 +987,87 @@ async def test_cors_public_endpoint_not_credentialed(auth_client):
     assert resp.status_code == 200
     # Wildcard CORS wins for the public surface (no credentials).
     assert resp.headers.get("access-control-allow-credentials") is None
+
+
+# ---------------------------------------------------------------------------
+# routes: self-service profile (GET/PATCH /api/v1/auth/profile)
+# ---------------------------------------------------------------------------
+
+
+async def test_get_profile_requires_auth(auth_client):
+    resp = await auth_client.get("/api/v1/auth/profile", headers={"Authorization": ""})
+    assert resp.status_code == 401
+
+
+async def test_get_profile_reports_placeholder_email_after_registration(
+    auth_client, user_service
+):
+    await user_service.register(username="newuser", password="correct-password")
+    user_resp = await login(
+        auth_client, username="newuser", password="correct-password"
+    )
+    headers = {"Authorization": f"Bearer {user_resp.json()['access_token']}"}
+
+    resp = await auth_client.get("/api/v1/auth/profile", headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["username"] == "newuser"
+    assert body["email"] == "newuser@users.noreply.example.com"
+    assert body["email_is_placeholder"] is True
+    assert body["role"] == "user"
+
+
+async def test_update_profile_sets_a_real_email(auth_client, user_service):
+    await user_service.register(username="newuser", password="correct-password")
+    user_resp = await login(
+        auth_client, username="newuser", password="correct-password"
+    )
+    headers = {"Authorization": f"Bearer {user_resp.json()['access_token']}"}
+
+    resp = await auth_client.patch(
+        "/api/v1/auth/profile",
+        json={"email": "real@example.com"},
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["email"] == "real@example.com"
+    assert body["email_is_placeholder"] is False
+
+    follow_up = await auth_client.get("/api/v1/auth/profile", headers=headers)
+    assert follow_up.json()["email"] == "real@example.com"
+    assert follow_up.json()["email_is_placeholder"] is False
+
+
+async def test_update_profile_refuses_an_email_already_in_use(
+    auth_client, user_service
+):
+    await user_service.register(username="alice", password="correct-password")
+    await user_service.register(username="bob", password="correct-password")
+
+    alice_resp = await login(auth_client, username="alice", password="correct-password")
+    alice_headers = {"Authorization": f"Bearer {alice_resp.json()['access_token']}"}
+    taken = await auth_client.patch(
+        "/api/v1/auth/profile",
+        json={"email": "shared@example.com"},
+        headers=alice_headers,
+    )
+    assert taken.status_code == 200
+
+    bob_resp = await login(auth_client, username="bob", password="correct-password")
+    bob_headers = {"Authorization": f"Bearer {bob_resp.json()['access_token']}"}
+    conflict = await auth_client.patch(
+        "/api/v1/auth/profile",
+        json={"email": "shared@example.com"},
+        headers=bob_headers,
+    )
+    assert conflict.status_code == 409
+
+
+async def test_update_profile_requires_auth(auth_client):
+    resp = await auth_client.patch(
+        "/api/v1/auth/profile",
+        json={"email": "real@example.com"},
+        headers={"Authorization": ""},
+    )
+    assert resp.status_code == 401
