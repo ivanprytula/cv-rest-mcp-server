@@ -10,6 +10,7 @@ import NewPosting from './routes/NewPosting'
 import Onboarding from './routes/Onboarding'
 import PostingReport from './routes/PostingReport'
 import Postings from './routes/Postings'
+import Profile from './routes/Profile'
 import Register from './routes/Register'
 import RevisionPreview from './routes/RevisionPreview'
 import Revisions from './routes/Revisions'
@@ -44,6 +45,7 @@ export default function App() {
                 <Route path="postings/new" element={<NewPosting />} />
                 <Route path="postings/:id" element={<PostingReport />} />
                 <Route path="admin" element={<Admin />} />
+                <Route path="profile" element={<Profile />} />
               </Route>
             </Routes>
           </BrowserRouter>

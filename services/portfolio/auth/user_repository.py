@@ -11,8 +11,10 @@ from __future__ import annotations
 from typing import Protocol, cast
 
 from sqlalchemy import CursorResult, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from services.portfolio.auth.user import SetEmailOutcome
 from services.portfolio.auth.user_row import UserRow
 
 
@@ -21,6 +23,7 @@ class UserRepository(Protocol):
     async def create(self, *, user: UserRow) -> UserRow: ...
     async def set_active(self, *, username: str, is_active: bool) -> bool: ...
     async def set_role(self, *, username: str, role: str) -> bool: ...
+    async def set_email(self, *, username: str, email: str) -> SetEmailOutcome: ...
     async def list_all(self) -> list[UserRow]: ...
 
 
@@ -80,6 +83,28 @@ class SqlAlchemyUserRepository:
             )
             await session.commit()
             return result.rowcount > 0
+
+    async def set_email(self, *, username: str, email: str) -> SetEmailOutcome:
+        """Replace a user's email. `EMAIL_TAKEN` on a unique-constraint
+        collision with another account (races the register/set_email
+        check-then-write pattern the rest of this module uses)."""
+        async with self._session_factory() as session:
+            try:
+                result = cast(
+                    CursorResult,
+                    await session.execute(
+                        update(UserRow)
+                        .where(UserRow.username == username)
+                        .values(email=email)
+                    ),
+                )
+                await session.commit()
+            except IntegrityError:
+                await session.rollback()
+                return SetEmailOutcome.EMAIL_TAKEN
+            if result.rowcount == 0:
+                return SetEmailOutcome.USER_NOT_FOUND
+            return SetEmailOutcome.OK
 
     async def list_all(self) -> list[UserRow]:
         async with self._session_factory() as session:

@@ -43,6 +43,9 @@ export default function AdminShell() {
           )}
         </nav>
         <div className="flex flex-wrap items-center gap-3">
+          <NavLink to="/profile" className={navLinkClass}>
+            Profile
+          </NavLink>
           <ThemeControls />
           <button
             type="button"

@@ -33,9 +33,7 @@ async def two_tenants(user_service, session_factory):
     repo = SqlAlchemyDocumentRepository(session_factory)
     tenants: list[TenantId] = []
     for name in ("alice", "bob"):
-        user = await user_service.register(
-            username=name, email=f"{name}@example.com", password="a-long-password"
-        )
+        user = await user_service.register(username=name, password="a-long-password")
         assert user is not None
         tenant = TenantId(user.id)
         await repo.put(kind=KIND_CV, payload={"name": name.title()}, tenant_id=tenant)

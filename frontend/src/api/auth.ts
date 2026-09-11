@@ -28,6 +28,13 @@ export interface AdminUser {
   role: string
 }
 
+export interface Profile {
+  username: string
+  email: string
+  email_is_placeholder: boolean
+  role: string
+}
+
 async function throwDetail(res: Response, fallback: string): Promise<never> {
   const detail = await res
     .json()
@@ -38,13 +45,12 @@ async function throwDetail(res: Response, fallback: string): Promise<never> {
 
 export async function register(
   username: string,
-  email: string,
   password: string,
 ): Promise<RegisteredUser> {
   const res = await fetch(`${BASE_URL}/api/v1/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, email, password }),
+    body: JSON.stringify({ username, password }),
   })
   if (!res.ok) return throwDetail(res, 'Could not create account')
   return res.json()
@@ -81,6 +87,20 @@ export async function logout(): Promise<void> {
 
 export async function getMe(): Promise<Me> {
   return apiJson<Me>('/api/v1/auth/me')
+}
+
+export async function getProfile(): Promise<Profile> {
+  return apiJson<Profile>('/api/v1/auth/profile')
+}
+
+export async function updateProfileEmail(email: string): Promise<Profile> {
+  const res = await apiFetch('/api/v1/auth/profile', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  })
+  if (!res.ok) throw new ApiError(res.status, await res.text())
+  return res.json()
 }
 
 export async function listUsers(): Promise<AdminUser[]> {

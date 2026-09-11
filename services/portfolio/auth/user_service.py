@@ -15,6 +15,7 @@ from services.portfolio.auth.user import (
     ROLE_ADMIN,
     ROLE_USER,
     PasswordHasher,
+    SetEmailOutcome,
     User,
 )
 from services.portfolio.auth.user_repository import UserRepository
@@ -27,6 +28,28 @@ from services.portfolio.tenancy import TenantId
 # username still bcrypt-verifies a dummy hash so login timing never reveals which
 # of username/password failed. Generated at import -> guaranteed-valid hash.
 _DUMMY_HASH: str = bcrypt.hashpw(b"timing-sentinel", bcrypt.gensalt()).decode("utf-8")
+
+# `email` is NOT NULL + unique at the DB level, but the SPA's register form
+# no longer collects one (sidesteps PII/GDPR handling until the site
+# actually needs it — password reset, notifications). A placeholder keyed
+# on the already-unique username satisfies the constraint without asking
+# the caller for anything; `is_placeholder_email` lets a caller (the
+# profile page) detect it and nudge the user to set a real one.
+#
+# example.com (RFC 2606) rather than a made-up .local/.invalid domain:
+# pydantic's EmailStr/email-validator rejects special-use TLDs like
+# .local/.invalid outright, but example.com is a real, reserved-for-
+# documentation domain that validates cleanly and can never collide with
+# an actual mailbox.
+_PLACEHOLDER_EMAIL_DOMAIN = "users.noreply.example.com"
+
+
+def _placeholder_email(username: str) -> str:
+    return f"{username}@{_PLACEHOLDER_EMAIL_DOMAIN}"
+
+
+def is_placeholder_email(email: str) -> bool:
+    return email.endswith(f"@{_PLACEHOLDER_EMAIL_DOMAIN}")
 
 
 class UserService:
@@ -63,18 +86,20 @@ class UserService:
             return None
         return row.to_domain()
 
-    async def register(
-        self, *, username: str, email: str, password: str
-    ) -> User | None:
+    async def register(self, *, username: str, password: str) -> User | None:
         """Create a self-service account, or None if the username is taken.
 
         Always `ROLE_USER`: registering can never mint an admin. The new
         user owns their own tenant — their id — and `cv:manage` lets them
         edit only their own documents.
 
-        None means "username taken", the one failure a caller must render
-        differently; a repository error still raises, since a failed write
-        that reports success would leave the user unable to log in.
+        No `email` param: the SPA's register form doesn't collect one, so a
+        placeholder is generated (see `_placeholder_email`) to satisfy the
+        column's NOT NULL + unique constraint — `set_email` replaces it with
+        a real one from the profile page later. None means "username
+        taken", the one failure a caller must render differently; a
+        repository error still raises, since a failed write that reports
+        success would leave the user unable to log in.
         """
         if not password:
             return None
@@ -83,7 +108,7 @@ class UserService:
         created = await self._repo.create(
             user=UserRow(
                 username=username,
-                email=email,
+                email=_placeholder_email(username),
                 hashed_password=self._hasher.hash(password),
                 is_active=True,
                 role=ROLE_USER,
@@ -110,6 +135,16 @@ class UserService:
         same statelessness caveat as `set_active`.
         """
         return await self._repo.set_role(username=username, role=role)
+
+    async def set_email(self, *, username: str, email: str) -> SetEmailOutcome:
+        """Replace a user's (possibly placeholder) email with a real one.
+
+        Self-service only — callers must derive `username` from the
+        caller's own verified JWT, never a path param, since there is no
+        admin-role gate on this write (see `auth/routes.py`'s profile
+        route).
+        """
+        return await self._repo.set_email(username=username, email=email)
 
     async def list_all(self) -> list[User]:
         rows = await self._repo.list_all()

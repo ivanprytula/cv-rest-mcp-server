@@ -7,6 +7,8 @@ layer (`UserService`) depends on, injectable for tests.
 
 from __future__ import annotations
 
+from enum import Enum
+
 import bcrypt
 from pydantic import BaseModel, ConfigDict, EmailStr
 
@@ -15,6 +17,16 @@ ROLE_ADMIN = "admin"
 ROLE_USER = "user"
 SCOPE_READ = "cv:read"
 SCOPE_MANAGE = "cv:manage"
+
+
+class SetEmailOutcome(Enum):
+    """Result of `UserService.set_email` — three distinguishable outcomes,
+    since a plain bool can't tell "no such user" apart from "email taken".
+    """
+
+    OK = "ok"
+    USER_NOT_FOUND = "user_not_found"
+    EMAIL_TAKEN = "email_taken"
 
 
 class PasswordHasher:
