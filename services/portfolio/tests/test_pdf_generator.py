@@ -5,12 +5,13 @@ import pytest
 from fastapi import HTTPException
 from weasyprint import HTML
 
-from services.portfolio.cv_source import CvSource
+from services.portfolio.documents.document_service import DocumentService
 from services.portfolio.pdf_generator import (
     PdfService,
     _deny_all_url_fetcher,
     _URLFetchDeniedError,
 )
+from services.portfolio.tenancy import TenantId
 
 
 def test_list_themes(pdf_service):
@@ -22,14 +23,14 @@ def test_list_themes(pdf_service):
     assert "modern" in themes
 
 
-def test_generate_cv_pdf_invalid_theme(pdf_service):
+def test_generate_cv_pdf_invalid_theme(pdf_service, synthetic_cv):
     with pytest.raises(Exception) as exc_info:
-        pdf_service.generate_cv_pdf("nonexistent")
+        pdf_service.generate_cv_pdf("nonexistent", synthetic_cv)
     assert "Theme 'nonexistent' not found" in str(exc_info.value)
 
 
-def test_generate_cv_pdf_returns_bytes(pdf_service):
-    pdf = pdf_service.generate_cv_pdf("classic")
+def test_generate_cv_pdf_returns_bytes(pdf_service, synthetic_cv):
+    pdf = pdf_service.generate_cv_pdf("classic", synthetic_cv)
     assert isinstance(pdf, bytes)
     assert pdf.startswith(b"%PDF")
 
@@ -57,18 +58,18 @@ def test_weasyprint_html_uses_deny_all_url_fetcher():
     assert pdf.startswith(b"%PDF")
 
 
-def test_generate_cv_pdf_caches_result(pdf_service):
+def test_generate_cv_pdf_caches_result(pdf_service, synthetic_cv):
     pdf_service.clear_cache()
-    pdf1 = pdf_service.generate_cv_pdf("classic")
-    pdf2 = pdf_service.generate_cv_pdf("classic")
+    pdf1 = pdf_service.generate_cv_pdf("classic", synthetic_cv)
+    pdf2 = pdf_service.generate_cv_pdf("classic", synthetic_cv)
     assert pdf1 == pdf2
     assert len(pdf_service._cache) == 1
 
 
-def test_generate_cv_pdf_different_themes_cached_separately(pdf_service):
+def test_generate_cv_pdf_different_themes_cached_separately(pdf_service, synthetic_cv):
     pdf_service.clear_cache()
-    pdf_classic = pdf_service.generate_cv_pdf("classic")
-    pdf_minimal = pdf_service.generate_cv_pdf("minimal")
+    pdf_classic = pdf_service.generate_cv_pdf("classic", synthetic_cv)
+    pdf_minimal = pdf_service.generate_cv_pdf("minimal", synthetic_cv)
     assert pdf_classic != pdf_minimal
     assert len(pdf_service._cache) == 2
 
@@ -114,21 +115,26 @@ async def test_generate_cv_pdf_async_single_flight(pdf_service, monkeypatch):
     assert len(pdf_service._cache) == 1
 
 
-def test_cache_evicts_least_recently_used_entry(synthetic_cv_path):
+def test_cache_evicts_least_recently_used_entry(
+    synthetic_cv, empty_document_repository
+):
     service = PdfService(
-        CvSource(local_path=synthetic_cv_path), max_entries=1, max_workers=1
+        DocumentService(empty_document_repository),
+        TenantId(1),
+        max_entries=1,
+        max_workers=1,
     )
-    service.generate_cv_pdf("classic")
-    service.generate_cv_pdf("minimal")
+    service.generate_cv_pdf("classic", synthetic_cv)
+    service.generate_cv_pdf("minimal", synthetic_cv)
     assert [theme for theme, _ in service._cache] == ["minimal"]
 
 
-def test_generate_cv_pdf_wraps_render_errors(pdf_service, monkeypatch):
+def test_generate_cv_pdf_wraps_render_errors(pdf_service, synthetic_cv, monkeypatch):
     def broken_html(*args, **kwargs):
         raise RuntimeError("render exploded")
 
     monkeypatch.setattr("services.portfolio.pdf_generator.HTML", broken_html)
     with pytest.raises(HTTPException) as exc_info:
-        pdf_service.generate_cv_pdf("classic")
+        pdf_service.generate_cv_pdf("classic", synthetic_cv)
     assert exc_info.value.status_code == 500
     assert len(pdf_service._cache) == 0

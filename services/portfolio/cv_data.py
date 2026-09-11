@@ -1,7 +1,7 @@
 """CV data models and loaders.
 
 Data is no longer a module global; callers must pass an explicit path
-(or use CvSource for file/GCS resolution).
+(or use DocumentService for tenant-scoped DB/file resolution).
 """
 
 import json

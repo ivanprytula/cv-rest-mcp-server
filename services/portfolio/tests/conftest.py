@@ -25,11 +25,11 @@ os.environ.pop("ALLOWED_IPS_FILE", None)
 os.environ.pop("BLOCKED_IPS_FILE", None)
 
 from services.portfolio.constants import PDF_CACHE_MAX_ENTRIES, PDF_EXECUTOR_MAX_WORKERS
-from services.portfolio.cv_source import CvSource
 from services.portfolio.dependencies import get_pdf_service, get_user_service
+from services.portfolio.documents.document_service import DocumentService
 from services.portfolio.main import app
 from services.portfolio.pdf_generator import PdfService
-from services.portfolio.tenancy import APP_ROLE
+from services.portfolio.tenancy import APP_ROLE, TenantId
 
 
 # Synthetic CV content so tests never depend on data/cv.json wording.
@@ -87,22 +87,87 @@ def synthetic_cv_path(tmp_path):
     return path
 
 
+class FakeEmptyDocumentRepository:
+    """Always misses, so `DocumentService` falls through to the file fallback.
+
+    Enough for tests that just need a CV served — no Postgres, no rows.
+    """
+
+    async def get(self, kind, *, tenant_id):
+        return None
+
+    async def put(self, *, kind, payload, tenant_id):
+        raise NotImplementedError
+
+    async def list_all(self, *, tenant_id):
+        return []
+
+    async def delete(self, kind, *, tenant_id):
+        return False
+
+
 @pytest.fixture
-def pdf_service(synthetic_cv_path):
+def empty_document_repository():
+    return FakeEmptyDocumentRepository()
+
+
+@pytest.fixture
+def fake_document_service(empty_document_repository):
+    """`DocumentService` with no rows, so every read degrades to the file
+    fallback — enough to back the public CV surface without real Postgres.
+    """
+    return DocumentService(empty_document_repository)
+
+
+@pytest.fixture
+def pdf_service(synthetic_cv_path, fake_document_service, monkeypatch):
+    monkeypatch.setattr(
+        "services.portfolio.pdf_generator.settings.cv_data_path", synthetic_cv_path
+    )
     return PdfService(
-        CvSource(local_path=synthetic_cv_path),
+        fake_document_service,
+        TenantId(1),
         max_entries=PDF_CACHE_MAX_ENTRIES,
         max_workers=PDF_EXECUTOR_MAX_WORKERS,
     )
 
 
 @pytest.fixture
-def override_pdf_service(pdf_service):
+def override_pdf_service(pdf_service, fake_document_service):
+    """Wires the public CV surface: pdf_service plus the document_service +
+    operator_tenant_id it shares with routes that also read the skill bank
+    (e.g. `/api/v1/cv/tailor`), so both sides see the same fake CV/bank data.
+
+    Skips the document_service/operator_tenant_id wiring when a more specific
+    fixture (`user_service`, real Postgres) already set them up — this
+    fixture must not clobber a real, seeded document_service with the fake
+    one when both are requested together (e.g. via `auth_client`).
+    """
+    from services.portfolio.dependencies import (
+        get_document_service,
+        get_operator_tenant_id,
+    )
+
     app.dependency_overrides[get_pdf_service] = lambda: pdf_service
     app.state.pdf_service = pdf_service
+
+    owns_document_service = getattr(app.state, "document_service", None) is None
+    if owns_document_service:
+        operator_tenant_id = TenantId(1)
+        app.dependency_overrides[get_document_service] = lambda: fake_document_service
+        app.dependency_overrides[get_operator_tenant_id] = lambda: operator_tenant_id
+        app.state.document_service = fake_document_service
+        app.state.operator_tenant_id = operator_tenant_id
+
     yield pdf_service
+
     app.dependency_overrides.pop(get_pdf_service, None)
     app.state.pdf_service = None
+    if owns_document_service:
+        app.dependency_overrides.pop(get_document_service, None)
+        app.dependency_overrides.pop(get_operator_tenant_id, None)
+        app.state.document_service = None
+        app.state.operator_tenant_id = None
 
 
 class FakeRevisionRepository:
@@ -497,6 +562,13 @@ async def user_service(auth_settings, _fresh_postgres_url, monkeypatch):
         SqlAlchemyTrackedBoardRepository(session_factory)
     )
 
+    operator = await service.get_by_username("operator")
+    assert operator is not None, "operator not seeded"
+    from services.portfolio.dependencies import get_operator_tenant_id
+    from services.portfolio.tenancy import TenantId
+
+    operator_tenant_id = TenantId(operator.id)
+
     monkeypatch.setattr(settings, "database_url", app_url)
     app.dependency_overrides[get_user_service] = lambda: service
     app.dependency_overrides[get_revision_service] = lambda: revision_service
@@ -504,6 +576,7 @@ async def user_service(auth_settings, _fresh_postgres_url, monkeypatch):
     app.dependency_overrides[get_gap_service] = lambda: gap_service
     app.dependency_overrides[get_document_service] = lambda: document_service
     app.dependency_overrides[get_tracked_board_service] = lambda: tracked_board_service
+    app.dependency_overrides[get_operator_tenant_id] = lambda: operator_tenant_id
     app.state.user_service = service
     app.state.db_session_factory = session_factory
     app.state.document_service = document_service
@@ -511,6 +584,7 @@ async def user_service(auth_settings, _fresh_postgres_url, monkeypatch):
     app.state.refresh_token_service = refresh_token_service
     app.state.gap_service = gap_service
     app.state.tracked_board_service = tracked_board_service
+    app.state.operator_tenant_id = operator_tenant_id
     yield service
     app.dependency_overrides.pop(get_user_service, None)
     app.dependency_overrides.pop(get_revision_service, None)
@@ -518,6 +592,7 @@ async def user_service(auth_settings, _fresh_postgres_url, monkeypatch):
     app.dependency_overrides.pop(get_gap_service, None)
     app.dependency_overrides.pop(get_document_service, None)
     app.dependency_overrides.pop(get_tracked_board_service, None)
+    app.dependency_overrides.pop(get_operator_tenant_id, None)
     app.state.user_service = None
     app.state.db_session_factory = None
     app.state.document_service = None
@@ -525,6 +600,7 @@ async def user_service(auth_settings, _fresh_postgres_url, monkeypatch):
     app.state.refresh_token_service = None
     app.state.gap_service = None
     app.state.tracked_board_service = None
+    app.state.operator_tenant_id = None
     await engine.dispose()
 
 

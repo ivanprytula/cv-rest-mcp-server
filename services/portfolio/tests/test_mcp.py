@@ -17,8 +17,8 @@ def _setup_pdf_service(override_pdf_service):
     yield
 
 
-def test_get_cv_tool(synthetic_cv):
-    result = get_cv()
+async def test_get_cv_tool(synthetic_cv):
+    result = await get_cv()
     assert result["name"] == synthetic_cv["name"]
     assert isinstance(result["skills"], list)
     assert isinstance(result["experience"], list)
@@ -73,16 +73,16 @@ async def test_mcp_endpoint_redirect(client):
     assert resp.headers["location"].endswith("/mcp/")
 
 
-def test_match_job_posting_returns_tailored_cv():
+async def test_match_job_posting_returns_tailored_cv():
     jd = "Required: Python, FastAPI, PostgreSQL"
-    result = match_job_posting(jd)
+    result = await match_job_posting(jd)
     assert "skills" in result
     assert isinstance(result["skills"], list)
     # Original CV is not mutated — match_job_posting should return a new dict
     assert result["name"] == "Jane Doe"
 
 
-def test_match_job_posting_with_title_override():
+async def test_match_job_posting_with_title_override():
     jd = "Required: Python"
-    result = match_job_posting(jd, title="Senior Python Dev")
+    result = await match_job_posting(jd, title="Senior Python Dev")
     assert result["title"] == "Senior Python Dev"

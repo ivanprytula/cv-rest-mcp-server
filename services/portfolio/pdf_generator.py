@@ -16,8 +16,12 @@ from services.portfolio.constants import (
     PDF_EXECUTOR_MAX_WORKERS,
     THEMES_DIR,
 )
-from services.portfolio.cv_source import CvSource
+from services.portfolio.cv_data import validate_cv_payload
+from services.portfolio.documents.document_row import KIND_CV
+from services.portfolio.documents.document_service import DocumentService
 from services.portfolio.renderer import render_html
+from services.portfolio.settings import settings
+from services.portfolio.tenancy import TenantId
 
 
 class _URLFetchDeniedError(Exception):
@@ -79,12 +83,14 @@ class ThemeNotFoundError(HTTPException):
 class PdfService:
     def __init__(
         self,
-        cv_source: CvSource,
+        documents: DocumentService,
+        tenant_id: TenantId,
         *,
         max_entries: int = PDF_CACHE_MAX_ENTRIES,
         max_workers: int = PDF_EXECUTOR_MAX_WORKERS,
     ) -> None:
-        self._cv_source = cv_source
+        self._documents = documents
+        self._tenant_id = tenant_id
         self._max_entries = max_entries
         self._lock = threading.Lock()
         self._executor = ThreadPoolExecutor(max_workers=max_workers)
@@ -92,15 +98,31 @@ class PdfService:
         self._cache: OrderedDict[tuple[str, str], bytes] = OrderedDict()
         self._inflight: dict[tuple[str, str], Future[bytes]] = {}
 
-    @property
-    def cv_data(self) -> dict:
-        """Current CV document (hot-reloaded when backed by GCS)."""
-        return self._cv_source.get()
+    async def cv_data(self) -> dict:
+        """Current CV document: the operator's DB row, else the shipped file.
 
-    @property
-    def cv_source_kind(self) -> str:
-        """Where the served CV came from: "gcs", "file", or "placeholder"."""
-        return self._cv_source.source_kind
+        Normalized through `validate_cv_payload` the same way a file read
+        always was — a DB row or fallback file missing an optional list
+        field (e.g. `projects`) still renders with `[]`, not a KeyError.
+        """
+        payload = await self._documents.read(
+            KIND_CV, tenant_id=self._tenant_id, fallback_path=settings.cv_data_path
+        )
+        if payload is None:
+            return {}
+        return validate_cv_payload(payload)
+
+    async def cv_source_kind(self) -> str:
+        """Where the served CV came from: "database", "file", or "unavailable"."""
+        payload = await self._documents.read(
+            KIND_CV, tenant_id=self._tenant_id, fallback_path=None
+        )
+        if payload is not None:
+            return "database"
+        payload = await self._documents.read(
+            KIND_CV, tenant_id=self._tenant_id, fallback_path=settings.cv_data_path
+        )
+        return "file" if payload is not None else "unavailable"
 
     def clear_cache(self) -> None:
         with self._lock:
@@ -169,16 +191,19 @@ class PdfService:
     def generate_cv_pdf(
         self,
         theme: str,
-        cv_json: dict | None = None,
+        cv_json: dict,
         *,
         consent: bool = False,
         consent_company: str = "",
     ) -> bytes:
+        """Render synchronously. Callers must supply `cv_json` — fetching the
+        current CV is async (`cv_data()`); this method does not do it for you.
+        """
         if theme not in self.themes:
             raise ThemeNotFoundError(theme)
         return self._get_or_render_pdf(
             theme,
-            cv_json or self.cv_data,
+            cv_json,
             consent=consent,
             consent_company=consent_company,
         )
@@ -194,7 +219,7 @@ class PdfService:
         if theme not in self.themes:
             raise ThemeNotFoundError(theme)
 
-        cv_json = cv_json or self.cv_data
+        cv_json = cv_json or await self.cv_data()
         tag = _consent_tag(consent, consent_company)
         key = self._cache_key(theme, cv_json, tag)
         cached = self._cache_get(key)

@@ -43,7 +43,6 @@ from services.portfolio.constants import (
     TEMPLATE_DIR,
 )
 from services.portfolio.cv_extraction import CVExtractionService
-from services.portfolio.cv_source import build_cv_source_from_settings
 from services.portfolio.db import build_engine, build_session_factory
 from services.portfolio.db_migrations import upgrade_head
 from services.portfolio.documents.document_repository import (
@@ -91,7 +90,7 @@ from services.portfolio.tenancy import verify_rls_enforced
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
 # Third-party render pipeline logs every font-subsetting detail at INFO;
-# keep root at INFO for app messages (cv_source reloads) but silence these.
+# keep root at INFO for app messages but silence these.
 for _noisy in ("weasyprint", "fontTools"):
     logging.getLogger(_noisy).setLevel(logging.WARNING)
 
@@ -232,13 +231,13 @@ mcp = FastMCP("cv-rest-mcp-server")
 
 
 @mcp.tool
-def get_cv() -> dict:
+async def get_cv() -> dict:
     """Return the complete CV as structured JSON data."""
     enforce_mcp_read_limit()
     pdf_service = app.state.pdf_service
     if pdf_service is None:
         raise RuntimeError("PDF service not initialized")
-    return pdf_service.cv_data
+    return await pdf_service.cv_data()
 
 
 @mcp.tool
@@ -275,7 +274,7 @@ async def generate_cv_pdf_tool(theme: str) -> str:
 
 
 @mcp.tool
-def match_job_posting(posting_text: str, title: str = "") -> dict:
+async def match_job_posting(posting_text: str, title: str = "") -> dict:
     """Match a job description against the skill bank and return a tailored version.
 
     The tailored CV's skills are built from bank atoms whose level meets the
@@ -289,14 +288,18 @@ def match_job_posting(posting_text: str, title: str = "") -> dict:
     """
     enforce_mcp_read_limit()
     pdf_service = app.state.pdf_service
-    if pdf_service is None:
+    document_service = app.state.document_service
+    operator_tenant_id = app.state.operator_tenant_id
+    if pdf_service is None or document_service is None or operator_tenant_id is None:
         raise RuntimeError("PDF service not initialized")
-    from services.portfolio.matching.baseline import BaselineError, get_baseline
+    from services.portfolio.matching.baseline import BaselineError, get_baseline_async
     from services.portfolio.matching.tailor import tailor_cv
     from services.portfolio.matching.taxonomy import build_alias_table
 
     try:
-        baseline_atoms = get_baseline()
+        baseline_atoms = await get_baseline_async(
+            document_service, tenant_id=operator_tenant_id
+        )
     except BaselineError as exc:
         logger.warning("Skill bank unavailable: %s", exc)
         raise ToolError("CV tailoring failed") from exc
@@ -305,7 +308,7 @@ def match_job_posting(posting_text: str, title: str = "") -> dict:
         return tailor_cv(
             posting_text,
             baseline_atoms,
-            pdf_service.cv_data,
+            await pdf_service.cv_data(),
             title=title,
             aliases=aliases,
         )
@@ -319,13 +322,6 @@ mcp_app = mcp.http_app(path="/")
 
 @asynccontextmanager
 async def lifespan(app):
-    pdf_service = PdfService(
-        build_cv_source_from_settings(),
-        max_entries=PDF_CACHE_MAX_ENTRIES,
-        max_workers=PDF_EXECUTOR_MAX_WORKERS,
-    )
-    app.state.pdf_service = pdf_service
-
     # One app-wide engine/pool (ADR-023), shared by every repository —
     # NOT one engine per repository (see services.portfolio.db's docstring).
     # Run Alembic migrations up to head, then idempotently seed the first
@@ -380,10 +376,25 @@ async def lifespan(app):
     # exists yet (no FIRST_ADMIN_PASSWORD configured): the files still serve
     # every read through the fallback, and the next boot seeds them.
     operator_tenant_id = await resolve_operator_tenant_id(user_service)
+    app.state.operator_tenant_id = operator_tenant_id
     if operator_tenant_id is not None:
         await document_service.seed_from_files(
             document_sources(settings), tenant_id=operator_tenant_id
         )
+
+    # Public CV/PDF surface (routes.py, MCP tools): unauthenticated, so it
+    # always serves the operator's own tenant — see get_operator_tenant_id.
+    # No operator configured yet means no public CV to serve; every route
+    # already degrades on a None pdf_service (503), same as before Phase 3d.
+    pdf_service = None
+    if operator_tenant_id is not None:
+        pdf_service = PdfService(
+            document_service,
+            operator_tenant_id,
+            max_entries=PDF_CACHE_MAX_ENTRIES,
+            max_workers=PDF_EXECUTOR_MAX_WORKERS,
+        )
+    app.state.pdf_service = pdf_service
 
     # CV-intake extraction (Phase 3b): optional, unlike every service above.
     # No API key means the feature is off, not a startup failure — nothing
@@ -397,7 +408,8 @@ async def lifespan(app):
         yield
 
     await engine.dispose()
-    pdf_service._executor.shutdown(wait=False)
+    if pdf_service is not None:
+        pdf_service._executor.shutdown(wait=False)
 
 
 app.router.lifespan_context = lifespan
