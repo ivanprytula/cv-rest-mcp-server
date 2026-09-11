@@ -621,6 +621,17 @@ async def test_disable_user_blocks_future_login(auth_client, user_service):
     assert login_resp.status_code == 401
 
 
+async def test_disable_user_refuses_self(auth_client):
+    headers = await _admin_headers(auth_client)
+    resp = await auth_client.post(
+        "/api/v1/auth/users/operator/disable", headers=headers
+    )
+    assert resp.status_code == 409
+
+    login_resp = await login(auth_client)
+    assert login_resp.status_code == 200
+
+
 async def test_disable_user_revokes_refresh_family(auth_client, user_service):
     await user_service.register(
         username="suspicious",
@@ -649,6 +660,132 @@ async def test_disable_unknown_user_returns_404(auth_client):
     headers = await _admin_headers(auth_client)
     resp = await auth_client.post("/api/v1/auth/users/nobody/disable", headers=headers)
     assert resp.status_code == 404
+
+
+async def test_enable_user_requires_admin(auth_client, user_service):
+    await user_service.register(
+        username="plainuser", email="plain@example.com", password="correct-password"
+    )
+    user_resp = await login(
+        auth_client, username="plainuser", password="correct-password"
+    )
+    headers = {"Authorization": f"Bearer {user_resp.json()['access_token']}"}
+    resp = await auth_client.post(
+        "/api/v1/auth/users/plainuser/enable", headers=headers
+    )
+    assert resp.status_code == 403
+
+
+async def test_enable_user_restores_login(auth_client, user_service):
+    await user_service.register(
+        username="suspicious",
+        email="suspicious@example.com",
+        password="correct-password",
+    )
+    headers = await _admin_headers(auth_client)
+    resp = await auth_client.post(
+        "/api/v1/auth/users/suspicious/disable", headers=headers
+    )
+    assert resp.status_code == 200
+
+    resp = await auth_client.post(
+        "/api/v1/auth/users/suspicious/enable", headers=headers
+    )
+    assert resp.status_code == 200
+    assert resp.json() == {"username": "suspicious", "is_active": True}
+
+    login_resp = await login(
+        auth_client, username="suspicious", password="correct-password"
+    )
+    assert login_resp.status_code == 200
+
+
+async def test_enable_unknown_user_returns_404(auth_client):
+    headers = await _admin_headers(auth_client)
+    resp = await auth_client.post("/api/v1/auth/users/nobody/enable", headers=headers)
+    assert resp.status_code == 404
+
+
+async def test_set_user_role_requires_admin(auth_client, user_service):
+    await user_service.register(
+        username="plainuser", email="plain@example.com", password="correct-password"
+    )
+    user_resp = await login(
+        auth_client, username="plainuser", password="correct-password"
+    )
+    headers = {"Authorization": f"Bearer {user_resp.json()['access_token']}"}
+    resp = await auth_client.post(
+        "/api/v1/auth/users/plainuser/role", json={"role": "admin"}, headers=headers
+    )
+    assert resp.status_code == 403
+
+
+async def test_set_user_role_promotes_to_admin(auth_client, user_service):
+    await user_service.register(
+        username="futureadmin", email="fa@example.com", password="correct-password"
+    )
+    headers = await _admin_headers(auth_client)
+    resp = await auth_client.post(
+        "/api/v1/auth/users/futureadmin/role", json={"role": "admin"}, headers=headers
+    )
+    assert resp.status_code == 200
+    assert resp.json() == {"username": "futureadmin", "role": "admin"}
+
+    updated = await user_service.get_by_username("futureadmin")
+    assert updated.role == "admin"
+
+
+async def test_set_user_role_refuses_self(auth_client, user_service):
+    headers = await _admin_headers(auth_client)
+    resp = await auth_client.post(
+        "/api/v1/auth/users/operator/role", json={"role": "user"}, headers=headers
+    )
+    assert resp.status_code == 409
+
+    unchanged = await user_service.get_by_username("operator")
+    assert unchanged.role == "admin"
+
+
+async def test_set_user_role_rejects_invalid_role(auth_client):
+    headers = await _admin_headers(auth_client)
+    resp = await auth_client.post(
+        "/api/v1/auth/users/operator/role", json={"role": "superuser"}, headers=headers
+    )
+    assert resp.status_code == 422
+
+
+async def test_set_role_unknown_user_returns_404(auth_client):
+    headers = await _admin_headers(auth_client)
+    resp = await auth_client.post(
+        "/api/v1/auth/users/nobody/role", json={"role": "admin"}, headers=headers
+    )
+    assert resp.status_code == 404
+
+
+async def test_list_users_requires_admin(auth_client, user_service):
+    await user_service.register(
+        username="plainuser", email="plain@example.com", password="correct-password"
+    )
+    user_resp = await login(
+        auth_client, username="plainuser", password="correct-password"
+    )
+    headers = {"Authorization": f"Bearer {user_resp.json()['access_token']}"}
+    resp = await auth_client.get("/api/v1/auth/users", headers=headers)
+    assert resp.status_code == 403
+
+
+async def test_list_users_returns_every_account(auth_client, user_service):
+    await user_service.register(
+        username="alice", email="alice@example.com", password="correct-password"
+    )
+    await user_service.register(
+        username="bob", email="bob@example.com", password="correct-password"
+    )
+    headers = await _admin_headers(auth_client)
+    resp = await auth_client.get("/api/v1/auth/users", headers=headers)
+    assert resp.status_code == 200
+    usernames = {row["username"] for row in resp.json()}
+    assert {"operator", "alice", "bob"} <= usernames
 
 
 async def test_me_with_invalid_token(auth_client):

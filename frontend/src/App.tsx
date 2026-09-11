@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from './auth/AuthContext'
 import RequireAuth from './auth/RequireAuth'
+import Admin from './routes/Admin'
 import AdminShell from './routes/AdminShell'
 import CvIntake from './routes/CvIntake'
 import Login from './routes/Login'
@@ -42,6 +43,7 @@ export default function App() {
                 <Route path="postings" element={<Postings />} />
                 <Route path="postings/new" element={<NewPosting />} />
                 <Route path="postings/:id" element={<PostingReport />} />
+                <Route path="admin" element={<Admin />} />
               </Route>
             </Routes>
           </BrowserRouter>

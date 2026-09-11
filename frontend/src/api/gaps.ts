@@ -117,3 +117,8 @@ export async function clusterPosting(postingId: number): Promise<PhraseCluster[]
   )
   return clusters
 }
+
+export async function deletePosting(postingId: number): Promise<void> {
+  const res = await apiFetch(`/api/v1/postings/${postingId}`, { method: 'DELETE' })
+  if (!res.ok) throw new ApiError(res.status, await res.text())
+}

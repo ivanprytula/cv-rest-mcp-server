@@ -6,7 +6,7 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   `whitespace-nowrap font-semibold no-underline ${isActive ? 'text-accent' : 'text-text'}`
 
 export default function AdminShell() {
-  const { logout } = useAuth()
+  const { logout, role } = useAuth()
   const navigate = useNavigate()
 
   async function handleLogout() {
@@ -36,6 +36,11 @@ export default function AdminShell() {
           <NavLink to="/postings/new" className={navLinkClass}>
             + New posting
           </NavLink>
+          {role === 'admin' && (
+            <NavLink to="/admin" className={navLinkClass}>
+              Admin
+            </NavLink>
+          )}
         </nav>
         <div className="flex flex-wrap items-center gap-3">
           <ThemeControls />

@@ -125,6 +125,18 @@ async def list_job_postings(
     return PostingList(postings=await gap_service.list_postings(mentions_term=mentions))
 
 
+@postings_router.delete("/{posting_id}", status_code=204)
+async def delete_job_posting(
+    posting_id: int,
+    gap_service: GapService = get_gap_service_dep,
+) -> None:
+    """Admin-only: permanently remove a stored posting (its analyses and
+    phrase clusters cascade with it)."""
+    deleted = await gap_service.delete_posting(posting_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Job posting not found")
+
+
 @postings_router.post("/{posting_id}/analyze", response_model=GapReportOut)
 async def analyze_job_posting(
     posting_id: int,

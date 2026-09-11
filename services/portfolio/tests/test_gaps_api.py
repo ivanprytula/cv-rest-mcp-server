@@ -78,6 +78,36 @@ class TestStorePosting:
         assert "posting_text" not in postings[0]
 
 
+class TestDeletePosting:
+    async def test_deletes_the_posting(self, admin_client):
+        posting = await _store(admin_client, JD_KUBERNETES, company="Acme")
+        resp = await admin_client.delete(f"{POSTINGS}/{posting['id']}")
+        assert resp.status_code == status.HTTP_204_NO_CONTENT
+
+        listing = await admin_client.get(POSTINGS)
+        assert listing.json()["postings"] == []
+
+    async def test_deleting_unknown_posting_is_404(self, admin_client):
+        resp = await admin_client.delete(f"{POSTINGS}/999999")
+        assert resp.status_code == status.HTTP_404_NOT_FOUND
+
+    async def test_requires_admin(self, admin_client, user_service):
+        posting = await _store(admin_client, JD_KUBERNETES)
+        await user_service.register(
+            username="plainuser", email="plain@example.com", password="correct-password"
+        )
+        resp = await admin_client.post(
+            "/api/v1/auth/token",
+            json={"username": "plainuser", "password": "correct-password"},
+        )
+        token = resp.json()["access_token"]
+        resp = await admin_client.delete(
+            f"{POSTINGS}/{posting['id']}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == status.HTTP_403_FORBIDDEN
+
+
 class TestPostingDocumentConsistency:
     """The Postgres row and its Firestore document are two writes with no
     shared transaction — these lock in the ordering that keeps a partial
@@ -367,6 +397,43 @@ class TestTailoringStoresThePosting:
             await admin_client.post("/api/v1/cv/tailor", content=JD_KUBERNETES.encode())
         postings = (await admin_client.get(POSTINGS)).json()["postings"]
         assert len(postings) == 1
+
+
+class TestDeleteRevision:
+    async def test_deletes_the_revision(self, admin_client):
+        tailor_resp = await admin_client.post(
+            "/api/v1/cv/tailor", content=JD_KUBERNETES.encode()
+        )
+        revision_id = tailor_resp.json()["saved_to"]
+
+        resp = await admin_client.delete(f"/api/v1/revisions/{revision_id}")
+        assert resp.status_code == status.HTTP_204_NO_CONTENT
+
+        listing = await admin_client.get("/api/v1/revisions")
+        assert revision_id not in [r["id"] for r in listing.json()["revisions"]]
+
+    async def test_deleting_unknown_revision_is_404(self, admin_client):
+        resp = await admin_client.delete("/api/v1/revisions/999999")
+        assert resp.status_code == status.HTTP_404_NOT_FOUND
+
+    async def test_requires_admin(self, admin_client, user_service):
+        tailor_resp = await admin_client.post(
+            "/api/v1/cv/tailor", content=JD_KUBERNETES.encode()
+        )
+        revision_id = tailor_resp.json()["saved_to"]
+        await user_service.register(
+            username="plainuser", email="plain@example.com", password="correct-password"
+        )
+        resp = await admin_client.post(
+            "/api/v1/auth/token",
+            json={"username": "plainuser", "password": "correct-password"},
+        )
+        token = resp.json()["access_token"]
+        resp = await admin_client.delete(
+            f"/api/v1/revisions/{revision_id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == status.HTTP_403_FORBIDDEN
 
 
 JD_TWO_RESPONSIBILITIES = (

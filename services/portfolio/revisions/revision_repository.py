@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from sqlalchemy import delete as sa_delete
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -18,6 +19,7 @@ class RevisionRepository(Protocol):
     async def create(self, *, revision: RevisionRow) -> RevisionRow: ...
     async def get_by_id(self, revision_id: int) -> RevisionRow | None: ...
     async def list_all(self) -> list[RevisionRow]: ...
+    async def delete(self, revision_id: int) -> bool: ...
 
 
 class SqlAlchemyRevisionRepository:
@@ -52,3 +54,14 @@ class SqlAlchemyRevisionRepository:
                 select(RevisionRow).order_by(RevisionRow.created_at.desc())
             )
             return list(result.scalars().all())
+
+    async def delete(self, revision_id: int) -> bool:
+        async with self._session_factory() as session:
+            result = await session.execute(
+                sa_delete(RevisionRow)
+                .where(RevisionRow.id == revision_id)
+                .returning(RevisionRow.id)
+            )
+            deleted = result.scalars().first() is not None
+            await session.commit()
+            return deleted

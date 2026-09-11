@@ -1,3 +1,5 @@
+import { apiFetch, apiJson, ApiError } from './client'
+
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
 
 interface TokenPair {
@@ -10,6 +12,20 @@ interface RegisteredUser {
   id: number
   username: string
   email: string
+}
+
+export interface Me {
+  subject: string
+  role: string
+  scopes: string[]
+}
+
+export interface AdminUser {
+  id: number
+  username: string
+  email: string
+  is_active: boolean
+  role: string
 }
 
 async function throwDetail(res: Response, fallback: string): Promise<never> {
@@ -61,4 +77,31 @@ export async function logout(): Promise<void> {
     method: 'POST',
     credentials: 'include',
   })
+}
+
+export async function getMe(): Promise<Me> {
+  return apiJson<Me>('/api/v1/auth/me')
+}
+
+export async function listUsers(): Promise<AdminUser[]> {
+  return apiJson<AdminUser[]>('/api/v1/auth/users')
+}
+
+export async function setUserRole(username: string, role: string): Promise<void> {
+  const res = await apiFetch(`/api/v1/auth/users/${username}/role`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ role }),
+  })
+  if (!res.ok) throw new ApiError(res.status, await res.text())
+}
+
+export async function enableUser(username: string): Promise<void> {
+  const res = await apiFetch(`/api/v1/auth/users/${username}/enable`, { method: 'POST' })
+  if (!res.ok) throw new ApiError(res.status, await res.text())
+}
+
+export async function disableUser(username: string): Promise<void> {
+  const res = await apiFetch(`/api/v1/auth/users/${username}/disable`, { method: 'POST' })
+  if (!res.ok) throw new ApiError(res.status, await res.text())
 }

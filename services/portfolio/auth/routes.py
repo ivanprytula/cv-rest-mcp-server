@@ -29,7 +29,7 @@ from services.portfolio.auth.crypto import (
     sign_access_token,
 )
 from services.portfolio.auth.refresh_token_service import RefreshTokenService
-from services.portfolio.auth.user import ROLE_USER
+from services.portfolio.auth.user import ROLE_USER, User
 from services.portfolio.auth.user_service import UserService
 from services.portfolio.constants import API_V1_PREFIX
 from services.portfolio.dependencies import (
@@ -41,8 +41,10 @@ from services.portfolio.schemas.auth import (
     MeResponse,
     RegisteredUser,
     RegisterRequest,
+    SetUserRoleRequest,
     TokenPair,
     UserActiveStatus,
+    UserRoleStatus,
 )
 from services.portfolio.settings import settings
 
@@ -274,6 +276,7 @@ async def logout(
     responses={404: {"description": "No such user"}},
 )
 async def disable_user(
+    request: Request,
     username: str,
     user_service: UserService = get_user_service_dep,
     refresh_tokens: RefreshTokenService = get_refresh_token_service_dep,
@@ -290,7 +293,15 @@ async def disable_user(
 
     Gated by `JWTAuthMiddleware`'s admin-route set (see `_ADMIN_ROUTES` in
     `auth/middleware.py`), the same mechanism as every other admin mutation.
+    Self-disable is refused outright — an admin locking out their own only
+    account has no recovery path short of a manual DB edit; have another
+    admin do it.
     """
+    if _get_auth_claims(request).get("sub") == username:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cannot disable your own account",
+        )
     updated = await user_service.set_active(username=username, is_active=False)
     if not updated:
         raise HTTPException(
@@ -298,6 +309,72 @@ async def disable_user(
         )
     await refresh_tokens.revoke_all_for_subject(username)
     return UserActiveStatus(username=username, is_active=False)
+
+
+@auth_router.post(
+    "/users/{username}/enable",
+    response_model=UserActiveStatus,
+    status_code=status.HTTP_200_OK,
+    responses={404: {"description": "No such user"}},
+)
+async def enable_user(
+    username: str,
+    user_service: UserService = get_user_service_dep,
+) -> UserActiveStatus:
+    """Admin-only: `disable_user`'s counterpart. Lets a blocked user log in
+    again; already-revoked refresh-token families stay revoked — they sign
+    in fresh, same as any other login.
+    """
+    updated = await user_service.set_active(username=username, is_active=True)
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="No such user"
+        )
+    return UserActiveStatus(username=username, is_active=True)
+
+
+@auth_router.post(
+    "/users/{username}/role",
+    response_model=UserRoleStatus,
+    status_code=status.HTTP_200_OK,
+    responses={404: {"description": "No such user"}},
+)
+async def set_user_role(
+    request: Request,
+    username: str,
+    payload: SetUserRoleRequest,
+    user_service: UserService = get_user_service_dep,
+) -> UserRoleStatus:
+    """Admin-only: change a user's role. Takes effect on their next
+    login/refresh — see `UserService.set_role`.
+
+    Self-role-change is refused outright — same reasoning as self-disable:
+    an admin demoting their own only account has no recovery path short of
+    a manual DB edit; have another admin do it.
+    """
+    if _get_auth_claims(request).get("sub") == username:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cannot change your own role",
+        )
+    updated = await user_service.set_role(username=username, role=payload.role)
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="No such user"
+        )
+    return UserRoleStatus(username=username, role=payload.role)
+
+
+@auth_router.get(
+    "/users",
+    response_model=list[User],
+    status_code=status.HTTP_200_OK,
+)
+async def list_users(
+    user_service: UserService = get_user_service_dep,
+) -> list[User]:
+    """Admin-only: every user account, for the admin console's Users list."""
+    return await user_service.list_all()
 
 
 @auth_router.get(

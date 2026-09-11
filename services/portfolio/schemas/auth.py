@@ -60,3 +60,16 @@ class UserActiveStatus(BaseModel):
 
     username: str
     is_active: bool
+
+
+class SetUserRoleRequest(BaseModel):
+    """Body for the admin set-role endpoint."""
+
+    role: str = Field(pattern=r"^(admin|user)$")
+
+
+class UserRoleStatus(BaseModel):
+    """What the admin set-role endpoint returns."""
+
+    username: str
+    role: str

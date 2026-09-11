@@ -468,6 +468,19 @@ class GapService:
             return None
         return row.to_domain(posting_text=document.posting_text)
 
+    async def delete_posting(self, posting_id: int) -> bool:
+        """Permanently remove a posting row (analyses/clusters cascade with
+        it at the DB level). Its Firestore document is content-addressed by
+        hash, not posting id, and may be shared with another posting that
+        deduped onto the same text — left in place rather than risk deleting
+        text another row still depends on.
+        """
+        try:
+            return await self._repo.delete_posting(posting_id)
+        except Exception:
+            logger.warning("Failed to delete posting %s", posting_id, exc_info=True)
+            return False
+
     async def list_postings(
         self, *, mentions_term: str | None = None
     ) -> list[JobPostingSummary]:

@@ -6,7 +6,12 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { login as apiLogin, logout as apiLogout, refresh as apiRefresh } from '../api/auth'
+import {
+  getMe,
+  login as apiLogin,
+  logout as apiLogout,
+  refresh as apiRefresh,
+} from '../api/auth'
 
 // Access token lives in memory only (ADR-022): never localStorage/sessionStorage,
 // so an XSS payload cannot read it. The refresh token never reaches JS at all —
@@ -14,6 +19,8 @@ import { login as apiLogin, logout as apiLogout, refresh as apiRefresh } from '.
 interface AuthState {
   accessToken: string | null
   isAuthenticated: boolean
+  role: string | null
+  username: string | null
   login: (username: string, password: string) => Promise<void>
   logout: () => Promise<void>
   setAccessToken: (token: string | null) => void
@@ -60,10 +67,29 @@ export async function tryRefresh(): Promise<string | null> {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [accessToken, setAccessTokenState] = useState<string | null>(null)
+  const [role, setRole] = useState<string | null>(null)
+  const [username, setUsername] = useState<string | null>(null)
 
+  // Single choke point for both explicit login and RequireAuth's silent
+  // cookie-refresh on reload — role/username are fetched here so both paths
+  // know them, not just the one that calls login() directly.
   const setAccessToken = useCallback((token: string | null) => {
     setAccessTokenExternal(token)
     setAccessTokenState(token)
+    if (token) {
+      getMe()
+        .then((me) => {
+          setRole(me.role)
+          setUsername(me.subject)
+        })
+        .catch(() => {
+          setRole(null)
+          setUsername(null)
+        })
+    } else {
+      setRole(null)
+      setUsername(null)
+    }
   }, [])
 
   const login = useCallback(
@@ -80,8 +106,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [setAccessToken])
 
   const value = useMemo(
-    () => ({ accessToken, isAuthenticated: accessToken !== null, login, logout, setAccessToken }),
-    [accessToken, login, logout, setAccessToken],
+    () => ({
+      accessToken,
+      isAuthenticated: accessToken !== null,
+      role,
+      username,
+      login,
+      logout,
+      setAccessToken,
+    }),
+    [accessToken, role, username, login, logout, setAccessToken],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
