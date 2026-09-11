@@ -51,7 +51,7 @@ jobs:
           python-version: "3.14"
       - name: Install dependencies
         run: uv sync --group dev
-      - name: Install frontend dependencies
+      - name: Install Tailwind CSS build dependencies
         run: npm ci
       - name: Verify generated CSS
         run: |
@@ -63,6 +63,18 @@ jobs:
         run: uv run ruff format --check .
       - name: Type check
         run: uv run ty check
+      - name: Install SPA dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Frontend lint
+        working-directory: frontend
+        run: npm run lint
+      - name: Frontend type check + build
+        working-directory: frontend
+        run: npm run build
+      - name: Frontend tests
+        working-directory: frontend
+        run: npm run test
 
   tests:
     needs: code-quality
