@@ -8,9 +8,9 @@ touching the service.
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Protocol, cast
 
-from sqlalchemy import select
+from sqlalchemy import CursorResult, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from services.portfolio.auth.user_row import UserRow
@@ -19,6 +19,7 @@ from services.portfolio.auth.user_row import UserRow
 class UserRepository(Protocol):
     async def get_by_username(self, username: str) -> UserRow | None: ...
     async def create(self, *, user: UserRow) -> UserRow: ...
+    async def set_active(self, *, username: str, is_active: bool) -> bool: ...
 
 
 class SqlAlchemyUserRepository:
@@ -47,3 +48,19 @@ class SqlAlchemyUserRepository:
             session.add(user)
             await session.commit()
         return user
+
+    async def set_active(self, *, username: str, is_active: bool) -> bool:
+        """Flip a user's active flag. Returns False if no such user exists."""
+        async with self._session_factory() as session:
+            # cast: session.execute is typed Result[Any]; a DML statement
+            # actually returns a CursorResult, which is what carries rowcount.
+            result = cast(
+                CursorResult,
+                await session.execute(
+                    update(UserRow)
+                    .where(UserRow.username == username)
+                    .values(is_active=is_active)
+                ),
+            )
+            await session.commit()
+            return result.rowcount > 0

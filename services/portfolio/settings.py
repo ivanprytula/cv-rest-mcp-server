@@ -64,6 +64,10 @@ class Settings(BaseSettings):
     first_admin_password_file: Path | None = None
     access_token_ttl_minutes: int = 10
     refresh_token_ttl_days: int = 30
+    # Incident-response kill switch: flip to false (env var, no redeploy of
+    # code) to stop new self-service signups while everything else — login,
+    # the API, existing users — keeps working.
+    registration_enabled: bool = True
 
     # Skill bank (CV tailor + MCP match_job_posting)
     cv_baseline_path: Path = Path("data/cv_baseline.json")

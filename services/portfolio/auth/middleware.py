@@ -53,6 +53,9 @@ _REGISTER_PATH = f"{API_V1_PREFIX}/auth/register"
 _REFRESH_PATH = f"{API_V1_PREFIX}/auth/refresh"
 _LOGOUT_PATH = f"{API_V1_PREFIX}/auth/logout"
 
+# Admin user-management subtree: POST /api/v1/auth/users/{username}/disable.
+_ADMIN_USERS_PREFIX = f"{API_V1_PREFIX}/auth/users"
+
 # Tailoring surface (migrated from TailorAuthMiddleware). All of it is
 # header-only Bearer auth now — nothing embeds a tailored view in an iframe,
 # so there is no `?token=` fallback anywhere. The mutation route lives under
@@ -95,6 +98,7 @@ _ADMIN_PREFIXES = (
     ("POST", f"{API_V1_PREFIX}/postings"),
     ("PATCH", f"{API_V1_PREFIX}/tracked-boards"),
     ("DELETE", f"{API_V1_PREFIX}/tracked-boards"),
+    ("POST", _ADMIN_USERS_PREFIX),
 )
 
 # Mutations gated by the `cv:manage` scope rather than the admin role: a

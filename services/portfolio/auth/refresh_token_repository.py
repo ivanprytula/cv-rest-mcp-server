@@ -27,6 +27,7 @@ class RefreshTokenRepository(Protocol):
         self, *, family_id: str, presented_hash: str, new_hash: str
     ) -> bool: ...
     async def revoke(self, family_id: str) -> None: ...
+    async def revoke_all_for_subject(self, subject: str) -> None: ...
     async def clear(self) -> None: ...
 
 
@@ -124,6 +125,16 @@ class SqlAlchemyRefreshTokenRepository:
             await session.execute(
                 update(RefreshTokenFamilyRow)
                 .where(RefreshTokenFamilyRow.family_id == family_id)
+                .values(revoked=True)
+            )
+            await session.commit()
+
+    async def revoke_all_for_subject(self, subject: str) -> None:
+        """Revoke every family issued to *subject* (e.g. disabling a user)."""
+        async with self._session_factory() as session:
+            await session.execute(
+                update(RefreshTokenFamilyRow)
+                .where(RefreshTokenFamilyRow.subject == subject)
                 .values(revoked=True)
             )
             await session.commit()
