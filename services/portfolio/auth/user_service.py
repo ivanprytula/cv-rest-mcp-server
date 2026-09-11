@@ -91,6 +91,17 @@ class UserService:
         )
         return created.to_domain()
 
+    async def set_active(self, *, username: str, is_active: bool) -> bool:
+        """Enable or disable a user's account. Returns False if unknown.
+
+        Disabling does not touch already-issued access tokens (stateless,
+        ≤`access_token_ttl_minutes` old) — `authenticate()` already refuses
+        an inactive user, so this alone blocks new logins. Callers that also
+        want existing sessions cut immediately should revoke the user's
+        refresh-token families too (see `auth/routes.py`'s admin route).
+        """
+        return await self._repo.set_active(username=username, is_active=is_active)
+
     async def seed_first_admin(
         self, *, username: str, email: str, password: str, role: str = ROLE_ADMIN
     ) -> User | None:

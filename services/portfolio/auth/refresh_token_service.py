@@ -96,6 +96,10 @@ class RefreshTokenService:
         if family is not None:
             await self._repo.revoke(family.family_id)
 
+    async def revoke_all_for_subject(self, subject: str) -> None:
+        """Revoke every refresh-token family issued to *subject* (disabling a user)."""
+        await self._repo.revoke_all_for_subject(subject)
+
     async def clear(self) -> None:
         """Drop all families (test helper / lifecycle)."""
         await self._repo.clear()

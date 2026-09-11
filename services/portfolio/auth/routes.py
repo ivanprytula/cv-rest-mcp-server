@@ -42,6 +42,7 @@ from services.portfolio.schemas.auth import (
     RegisteredUser,
     RegisterRequest,
     TokenPair,
+    UserActiveStatus,
 )
 from services.portfolio.settings import settings
 
@@ -119,7 +120,10 @@ def _get_auth_claims(request: Request) -> dict:
     "/register",
     response_model=RegisteredUser,
     status_code=status.HTTP_201_CREATED,
-    responses={409: {"description": "Username already taken"}},
+    responses={
+        403: {"description": "Registration is disabled"},
+        409: {"description": "Username already taken"},
+    },
 )
 async def register(
     body: RegisterRequest,
@@ -131,6 +135,11 @@ async def register(
     returned — the client posts to `/auth/token` next, keeping one path
     that issues credentials.
     """
+    if not settings.registration_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Registration is currently disabled",
+        )
     user = await user_service.register(
         username=body.username, email=body.email, password=body.password
     )
@@ -256,6 +265,39 @@ async def logout(
     _clear_refresh_cookie(response)
     response.headers["Cache-Control"] = "no-store"
     return response
+
+
+@auth_router.post(
+    "/users/{username}/disable",
+    response_model=UserActiveStatus,
+    status_code=status.HTTP_200_OK,
+    responses={404: {"description": "No such user"}},
+)
+async def disable_user(
+    username: str,
+    user_service: UserService = get_user_service_dep,
+    refresh_tokens: RefreshTokenService = get_refresh_token_service_dep,
+) -> UserActiveStatus:
+    """Admin-only incident-response lever: block a user's future logins.
+
+    Sets `is_active=False` (which `authenticate()`/`refresh()` already
+    check) and revokes every refresh-token family issued to them, so a
+    stolen or abused session cannot mint a new access token either. Their
+    current access token still works until it naturally expires (as short
+    as `access_token_ttl_minutes` away) — access tokens are stateless and
+    cannot be revoked instantly; use `max-instances=0` on the Cloud Run
+    service for an immediate, whole-API stop if that gap matters.
+
+    Gated by `JWTAuthMiddleware`'s admin-route set (see `_ADMIN_ROUTES` in
+    `auth/middleware.py`), the same mechanism as every other admin mutation.
+    """
+    updated = await user_service.set_active(username=username, is_active=False)
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="No such user"
+        )
+    await refresh_tokens.revoke_all_for_subject(username)
+    return UserActiveStatus(username=username, is_active=False)
 
 
 @auth_router.get(

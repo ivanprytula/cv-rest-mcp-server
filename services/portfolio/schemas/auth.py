@@ -53,3 +53,10 @@ class MeResponse(BaseModel):
     subject: str
     role: str
     scopes: list[str]
+
+
+class UserActiveStatus(BaseModel):
+    """What the admin disable/enable-user endpoints return."""
+
+    username: str
+    is_active: bool

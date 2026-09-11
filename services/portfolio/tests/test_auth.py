@@ -198,6 +198,15 @@ async def test_authenticate_unknown_username(user_service):
     assert await user_service.authenticate("attacker", "whatever") is None
 
 
+async def test_set_active_disables_login(user_service):
+    assert await user_service.set_active(username="operator", is_active=False) is True
+    assert await user_service.authenticate("operator", "correct-password") is None
+
+
+async def test_set_active_unknown_user_returns_false(user_service):
+    assert await user_service.set_active(username="nobody", is_active=False) is False
+
+
 async def test_authenticate_unconfigured_returns_none(_fresh_postgres_url):
     from services.portfolio.auth.user_repository import SqlAlchemyUserRepository
     from services.portfolio.auth.user_service import UserService
@@ -535,6 +544,111 @@ async def test_me_with_valid_token(auth_client):
 async def test_me_without_token(auth_client):
     resp = await auth_client.get("/api/v1/auth/me")
     assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# routes: register (kill switch)
+# ---------------------------------------------------------------------------
+
+
+async def test_register_disabled_returns_403(auth_client, monkeypatch):
+    monkeypatch.setattr(settings, "registration_enabled", False)
+    resp = await auth_client.post(
+        "/api/v1/auth/register",
+        json={
+            "username": "newuser",
+            "email": "new@example.com",
+            "password": "correct-password",
+        },
+    )
+    assert resp.status_code == 403
+    assert resp.json()["detail"] == "Registration is currently disabled"
+
+
+async def test_register_enabled_by_default(auth_client):
+    resp = await auth_client.post(
+        "/api/v1/auth/register",
+        json={
+            "username": "newuser",
+            "email": "new@example.com",
+            "password": "correct-password",
+        },
+    )
+    assert resp.status_code == 201
+
+
+# ---------------------------------------------------------------------------
+# routes: admin disable-user
+# ---------------------------------------------------------------------------
+
+
+async def _admin_headers(client) -> dict[str, str]:
+    resp = await login(client)
+    return {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
+
+async def test_disable_user_requires_admin(auth_client, user_service):
+    await user_service.register(
+        username="plainuser", email="plain@example.com", password="correct-password"
+    )
+    user_resp = await login(
+        auth_client, username="plainuser", password="correct-password"
+    )
+    headers = {"Authorization": f"Bearer {user_resp.json()['access_token']}"}
+    resp = await auth_client.post(
+        "/api/v1/auth/users/plainuser/disable", headers=headers
+    )
+    assert resp.status_code == 403
+
+
+async def test_disable_user_blocks_future_login(auth_client, user_service):
+    await user_service.register(
+        username="suspicious",
+        email="suspicious@example.com",
+        password="correct-password",
+    )
+    headers = await _admin_headers(auth_client)
+
+    resp = await auth_client.post(
+        "/api/v1/auth/users/suspicious/disable", headers=headers
+    )
+    assert resp.status_code == 200
+    assert resp.json() == {"username": "suspicious", "is_active": False}
+
+    login_resp = await login(
+        auth_client, username="suspicious", password="correct-password"
+    )
+    assert login_resp.status_code == 401
+
+
+async def test_disable_user_revokes_refresh_family(auth_client, user_service):
+    await user_service.register(
+        username="suspicious",
+        email="suspicious@example.com",
+        password="correct-password",
+    )
+    login_resp = await login(
+        auth_client, username="suspicious", password="correct-password"
+    )
+    set_cookie = login_resp.headers["set-cookie"]
+    refresh_token = set_cookie.split(";")[0].split("=", 1)[1]
+
+    admin_headers = await _admin_headers(auth_client)
+    resp = await auth_client.post(
+        "/api/v1/auth/users/suspicious/disable", headers=admin_headers
+    )
+    assert resp.status_code == 200
+
+    refresh_resp = await auth_client.post(
+        "/api/v1/auth/refresh", cookies={"__Host-refresh_token": refresh_token}
+    )
+    assert refresh_resp.status_code == 401
+
+
+async def test_disable_unknown_user_returns_404(auth_client):
+    headers = await _admin_headers(auth_client)
+    resp = await auth_client.post("/api/v1/auth/users/nobody/disable", headers=headers)
+    assert resp.status_code == 404
 
 
 async def test_me_with_invalid_token(auth_client):
