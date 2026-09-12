@@ -813,3 +813,42 @@ need to invent a bootstrap pattern. The seam between `UserService` and
 the token issuance (`sign_access_token(subject, scopes, *, role=...)`)
 is the only place where role/identity is attached to claims, so the
 Phase-2 role/groups/ABAC growth is a local change.
+
+## ADR-024: Pub/Sub test strategy + minimal A2A wire subset (Phase 3f spike)
+
+**Context.** Phase 3f adds a `PostingChanged` event (GCP Pub/Sub) and a
+CV-extraction critic agent speaking Google's Agent2Agent (A2A) protocol.
+Both are the codebase's first contact with their respective wire formats;
+committing to file layout before settling how each gets tested/scoped
+would risk rework across Phases 1-5.
+
+**Decision — Pub/Sub test strategy.** Mirror the existing Firestore-emulator
+pattern (`test_firestore_store.py`, `just test-firestore`, `firestore`
+pytest marker) exactly: a `pubsub` marker (excluded by default via
+`addopts`), a `just test-pubsub` recipe, and a session fixture that shells
+out to `gcloud beta emulators pubsub start` (note the `beta` release
+track — unlike `gcloud emulators firestore start`, the Pub/Sub emulator is
+not promoted to the default track on this CLI image, confirmed by a
+failing local run: `Invalid choice: 'pubsub' ... Try: gcloud beta emulators
+pubsub`) the same way `firestore_emulator()` does, setting
+`PUBSUB_EMULATOR_HOST` instead of `FIRESTORE_EMULATOR_HOST`. No
+mocked-client shortcut — the Firestore precedent already proved
+emulator-backed adapter tests are worth the Docker/CLI-image cost in this
+repo, and Pub/Sub's official emulator (bundled in the same `gcloud` CLI
+image) is at least as reliable as Firestore's.
+
+**Decision — A2A wire subset.** Target only the two pieces needed for a
+single, non-streaming extractor→critic round-trip: an `AgentCard` served
+at `/.well-known/agent.json` (name/description/url/skills, per spec) and
+the `message/send` JSON-RPC 2.0 method (request/response, no task
+polling, no SSE streaming, no push notifications). The full A2A spec
+also defines multi-turn `tasks/get`/`tasks/cancel` and streaming
+(`message/stream`) — none of that is reachable from a one-shot
+extract-then-critique flow, so it is out of scope until a real multi-turn
+need appears.
+
+**Consequences.** Phase 2's Pub/Sub adapter test and Phase 4's A2A
+envelope both have a settled shape before their PRs are written, so
+neither reopens this decision mid-implementation. If a future phase
+needs A2A streaming or multi-turn tasks, that is a new ADR, not an
+extension smuggled into Phase 4/5's original scope.

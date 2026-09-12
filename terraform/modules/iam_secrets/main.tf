@@ -34,6 +34,16 @@ resource "google_service_account" "ats_refresh_trigger_runtime" {
   project      = var.project
 }
 
+# Private, internal-only Cloud Run service invoked by the posting-changed
+# push subscription's OIDC token (Phase 3f PR3) — same pattern as
+# ats_refresh_trigger_runtime above, granted run.invoker on that one
+# service, nowhere else, in main.tf where the service itself is defined.
+resource "google_service_account" "analysis_worker_runtime" {
+  account_id   = "analysis-worker-runtime"
+  display_name = "Analysis worker Cloud Run service account"
+  project      = var.project
+}
+
 # Deployer requires Cloud Run admin + Secret Manager access
 resource "google_project_iam_member" "deployer_run_admin" {
   project = var.project
@@ -359,6 +369,43 @@ resource "google_secret_manager_secret_iam_member" "ats_refresh_trigger_database
   secret_id = var.database_url_secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.ats_refresh_trigger_runtime.email}"
+}
+
+# Analysis worker (Phase 3f PR3): same DATABASE_URL secret as api-core,
+# nothing else — it has no JWT signing, no CV bucket, no other runtime need.
+resource "google_project_iam_member" "analysis_worker_gcr_pull" {
+  project = var.project
+  role    = "roles/storage.objectViewer"
+  member  = "serviceAccount:${google_service_account.analysis_worker_runtime.email}"
+}
+
+resource "google_project_iam_member" "analysis_worker_logging" {
+  project = var.project
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.analysis_worker_runtime.email}"
+}
+
+resource "google_artifact_registry_repository_iam_member" "analysis_worker_cv_images_reader" {
+  project    = var.project
+  location   = google_artifact_registry_repository.cv_images.location
+  repository = google_artifact_registry_repository.cv_images.name
+  role       = "roles/artifactregistry.reader"
+  member     = "serviceAccount:${google_service_account.analysis_worker_runtime.email}"
+}
+
+resource "google_project_iam_member" "analysis_worker_cloudsql_client" {
+  count   = var.enable_cloud_sql ? 1 : 0
+  project = var.project
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${google_service_account.analysis_worker_runtime.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "analysis_worker_database_url" {
+  count     = var.database_url_secret_id != "" ? 1 : 0
+  project   = var.project
+  secret_id = var.database_url_secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.analysis_worker_runtime.email}"
 }
 
 # Cloud Build permissions (shared across all builders)

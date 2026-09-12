@@ -244,6 +244,10 @@ When writing new plan files, **never overwrite existing ones** unless explicitly
   `DATABASE_URL` has no default — required in `.env` and CI.
   `alembic/`/`alembic.ini` live under `services/portfolio/` (not repo root)
   so the Dockerfile's existing `COPY services/portfolio/` picks them up.
-- No external LLM calls in codebase (pure FastAPI + FastMCP)
+- CV intake (Phase 3b) calls Anthropic (`claude-haiku-4-5-20251001`) for
+  resume-to-`CVData` extraction (`services/portfolio/cv_extraction.py`) —
+  the codebase's first external LLM dependency. Tool-use forcing +
+  structured output; user reviews/edits the draft before save (trust-boundary
+  crossing, resume text is untrusted input).
 - All config via env/settings.py (12-factor)
 - PDF rendering uses WeasyPrint (CPU-bound, rate-limited)

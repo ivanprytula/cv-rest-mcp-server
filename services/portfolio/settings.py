@@ -80,6 +80,12 @@ class Settings(BaseSettings):
     # to use the real Firestore-backed store.
     firestore_project: str = ""
 
+    # PostingChanged event publisher (Phase 3f). Empty = no topic configured
+    # — GapService logs the event instead of publishing it, same "empty
+    # means skip" pattern as firestore_project above. Set to the Pub/Sub
+    # topic path (projects/<project>/topics/<topic>) to publish for real.
+    pubsub_posting_changed_topic: str = ""
+
     # Migrations connect as a more privileged role: they issue DDL, which the
     # app deliberately cannot. Two URLs rather than one connection that
     # switches role on the fly, because `SET ROLE` is reversible — a superuser

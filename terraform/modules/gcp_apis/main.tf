@@ -62,3 +62,10 @@ resource "google_project_service" "firestore" {
   service            = "firestore.googleapis.com"
   disable_on_destroy = false
 }
+
+# Phase 3f: PostingChanged events decouple ATS-sync from analysis. See
+# services/portfolio/events/pubsub_publisher.py.
+resource "google_project_service" "pubsub" {
+  service            = "pubsub.googleapis.com"
+  disable_on_destroy = false
+}

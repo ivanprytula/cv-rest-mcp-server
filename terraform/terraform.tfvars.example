@@ -110,10 +110,25 @@ services = {
     allow_unauthenticated = true
     max_instances         = 1
   }
-  # workers = {
-  #   image                 = "europe-west1-docker.pkg.dev/cv-rest-mcp-server/cv-images/workers:latest"
-  #   service_account       = "workers-runtime@cv-rest-mcp-server.iam.gserviceaccount.com"
-  #   allow_unauthenticated = false   # private: invoked via Pub/Sub/Cloud Tasks, never public
+  # ats-refresh-trigger = {
+  #   Same image as api-core, different entrypoint (Phase 2b PR4) — see
+  #   modules/cloud_run_service's `command` variable. Private: invoked only
+  #   by Cloud Scheduler's OIDC token (google_cloud_scheduler_job below).
+  #   image                 = "europe-west1-docker.pkg.dev/cv-rest-mcp-server/cv-images/api-core:latest"
+  #   service_account       = "ats-refresh-trigger-runtime@cv-rest-mcp-server.iam.gserviceaccount.com"
+  #   allow_unauthenticated = false
+  #   command               = ["python", "-m", "services.portfolio.refresh_trigger"]
+  #   max_instances         = 1
+  # }
+
+  # analysis-worker = {
+  #   Same image as api-core, different entrypoint (Phase 3f PR3). Private:
+  #   invoked only by the posting-changed push subscription's OIDC token
+  #   (module.pubsub[0]'s google_pubsub_subscription below).
+  #   image                 = "europe-west1-docker.pkg.dev/cv-rest-mcp-server/cv-images/api-core:latest"
+  #   service_account       = "analysis-worker-runtime@cv-rest-mcp-server.iam.gserviceaccount.com"
+  #   allow_unauthenticated = false
+  #   command               = ["python", "-m", "services.portfolio.analysis_worker"]
   #   max_instances         = 1
   # }
 }
@@ -198,6 +213,15 @@ enable_cloud_sql = false
 #   FIRESTORE_PROJECT = "cv-rest-mcp-server"
 enable_firestore = false
 # firestore_location = "eur3"  # default shown; check `gcloud firestore locations list` for this project
+
+# PostingChanged events (Phase 3f). PUBSUB_POSTING_CHANGED_TOPIC is a plain
+# (non-secret) Cloud Run env var, same wiring as FIRESTORE_PROJECT above —
+# add it to api-core's and ats-refresh-trigger's env_vars once this is
+# applied (use module.pubsub[0].posting_changed_topic_id), or both keep
+# running on LoggingEventPublisher with no error (see pubsub_publisher.py's
+# "empty setting means skip" note).
+#   PUBSUB_POSTING_CHANGED_TOPIC = "projects/cv-rest-mcp-server/topics/posting-changed"
+enable_pubsub_events = false
 
 # --- Bootstrap (one-time setup before terraform apply) ---
 # Use deploy-cloud-run.sh for first-time setup:
