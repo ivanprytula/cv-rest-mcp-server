@@ -56,6 +56,9 @@ class TrackedBoardRow(Base):
     # run polls. Independent of `kind` — a board's group has no bearing on
     # whether it's API-backed or url_only.
     group: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # No tenant_id: board polling stays admin-only/shared (Phase 3e decision),
+    # not per-tenant. A tracked board is "what we poll," not "who owns it" —
+    # unlike JobPostingRow.tenant_id. Adding it later would be additive.
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
