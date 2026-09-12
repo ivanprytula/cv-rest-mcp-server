@@ -110,13 +110,6 @@ services = {
     allow_unauthenticated = true
     max_instances         = 1
   }
-  # workers = {
-  #   image                 = "europe-west1-docker.pkg.dev/cv-rest-mcp-server/cv-images/workers:latest"
-  #   service_account       = "workers-runtime@cv-rest-mcp-server.iam.gserviceaccount.com"
-  #   allow_unauthenticated = false   # private: invoked via Pub/Sub/Cloud Tasks, never public
-  #   max_instances         = 1
-  # }
-
   # ats-refresh-trigger = {
   #   Same image as api-core, different entrypoint (Phase 2b PR4) — see
   #   modules/cloud_run_service's `command` variable. Private: invoked only
