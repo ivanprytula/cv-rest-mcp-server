@@ -30,9 +30,12 @@ jobs:
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.16.0"
-      - name: Install tflint
-        run: |
-          curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
+      # terraform-linters/tflint dropped its curl-installable install_linux.sh
+      # convenience script (404s now) — the official GitHub Action is the
+      # maintained replacement.
+      - uses: terraform-linters/setup-tflint@v6
+        with:
+          tflint_version: v0.64.0
       - name: tflint
         run: tflint --chdir terraform --config .tflint.hcl
       - name: checkov
