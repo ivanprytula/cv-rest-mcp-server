@@ -104,6 +104,7 @@ class GapService:
     async def store_posting(
         self,
         *,
+        tenant_id: TenantId,
         posting_text: str,
         source: str = "manual",
         external_id: str | None = None,
@@ -149,7 +150,9 @@ class GapService:
         digest = content_hash(posting_text)
         if external_id is None:
             try:
-                existing = await self._repo.find_by_content_hash(digest)
+                existing = await self._repo.find_by_content_hash(
+                    digest, tenant_id=tenant_id
+                )
             except Exception:
                 logger.warning("Failed to check for duplicate posting", exc_info=True)
                 existing = None
@@ -200,7 +203,7 @@ class GapService:
             last_seen_at=now,
         )
         try:
-            stored = await self._repo.upsert_posting(posting=row)
+            stored = await self._repo.upsert_posting(posting=row, tenant_id=tenant_id)
         except Exception:
             logger.warning("Failed to persist job posting", exc_info=True)
             return None, False
@@ -209,6 +212,7 @@ class GapService:
     async def sync_ats_posting(
         self,
         *,
+        tenant_id: TenantId,
         source: str,
         external_id: str,
         company_slug: str,
@@ -232,7 +236,9 @@ class GapService:
         """
         digest = content_hash(posting_text)
         try:
-            existing = await self._repo.find_by_source_external_id(source, external_id)
+            existing = await self._repo.find_by_source_external_id(
+                source, external_id, tenant_id=tenant_id
+            )
         except Exception:
             logger.warning(
                 "Failed to look up posting %s/%s", source, external_id, exc_info=True
@@ -247,6 +253,7 @@ class GapService:
             status = "new"
 
         posting, _ = await self.store_posting(
+            tenant_id=tenant_id,
             posting_text=posting_text,
             source=source,
             external_id=external_id,
@@ -261,7 +268,12 @@ class GapService:
         return posting, status
 
     async def close_stale_board_postings(
-        self, *, source: str, company_slug: str, seen_external_ids: set[str]
+        self,
+        *,
+        tenant_id: TenantId,
+        source: str,
+        company_slug: str,
+        seen_external_ids: set[str],
     ) -> int:
         """Close postings on one board absent from its current fetch.
 
@@ -271,6 +283,7 @@ class GapService:
         """
         try:
             return await self._repo.close_missing_postings(
+                tenant_id=tenant_id,
                 source=source,
                 company_slug=company_slug,
                 seen_external_ids=seen_external_ids,
@@ -287,6 +300,7 @@ class GapService:
     async def sync_board(
         self,
         *,
+        tenant_id: TenantId,
         source: str,
         company_slug: str,
         client: httpx.AsyncClient,
@@ -360,6 +374,7 @@ class GapService:
         for raw in result.postings:
             seen_external_ids.add(raw.external_id)
             posting, status = await self.sync_ats_posting(
+                tenant_id=tenant_id,
                 source=source,
                 external_id=raw.external_id,
                 company_slug=company_slug,
@@ -376,6 +391,7 @@ class GapService:
                 bank, deferred, vocabulary, aliases = analysis_inputs
                 await self.analyze_posting(
                     posting.id,
+                    tenant_id=tenant_id,
                     bank_atoms=bank,
                     deferred_atoms=deferred,
                     vocabulary=vocabulary,
@@ -384,6 +400,7 @@ class GapService:
                 )
 
         closed = await self.close_stale_board_postings(
+            tenant_id=tenant_id,
             source=source,
             company_slug=company_slug,
             seen_external_ids=seen_external_ids,
@@ -395,6 +412,7 @@ class GapService:
         self,
         boards: list[tuple[str, str]],
         *,
+        tenant_id: TenantId,
         analysis_inputs: tuple[
             list[dict[str, Any]],
             list[dict[str, Any]],
@@ -410,6 +428,9 @@ class GapService:
         list of what to poll. Returns per-board counts keyed by
         `"{source}/{company_slug}"`, so a caller (the refresh trigger's
         response body) can see exactly what happened without re-querying.
+        Boards themselves stay admin-only/shared (Phase 3e decision); every
+        posting synced from them is attributed to `tenant_id` — the
+        operator resolved by the caller.
         """
         semaphore = asyncio.Semaphore(_MAX_CONCURRENT_BOARDS)
         results: dict[str, dict[str, int]] = {}
@@ -419,6 +440,7 @@ class GapService:
                 key = f"{source}/{company_slug}"
                 try:
                     results[key] = await self.sync_board(
+                        tenant_id=tenant_id,
                         source=source,
                         company_slug=company_slug,
                         client=client,
@@ -435,7 +457,9 @@ class GapService:
             await asyncio.gather(*(_run(source, slug) for source, slug in boards))
         return results
 
-    async def get_posting(self, posting_id: int) -> JobPosting | None:
+    async def get_posting(
+        self, posting_id: int, *, tenant_id: TenantId
+    ) -> JobPosting | None:
         """Read a posting, hydrating its text from the document store.
 
         The single seam every caller (analyze/cluster/route handlers) goes
@@ -443,7 +467,7 @@ class GapService:
         the row they just fetched.
         """
         try:
-            row = await self._repo.get_posting(posting_id)
+            row = await self._repo.get_posting(posting_id, tenant_id=tenant_id)
         except Exception:
             logger.warning("Failed to read posting %s", posting_id, exc_info=True)
             return None
@@ -468,7 +492,7 @@ class GapService:
             return None
         return row.to_domain(posting_text=document.posting_text)
 
-    async def delete_posting(self, posting_id: int) -> bool:
+    async def delete_posting(self, posting_id: int, *, tenant_id: TenantId) -> bool:
         """Permanently remove a posting row (analyses/clusters cascade with
         it at the DB level). Its Firestore document is content-addressed by
         hash, not posting id, and may be shared with another posting that
@@ -476,13 +500,13 @@ class GapService:
         text another row still depends on.
         """
         try:
-            return await self._repo.delete_posting(posting_id)
+            return await self._repo.delete_posting(posting_id, tenant_id=tenant_id)
         except Exception:
             logger.warning("Failed to delete posting %s", posting_id, exc_info=True)
             return False
 
     async def list_postings(
-        self, *, mentions_term: str | None = None
+        self, *, tenant_id: TenantId, mentions_term: str | None = None
     ) -> list[JobPostingSummary]:
         """List postings, optionally filtered to ones whose analysis mentions a term.
 
@@ -493,7 +517,9 @@ class GapService:
         """
         try:
             rows = await self._repo.list_postings(
-                mentions_term=mentions_term, analyzer_version=ANALYZER_VERSION
+                tenant_id=tenant_id,
+                mentions_term=mentions_term,
+                analyzer_version=ANALYZER_VERSION,
             )
         except Exception:
             logger.warning("Failed to list postings", exc_info=True)
@@ -504,6 +530,7 @@ class GapService:
         self,
         posting_id: int,
         *,
+        tenant_id: TenantId,
         bank_atoms: list[dict[str, Any]],
         deferred_atoms: list[dict[str, Any]],
         vocabulary: list[dict[str, Any]],
@@ -516,7 +543,7 @@ class GapService:
         write is an upsert on (posting_id, analyzer_version), so re-analyzing
         is idempotent.
         """
-        posting = await self.get_posting(posting_id)
+        posting = await self.get_posting(posting_id, tenant_id=tenant_id)
         if posting is None:
             return None
 
@@ -535,7 +562,7 @@ class GapService:
             created_at=datetime.now(UTC),
         )
         try:
-            await self._repo.save_analysis(analysis=row)
+            await self._repo.save_analysis(analysis=row, tenant_id=tenant_id)
         except Exception:
             logger.warning(
                 "Failed to persist analysis for posting %s", posting_id, exc_info=True
@@ -543,10 +570,14 @@ class GapService:
             return None
         return report
 
-    async def get_analysis(self, posting_id: int) -> GapReport | None:
+    async def get_analysis(
+        self, posting_id: int, *, tenant_id: TenantId
+    ) -> GapReport | None:
         """Read a stored analysis at the current analyzer version."""
         try:
-            row = await self._repo.get_analysis(posting_id, ANALYZER_VERSION)
+            row = await self._repo.get_analysis(
+                posting_id, ANALYZER_VERSION, tenant_id=tenant_id
+            )
         except Exception:
             logger.warning("Failed to read analysis %s", posting_id, exc_info=True)
             return None
@@ -554,7 +585,7 @@ class GapService:
             return None
         return _report_from_result(row.result)
 
-    async def build_roadmap(self) -> list[RoadmapItem]:
+    async def build_roadmap(self, *, tenant_id: TenantId) -> list[RoadmapItem]:
         """Rank gap terms by how many postings demand them.
 
         `posting_count` descending is the product: the first row is what to learn
@@ -562,7 +593,9 @@ class GapService:
         """
         try:
             rows = await self._repo.aggregate_roadmap(
-                analyzer_version=ANALYZER_VERSION, tiers=ROADMAP_TIERS
+                analyzer_version=ANALYZER_VERSION,
+                tiers=ROADMAP_TIERS,
+                tenant_id=tenant_id,
             )
         except Exception:
             logger.warning("Failed to aggregate roadmap", exc_info=True)
@@ -570,7 +603,11 @@ class GapService:
         return [RoadmapItem(**row) for row in rows]
 
     async def cluster_posting(
-        self, posting_id: int, *, threshold: float = CLUSTER_THRESHOLD
+        self,
+        posting_id: int,
+        *,
+        tenant_id: TenantId,
+        threshold: float = CLUSTER_THRESHOLD,
     ) -> list[PhraseCluster] | None:
         """Group this posting's paraphrased responsibility sentences.
 
@@ -589,13 +626,15 @@ class GapService:
             segment_phrases,
         )
 
-        posting = await self.get_posting(posting_id)
+        posting = await self.get_posting(posting_id, tenant_id=tenant_id)
         if posting is None:
             return None
 
         phrases = segment_phrases(posting.posting_text)
         if not phrases:
-            return await self._save_clusters(posting_id, [], threshold)
+            return await self._save_clusters(
+                posting_id, [], threshold, tenant_id=tenant_id
+            )
 
         hashes = [content_hash(phrase) for phrase in phrases]
         try:
@@ -664,10 +703,17 @@ class GapService:
             )
             for group in groups
         ]
-        return await self._save_clusters(posting_id, clusters, threshold)
+        return await self._save_clusters(
+            posting_id, clusters, threshold, tenant_id=tenant_id
+        )
 
     async def _save_clusters(
-        self, posting_id: int, clusters: list[PhraseCluster], threshold: float
+        self,
+        posting_id: int,
+        clusters: list[PhraseCluster],
+        threshold: float,
+        *,
+        tenant_id: TenantId,
     ) -> list[PhraseCluster] | None:
         """Persist a clustering result (possibly empty) and return it, or
         None on a DB error."""
@@ -678,7 +724,7 @@ class GapService:
             created_at=datetime.now(UTC),
         )
         try:
-            await self._repo.save_phrase_clusters(row=row)
+            await self._repo.save_phrase_clusters(row=row, tenant_id=tenant_id)
         except Exception:
             logger.warning(
                 "Failed to persist clusters for posting %s", posting_id, exc_info=True
@@ -686,10 +732,12 @@ class GapService:
             return None
         return clusters
 
-    async def get_phrase_clusters(self, posting_id: int) -> list[PhraseCluster] | None:
+    async def get_phrase_clusters(
+        self, posting_id: int, *, tenant_id: TenantId
+    ) -> list[PhraseCluster] | None:
         """Read a posting's stored clustering result."""
         try:
-            row = await self._repo.get_phrase_clusters(posting_id)
+            row = await self._repo.get_phrase_clusters(posting_id, tenant_id=tenant_id)
         except Exception:
             logger.warning(
                 "Failed to read clusters for posting %s", posting_id, exc_info=True

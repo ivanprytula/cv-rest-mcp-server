@@ -21,6 +21,8 @@ from services.portfolio.documents.document_repository import (
     SqlAlchemyDocumentRepository,
 )
 from services.portfolio.documents.document_row import KIND_CV, DocumentRow
+from services.portfolio.gaps.gap_repository import SqlAlchemyGapRepository
+from services.portfolio.gaps.job_posting_row import JobPostingRow
 from services.portfolio.tenancy import TenantId
 
 
@@ -113,6 +115,73 @@ async def test_an_unscoped_connection_sees_nothing(two_tenants, session_factory)
     forgets to scope the session reads zero rows rather than all of them."""
     async with session_factory() as session:
         rows = (await session.execute(select(DocumentRow))).scalars().all()
+
+    assert rows == []
+
+
+@pytest.fixture
+async def two_tenants_with_postings(user_service, session_factory):
+    """Two users, each with one pasted job posting, in one database.
+
+    Extends the `two_tenants` convention (operator_documents) to
+    `job_postings` — the second tenant-scoped table, added in Phase 3e.
+    """
+    from datetime import UTC, datetime
+
+    repo = SqlAlchemyGapRepository(session_factory)
+    tenants: list[TenantId] = []
+    for name in ("alice", "bob"):
+        user = await user_service.register(username=name, password="a-long-password")
+        assert user is not None
+        tenant = TenantId(user.id)
+        now = datetime.now(UTC)
+        await repo.upsert_posting(
+            posting=JobPostingRow(
+                source="manual",
+                company=name.title(),
+                content_hash=f"hash-{name}",
+                first_seen_at=now,
+                last_seen_at=now,
+            ),
+            tenant_id=tenant,
+        )
+        tenants.append(tenant)
+    return repo, tenants[0], tenants[1]
+
+
+async def test_each_tenant_lists_only_its_own_postings(two_tenants_with_postings):
+    repo, alice, bob = two_tenants_with_postings
+
+    for tenant in (alice, bob):
+        rows = await repo.list_postings(tenant_id=tenant)
+        assert [row.tenant_id for row in rows] == [tenant]
+
+
+async def test_a_posting_query_without_the_tenant_filter_returns_nothing(
+    two_tenants_with_postings, session_factory
+):
+    """Same guarantee as `test_a_query_without_the_tenant_filter_returns_nothing`,
+    for `job_postings` instead of `operator_documents`."""
+    _, alice, _ = two_tenants_with_postings
+
+    async with session_factory() as session:
+        async with session.begin():
+            await session.execute(
+                text("SELECT set_config('app.tenant_id', :tid, true)"),
+                {"tid": str(alice)},
+            )
+            rows = (await session.execute(select(JobPostingRow))).scalars().all()
+
+    assert [row.tenant_id for row in rows] == [alice], (
+        "an unfiltered query saw another tenant's posting: RLS is not enforced"
+    )
+
+
+async def test_an_unscoped_connection_sees_no_postings(
+    two_tenants_with_postings, session_factory
+):
+    async with session_factory() as session:
+        rows = (await session.execute(select(JobPostingRow))).scalars().all()
 
     assert rows == []
 

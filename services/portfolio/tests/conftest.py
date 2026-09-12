@@ -305,17 +305,48 @@ def synthetic_baseline_path(tmp_path):
     return path
 
 
-@pytest.fixture(autouse=True)
-def tailor_settings(synthetic_baseline_path, tmp_path, monkeypatch):
-    """Point the tailor pipeline at the synthetic bank + a tmp revision dir.
+# Minimal vocabulary covering the same terms SYNTHETIC_BASELINE's skills use,
+# so gap analysis (bank vs. vocabulary vs. posting text) has real matches to
+# find rather than every term landing in "unknown" for lack of a vocabulary
+# entry at all.
+SYNTHETIC_VOCABULARY = {
+    "_schema_version": "1",
+    "terms": [
+        {"term": "pytest", "group_id": "testing", "aliases": []},
+        {"term": "Python", "group_id": "backend", "aliases": []},
+        {"term": "FastAPI", "group_id": "backend", "aliases": []},
+        {"term": "PostgreSQL", "group_id": "databases", "aliases": ["Postgres"]},
+        {"term": "Redis", "group_id": "databases", "aliases": []},
+        {"term": "Kubernetes", "group_id": "infra", "aliases": ["k8s"]},
+        {"term": "Terraform", "group_id": "infra", "aliases": []},
+        {"term": "GraphQL", "group_id": "backend", "aliases": []},
+    ],
+}
 
-    Autouse so every test is independent of the operator's data/cv_baseline.json
-    and     no test ever writes a cv_tailored-*.json into the repo's data/ dir.
-    Patches the settings instance directly (same pattern as the auth fixtures).
+
+@pytest.fixture
+def synthetic_vocabulary_path(tmp_path):
+    path = tmp_path / "jd_vocabulary.json"
+    path.write_text(json.dumps(SYNTHETIC_VOCABULARY, indent=2), encoding="utf-8")
+    return path
+
+
+@pytest.fixture(autouse=True)
+def tailor_settings(
+    synthetic_baseline_path, synthetic_vocabulary_path, tmp_path, monkeypatch
+):
+    """Point the tailor/gap-analysis pipeline at synthetic data + a tmp revision dir.
+
+    Autouse so every test is independent of the operator's real
+    data/cv_baseline.json and data/jd_vocabulary.json (gitignored, real
+    operator content, not part of this checkout) and no test ever writes a
+    cv_tailored-*.json into the repo's data/ dir. Patches the settings
+    instance directly (same pattern as the auth fixtures).
     """
     from services.portfolio.settings import settings
 
     monkeypatch.setattr(settings, "cv_baseline_path", synthetic_baseline_path)
+    monkeypatch.setattr(settings, "jd_vocabulary_path", synthetic_vocabulary_path)
     monkeypatch.setattr(settings, "cv_tailored_dir", tmp_path / "tailored")
     yield
 

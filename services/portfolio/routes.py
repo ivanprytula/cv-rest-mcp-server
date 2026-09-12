@@ -489,6 +489,7 @@ async def tailor_cv_endpoint(
     # None on any DB error, so neither can fail an otherwise-good tailoring.
     if gap_service is not None:
         await gap_service.store_posting(
+            tenant_id=operator_tenant_id,
             posting_text=posting.posting_text,
             source="tailor",
             title=posting.title,

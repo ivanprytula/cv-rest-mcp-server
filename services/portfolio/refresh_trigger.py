@@ -150,7 +150,7 @@ async def trigger_refresh(group: str | None = None) -> dict[str, object]:
     )
 
     results = await gap_service.refresh_all_boards(
-        boards, analysis_inputs=analysis_inputs, live_cv=live_cv
+        boards, tenant_id=tenant_id, analysis_inputs=analysis_inputs, live_cv=live_cv
     )
     return {"boards": results}
 
