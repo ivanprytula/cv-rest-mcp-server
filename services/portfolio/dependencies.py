@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from services.portfolio.auth.refresh_token_service import RefreshTokenService
     from services.portfolio.auth.user_service import UserService
     from services.portfolio.cv_extraction import CVExtractionService
+    from services.portfolio.cv_review.review_service import CVReviewService
     from services.portfolio.documents.document_service import DocumentService
     from services.portfolio.gaps.gap_service import GapService
     from services.portfolio.gaps.tracked_board_service import TrackedBoardService
@@ -91,6 +92,22 @@ async def get_cv_extraction_service(request: Request) -> CVExtractionService:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="CV extraction is not configured",
+        )
+    return service
+
+
+async def get_cv_review_service(request: Request) -> CVReviewService:
+    """The CV review (extract + critique) service, or 503 when unconfigured.
+
+    Same fail-closed posture as `get_cv_extraction_service` — a review
+    request with no critique step would be a silently degraded feature,
+    not an acceptable fallback.
+    """
+    service = getattr(request.app.state, "cv_review_service", None)
+    if service is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="CV review is not configured",
         )
     return service
 

@@ -19,8 +19,11 @@ from services.portfolio.cv_extraction import (
     CVExtractionError,
     CVExtractionService,
 )
+from services.portfolio.cv_review.critic_agent import CVCritiqueError
+from services.portfolio.cv_review.review_service import CVReviewService
 from services.portfolio.dependencies import (
     get_cv_extraction_service,
+    get_cv_review_service,
     get_document_service,
     get_tenant_id,
 )
@@ -50,6 +53,7 @@ router = APIRouter(prefix=f"{API_V1_PREFIX}/documents", tags=["documents"])
 get_document_service_dep = Depends(get_document_service)
 tenant_id_dep = Depends(get_tenant_id)
 get_cv_extraction_service_dep = Depends(get_cv_extraction_service)
+get_cv_review_service_dep = Depends(get_cv_review_service)
 
 # Derived from DOCUMENT_KINDS, never duplicated: a hand-written pattern here
 # would silently reject a kind added to that tuple.
@@ -149,19 +153,12 @@ _RAW_UPLOAD_REQUEST_BODY = {
 }
 
 
-@router.post("/cv/extract", openapi_extra={"requestBody": _RAW_UPLOAD_REQUEST_BODY})
-async def extract_cv_draft(
-    request: Request,
-    extraction: CVExtractionService = get_cv_extraction_service_dep,
-) -> dict[str, Any]:
-    """Draft a CV document from an uploaded resume file.
+async def _parsed_resume_text(request: Request) -> str:
+    """Shared upload parsing for `/cv/extract` and `/cv/review`.
 
-    Accepts the same formats as job-posting intake (JSON, PDF, DOCX, text,
-    Markdown). Returns the extracted draft for review — it is never written
-    to this tenant's document store here; the caller reviews/edits it and
-    then PUTs `/documents/cv` themselves to save it. Requires no tenant_id
-    of its own: `cv:manage` (checked by the middleware) is the whole gate,
-    since nothing is persisted by this route.
+    Raises the same 413/422 `HTTPException`s either route would raise on
+    its own — factored out because both need identical parsing, not
+    because either alone would justify a helper.
     """
     try:
         parsed = parse_job_posting_input(
@@ -178,9 +175,26 @@ async def extract_cv_draft(
             status_code=413,
             detail=f"Extracted text exceeds {MAX_RESUME_TEXT_CHARS:,} characters",
         )
+    return parsed.posting_text
 
+
+@router.post("/cv/extract", openapi_extra={"requestBody": _RAW_UPLOAD_REQUEST_BODY})
+async def extract_cv_draft(
+    request: Request,
+    extraction: CVExtractionService = get_cv_extraction_service_dep,
+) -> dict[str, Any]:
+    """Draft a CV document from an uploaded resume file.
+
+    Accepts the same formats as job-posting intake (JSON, PDF, DOCX, text,
+    Markdown). Returns the extracted draft for review — it is never written
+    to this tenant's document store here; the caller reviews/edits it and
+    then PUTs `/documents/cv` themselves to save it. Requires no tenant_id
+    of its own: `cv:manage` (checked by the middleware) is the whole gate,
+    since nothing is persisted by this route.
+    """
+    resume_text = await _parsed_resume_text(request)
     try:
-        draft = await extraction.extract(parsed.posting_text)
+        draft = await extraction.extract(resume_text)
     except CVExtractionError as exc:
         # The raw message can carry upstream API internals (request/response
         # detail from anthropic.APIError) — logged, never returned to the
@@ -188,6 +202,28 @@ async def extract_cv_draft(
         logger.warning("CV extraction failed: %s", exc)
         raise HTTPException(status_code=502, detail="CV extraction failed") from None
     return draft
+
+
+@router.post("/cv/review", openapi_extra={"requestBody": _RAW_UPLOAD_REQUEST_BODY})
+async def review_cv_draft(
+    request: Request,
+    review: CVReviewService = get_cv_review_service_dep,
+) -> dict[str, Any]:
+    """Draft a CV document, with a critique of the draft alongside it.
+
+    Same upload/parsing/gate as `/cv/extract` — this is additive, not a
+    replacement: `/cv/extract` still returns just the draft for a caller
+    that doesn't want the extra model call. Nothing is persisted here
+    either; the human reviews the draft (informed by the critique) before
+    PUTting `/documents/cv` themselves.
+    """
+    resume_text = await _parsed_resume_text(request)
+    try:
+        result = await review.run(resume_text)
+    except (CVExtractionError, CVCritiqueError) as exc:
+        logger.warning("CV review failed: %s", exc)
+        raise HTTPException(status_code=502, detail="CV review failed") from None
+    return result.model_dump()
 
 
 @router.delete("/{kind}")
