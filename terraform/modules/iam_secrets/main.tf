@@ -162,6 +162,18 @@ resource "google_project_iam_member" "deployer_compute_viewer" {
   member  = "serviceAccount:${google_service_account.deployer.email}"
 }
 
+# Every prior Cloud Run service's NEG (api-core, api-games, spa-origin,
+# ats-refresh-trigger) was created by a one-time local Owner apply — CI's
+# deployer only ever needed to *read* them (compute.viewer above).
+# analysis-worker is the first NEG CI itself creates from scratch, which
+# needs compute.regionNetworkEndpointGroups.create — networkAdmin covers
+# NEG create/delete without the full compute.admin surface.
+resource "google_project_iam_member" "deployer_compute_network_admin" {
+  project = var.project
+  role    = "roles/compute.networkAdmin"
+  member  = "serviceAccount:${google_service_account.deployer.email}"
+}
+
 # Deployer runs `terraform plan`/`apply` in CI, which refreshes the Cloud SQL
 # instance's state on every run (Phase 2, modules/cloud_sql) — cloudsql.viewer
 # covers the read; instance create/edit stays Terraform-state-owned via a
