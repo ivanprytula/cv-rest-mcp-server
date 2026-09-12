@@ -146,9 +146,9 @@ module "run" {
   memory                = each.value.memory
   ingress               = each.value.ingress
   command               = each.value.command
-  # api-core and the ATS refresh trigger talk to Postgres directly;
-  # games/spa-origin never mount the socket.
-  cloud_sql_instances = contains(["api-core", "ats-refresh-trigger"], each.key) && var.enable_cloud_sql ? [module.cloud_sql[0].connection_name] : []
+  # api-core, the ATS refresh trigger, and the analysis worker talk to
+  # Postgres directly; games/spa-origin never mount the socket.
+  cloud_sql_instances = contains(["api-core", "ats-refresh-trigger", "analysis-worker"], each.key) && var.enable_cloud_sql ? [module.cloud_sql[0].connection_name] : []
   labels              = merge(local.base_labels, { service = each.key })
 }
 
@@ -207,6 +207,58 @@ resource "google_cloud_scheduler_job" "ats_refresh" {
   depends_on = [
     module.gcp_apis,
     google_cloud_run_v2_service_iam_member.ats_refresh_trigger_invoker,
+  ]
+}
+
+# Phase 3f PR3: the posting-changed push subscription invokes the private
+# analysis-worker service via native OIDC, same pattern as the ATS refresh
+# Scheduler job above. Gated on both the topic (enable_pubsub_events) and
+# the worker service being defined in var.services.
+locals {
+  analysis_worker_enabled = contains(keys(var.services), "analysis-worker") && var.enable_pubsub_events
+}
+
+# run.invoker scoped to exactly this one service, mirroring
+# ats_refresh_trigger_invoker's reasoning above.
+resource "google_cloud_run_v2_service_iam_member" "analysis_worker_invoker" {
+  count = local.analysis_worker_enabled ? 1 : 0
+
+  project  = var.project_id
+  location = var.region
+  name     = module.run["analysis-worker"].service_name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${module.iam_secrets.analysis_worker_runtime_sa_email}"
+}
+
+resource "google_pubsub_subscription" "posting_changed_push" {
+  count   = local.analysis_worker_enabled ? 1 : 0
+  project = var.project_id
+  name    = "posting-changed-push"
+  topic   = module.pubsub[0].posting_changed_topic_id
+
+  push_config {
+    push_endpoint = "${module.run["analysis-worker"].service_uri}/pubsub/posting-changed"
+    oidc_token {
+      service_account_email = module.iam_secrets.analysis_worker_runtime_sa_email
+      audience              = module.run["analysis-worker"].service_uri
+    }
+  }
+
+  # Pub/Sub's own retry, not a hand-rolled one in analysis_worker.py — a
+  # non-2xx nacks, this policy controls redelivery backoff.
+  retry_policy {
+    minimum_backoff = "10s"
+    maximum_backoff = "600s"
+  }
+
+  dead_letter_policy {
+    dead_letter_topic     = module.pubsub[0].posting_changed_dlq_topic_id
+    max_delivery_attempts = 5
+  }
+
+  depends_on = [
+    module.gcp_apis,
+    google_cloud_run_v2_service_iam_member.analysis_worker_invoker,
   ]
 }
 

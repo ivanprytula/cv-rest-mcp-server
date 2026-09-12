@@ -412,7 +412,16 @@ class GapService:
                         posting.id,
                         exc_info=True,
                     )
-                if analysis_inputs is not None:
+                # A real Pub/Sub subscriber (analysis_worker.py) does this
+                # analysis out-of-band once PUBSUB_POSTING_CHANGED_TOPIC is
+                # configured. Until then — or if it never is, for a smaller
+                # deployment that skips the queue entirely — the default
+                # LoggingEventPublisher means no subscriber will ever run
+                # this, so this inline fallback keeps analysis working
+                # exactly as it did before Phase 3f.
+                if isinstance(self._publisher, LoggingEventPublisher) and (
+                    analysis_inputs is not None
+                ):
                     bank, deferred, vocabulary, aliases = analysis_inputs
                     await self.analyze_posting(
                         posting.id,

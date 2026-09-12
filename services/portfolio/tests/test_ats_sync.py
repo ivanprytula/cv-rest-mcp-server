@@ -107,6 +107,86 @@ class TestSyncBoard:
         assert published[0].status == "new"
         assert published[0].tenant_id == operator_tenant_id
 
+    async def test_new_posting_is_analyzed_inline_when_publisher_unconfigured(
+        self, gap_service, operator_tenant_id
+    ):
+        """The default LoggingEventPublisher means no subscriber ever runs
+        analysis out-of-band, so sync_board's inline fallback must still
+        analyze — the pre-Phase-3f behavior, preserved for any deployment
+        that hasn't configured PUBSUB_POSTING_CHANGED_TOPIC."""
+        client = httpx.AsyncClient(
+            transport=httpx.MockTransport(
+                _greenhouse_transport(
+                    [
+                        {
+                            "id": 5,
+                            "title": "Backend Engineer",
+                            "content": "Kubernetes required.",
+                            "absolute_url": "https://boards.greenhouse.io/acme/jobs/5",
+                        }
+                    ]
+                )
+            )
+        )
+        await gap_service.sync_board(
+            tenant_id=operator_tenant_id,
+            source="greenhouse",
+            company_slug="acme-inline-analysis",
+            client=client,
+            analysis_inputs=(BANK, [], [], {}),
+            live_cv=LIVE_CV,
+        )
+
+        postings = await gap_service.list_postings(tenant_id=operator_tenant_id)
+        posting = next(p for p in postings if p.title == "Backend Engineer")
+        analysis = await gap_service.get_analysis(
+            posting.id, tenant_id=operator_tenant_id
+        )
+        assert analysis is not None
+
+    async def test_new_posting_skips_inline_analysis_when_publisher_configured(
+        self, gap_service, monkeypatch, operator_tenant_id
+    ):
+        """Once a real publisher is wired in, analysis moves out-of-band to
+        analysis_worker.py — sync_board must not also do it inline, or every
+        posting would be analyzed twice."""
+
+        class _SpyPublisher:
+            async def publish(self, event):
+                pass
+
+        monkeypatch.setattr(gap_service, "_publisher", _SpyPublisher())
+
+        client = httpx.AsyncClient(
+            transport=httpx.MockTransport(
+                _greenhouse_transport(
+                    [
+                        {
+                            "id": 6,
+                            "title": "Platform Engineer",
+                            "content": "Kubernetes required.",
+                            "absolute_url": "https://boards.greenhouse.io/acme/jobs/6",
+                        }
+                    ]
+                )
+            )
+        )
+        await gap_service.sync_board(
+            tenant_id=operator_tenant_id,
+            source="greenhouse",
+            company_slug="acme-skip-inline-analysis",
+            client=client,
+            analysis_inputs=(BANK, [], [], {}),
+            live_cv=LIVE_CV,
+        )
+
+        postings = await gap_service.list_postings(tenant_id=operator_tenant_id)
+        posting = next(p for p in postings if p.title == "Platform Engineer")
+        analysis = await gap_service.get_analysis(
+            posting.id, tenant_id=operator_tenant_id
+        )
+        assert analysis is None
+
     async def test_second_sync_with_same_payload_is_unchanged(
         self, gap_service, operator_tenant_id
     ):

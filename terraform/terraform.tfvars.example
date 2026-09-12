@@ -116,6 +116,28 @@ services = {
   #   allow_unauthenticated = false   # private: invoked via Pub/Sub/Cloud Tasks, never public
   #   max_instances         = 1
   # }
+
+  # ats-refresh-trigger = {
+  #   Same image as api-core, different entrypoint (Phase 2b PR4) — see
+  #   modules/cloud_run_service's `command` variable. Private: invoked only
+  #   by Cloud Scheduler's OIDC token (google_cloud_scheduler_job below).
+  #   image                 = "europe-west1-docker.pkg.dev/cv-rest-mcp-server/cv-images/api-core:latest"
+  #   service_account       = "ats-refresh-trigger-runtime@cv-rest-mcp-server.iam.gserviceaccount.com"
+  #   allow_unauthenticated = false
+  #   command               = ["python", "-m", "services.portfolio.refresh_trigger"]
+  #   max_instances         = 1
+  # }
+
+  # analysis-worker = {
+  #   Same image as api-core, different entrypoint (Phase 3f PR3). Private:
+  #   invoked only by the posting-changed push subscription's OIDC token
+  #   (module.pubsub[0]'s google_pubsub_subscription below).
+  #   image                 = "europe-west1-docker.pkg.dev/cv-rest-mcp-server/cv-images/api-core:latest"
+  #   service_account       = "analysis-worker-runtime@cv-rest-mcp-server.iam.gserviceaccount.com"
+  #   allow_unauthenticated = false
+  #   command               = ["python", "-m", "services.portfolio.analysis_worker"]
+  #   max_instances         = 1
+  # }
 }
 
 # hostname -> workload name. GCP URL-map host rules match EXACTLY (no wildcard

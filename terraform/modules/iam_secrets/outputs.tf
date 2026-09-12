@@ -18,6 +18,11 @@ output "ats_refresh_trigger_runtime_sa_email" {
   value       = google_service_account.ats_refresh_trigger_runtime.email
 }
 
+output "analysis_worker_runtime_sa_email" {
+  description = "Analysis worker service account email"
+  value       = google_service_account.analysis_worker_runtime.email
+}
+
 output "deployer_sa_email" {
   description = "Email of the CI/CD deployer service account"
   value       = google_service_account.deployer.email
