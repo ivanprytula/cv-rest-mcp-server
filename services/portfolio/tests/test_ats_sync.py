@@ -69,6 +69,44 @@ class TestSyncBoard:
         assert len(postings) == 1
         assert postings[0].company == ""
 
+    async def test_new_posting_publishes_a_posting_changed_event(
+        self, gap_service, monkeypatch, operator_tenant_id
+    ):
+        published = []
+
+        class _SpyPublisher:
+            async def publish(self, event):
+                published.append(event)
+
+        monkeypatch.setattr(gap_service, "_publisher", _SpyPublisher())
+
+        client = httpx.AsyncClient(
+            transport=httpx.MockTransport(
+                _greenhouse_transport(
+                    [
+                        {
+                            "id": 4,
+                            "title": "Backend Engineer",
+                            "content": "Kubernetes required.",
+                            "absolute_url": "https://boards.greenhouse.io/acme/jobs/4",
+                        }
+                    ]
+                )
+            )
+        )
+        await gap_service.sync_board(
+            tenant_id=operator_tenant_id,
+            source="greenhouse",
+            company_slug="acme-events",
+            client=client,
+            analysis_inputs=None,
+            live_cv=None,
+        )
+
+        assert len(published) == 1
+        assert published[0].status == "new"
+        assert published[0].tenant_id == operator_tenant_id
+
     async def test_second_sync_with_same_payload_is_unchanged(
         self, gap_service, operator_tenant_id
     ):

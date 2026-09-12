@@ -24,6 +24,11 @@ from services.portfolio.documents.document_row import (
     KIND_SKILL_BANK,
 )
 from services.portfolio.documents.document_service import document_sources
+from services.portfolio.events.publisher import (
+    EventPublisher,
+    LoggingEventPublisher,
+    PostingChanged,
+)
 from services.portfolio.gaps.ats import TIMEOUT_SECONDS, USER_AGENT, fetcher_for
 from services.portfolio.gaps.gap_repository import GapRepository
 from services.portfolio.gaps.job_posting import (
@@ -96,10 +101,14 @@ class GapService:
     """
 
     def __init__(
-        self, repo: GapRepository, posting_docs: JobPostingDocumentStore
+        self,
+        repo: GapRepository,
+        posting_docs: JobPostingDocumentStore,
+        publisher: EventPublisher | None = None,
     ) -> None:
         self._repo = repo
         self._posting_docs = posting_docs
+        self._publisher = publisher or LoggingEventPublisher()
 
     async def store_posting(
         self,
@@ -387,17 +396,33 @@ class GapService:
                 counts["errors"] += 1
                 continue
             counts[status] += 1
-            if status in ("new", "changed") and analysis_inputs is not None:
-                bank, deferred, vocabulary, aliases = analysis_inputs
-                await self.analyze_posting(
-                    posting.id,
-                    tenant_id=tenant_id,
-                    bank_atoms=bank,
-                    deferred_atoms=deferred,
-                    vocabulary=vocabulary,
-                    live_cv=live_cv or {},
-                    aliases=aliases,
-                )
+            if status in ("new", "changed"):
+                try:
+                    await self._publisher.publish(
+                        PostingChanged(
+                            posting_id=posting.id,
+                            tenant_id=tenant_id,
+                            status=status,
+                            content_hash=posting.content_hash,
+                        )
+                    )
+                except Exception:
+                    logger.warning(
+                        "Failed to publish posting_changed for %s",
+                        posting.id,
+                        exc_info=True,
+                    )
+                if analysis_inputs is not None:
+                    bank, deferred, vocabulary, aliases = analysis_inputs
+                    await self.analyze_posting(
+                        posting.id,
+                        tenant_id=tenant_id,
+                        bank_atoms=bank,
+                        deferred_atoms=deferred,
+                        vocabulary=vocabulary,
+                        live_cv=live_cv or {},
+                        aliases=aliases,
+                    )
 
         closed = await self.close_stale_board_postings(
             tenant_id=tenant_id,
