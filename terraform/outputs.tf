@@ -64,3 +64,8 @@ output "cloud_armor_rate_limit" {
   value       = var.enable_cloud_armor ? "${var.cloud_armor_rate_limit_count}/${var.cloud_armor_rate_limit_interval_sec}s" : "disabled"
 }
 
+output "pubsub_posting_changed_topic" {
+  description = "Full topic path for api-core's/ats-refresh-trigger's PUBSUB_POSTING_CHANGED_TOPIC env var (if enabled)."
+  value       = var.enable_pubsub_events ? module.pubsub[0].posting_changed_topic_id : ""
+}
+
