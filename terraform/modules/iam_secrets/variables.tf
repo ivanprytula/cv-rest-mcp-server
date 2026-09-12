@@ -33,6 +33,12 @@ variable "enable_firestore" {
   default     = false
 }
 
+variable "enable_pubsub_events" {
+  description = "Bind roles/pubsub.admin to the deployer SA, so CI's terraform plan/apply can create and manage the PostingChanged topic/DLQ (modules/pubsub). Mirrors the root module's enable_pubsub_events flag."
+  type        = bool
+  default     = false
+}
+
 variable "database_url_secret_id" {
   description = "Secret Manager secret ID for the Postgres connection string (empty = skip IAM binding). Granted to the ATS refresh trigger's runtime SA — it needs DATABASE_URL directly, unlike api_core_secret_ids which is a list keyed for api-core."
   type        = string

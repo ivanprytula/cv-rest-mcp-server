@@ -196,6 +196,16 @@ resource "google_project_iam_member" "deployer_datastore_owner" {
   member  = "serviceAccount:${google_service_account.deployer.email}"
 }
 
+# Pub/Sub (Phase 3f) is a brand-new resource type for this project — CI's
+# deployer SA has never needed pubsub.topics.create/get before, same gap
+# pattern as datastore.owner above when Firestore was first added.
+resource "google_project_iam_member" "deployer_pubsub_admin" {
+  count   = var.enable_pubsub_events ? 1 : 0
+  project = var.project
+  role    = "roles/pubsub.admin"
+  member  = "serviceAccount:${google_service_account.deployer.email}"
+}
+
 # Deployer creates new runtime SAs as part of `terraform apply` in CI
 # (e.g. ats_refresh_trigger_runtime) — every prior SA was bootstrapped by a
 # one-time local Owner apply, but that doesn't scale to a new SA per PR.
@@ -241,6 +251,18 @@ resource "google_service_account_iam_member" "deployer_actas_spa_origin" {
 
 resource "google_service_account_iam_member" "deployer_actas_api_games" {
   service_account_id = google_service_account.api_games_runtime.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.deployer.email}"
+}
+
+resource "google_service_account_iam_member" "deployer_actas_ats_refresh_trigger" {
+  service_account_id = google_service_account.ats_refresh_trigger_runtime.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.deployer.email}"
+}
+
+resource "google_service_account_iam_member" "deployer_actas_analysis_worker" {
+  service_account_id = google_service_account.analysis_worker_runtime.name
   role               = "roles/iam.serviceAccountUser"
   member             = "serviceAccount:${google_service_account.deployer.email}"
 }

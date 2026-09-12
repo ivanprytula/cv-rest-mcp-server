@@ -43,6 +43,7 @@ module "iam_secrets" {
   database_url_secret_id = var.database_url_secret_id
   enable_cloud_sql       = var.enable_cloud_sql
   enable_firestore       = var.enable_firestore
+  enable_pubsub_events   = var.enable_pubsub_events
   labels                 = merge(local.base_labels, { service = "iam-secrets" })
 }
 
