@@ -199,6 +199,15 @@ enable_cloud_sql = false
 enable_firestore = false
 # firestore_location = "eur3"  # default shown; check `gcloud firestore locations list` for this project
 
+# PostingChanged events (Phase 3f). PUBSUB_POSTING_CHANGED_TOPIC is a plain
+# (non-secret) Cloud Run env var, same wiring as FIRESTORE_PROJECT above —
+# add it to api-core's and ats-refresh-trigger's env_vars once this is
+# applied (use module.pubsub[0].posting_changed_topic_id), or both keep
+# running on LoggingEventPublisher with no error (see pubsub_publisher.py's
+# "empty setting means skip" note).
+#   PUBSUB_POSTING_CHANGED_TOPIC = "projects/cv-rest-mcp-server/topics/posting-changed"
+enable_pubsub_events = false
+
 # --- Bootstrap (one-time setup before terraform apply) ---
 # Use deploy-cloud-run.sh for first-time setup:
 #   just deploy bootstrap          # enable APIs (now also via Terraform gcp_apis module)

@@ -53,6 +53,9 @@ from services.portfolio.documents.document_service import (
     document_sources,
 )
 from services.portfolio.documents.routes import router as documents_router
+from services.portfolio.events.pubsub_publisher import (
+    build_event_publisher_from_settings,
+)
 from services.portfolio.failban import register_violation_from_request
 from services.portfolio.gaps.gap_repository import SqlAlchemyGapRepository
 from services.portfolio.gaps.gap_service import GapService
@@ -357,7 +360,8 @@ async def lifespan(app):
     # Postgres — gap_repo only ever sees the relational skeleton.
     gap_repo = SqlAlchemyGapRepository(session_factory)
     posting_docs = build_job_posting_document_store_from_settings()
-    app.state.gap_service = GapService(gap_repo, posting_docs)
+    event_publisher = build_event_publisher_from_settings()
+    app.state.gap_service = GapService(gap_repo, posting_docs, event_publisher)
 
     # Tracked-board registry: what the ATS refresh trigger polls. Independent
     # of AtsBoardRow (gap_repo's fetch-cache) — this is the operator-editable

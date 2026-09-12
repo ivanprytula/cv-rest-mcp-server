@@ -61,6 +61,21 @@ module "firestore" {
   ]
 }
 
+# PostingChanged events (Phase 3f). Depends on iam_secrets for the runtime
+# service account emails it grants roles/pubsub.publisher to.
+module "pubsub" {
+  count      = var.enable_pubsub_events ? 1 : 0
+  depends_on = [module.gcp_apis]
+  source     = "./modules/pubsub"
+
+  project = var.project_id
+  publisher_service_account_emails = [
+    module.iam_secrets.api_core_runtime_sa_email,
+    module.iam_secrets.ats_refresh_trigger_runtime_sa_email,
+  ]
+  labels = merge(local.base_labels, { service = "pubsub" })
+}
+
 # GitHub Workload Identity Federation for CI/CD (optional)
 module "github_wif" {
   count  = var.setup_github_wif ? 1 : 0

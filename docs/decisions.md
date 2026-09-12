@@ -826,13 +826,16 @@ would risk rework across Phases 1-5.
 pattern (`test_firestore_store.py`, `just test-firestore`, `firestore`
 pytest marker) exactly: a `pubsub` marker (excluded by default via
 `addopts`), a `just test-pubsub` recipe, and a session fixture that shells
-out to `gcloud emulators pubsub start` the same way
-`firestore_emulator()` does, setting `PUBSUB_EMULATOR_HOST` instead of
-`FIRESTORE_EMULATOR_HOST`. No mocked-client shortcut — the Firestore
-precedent already proved emulator-backed adapter tests are worth the
-Docker/CLI-image cost in this repo, and Pub/Sub's official emulator
-(bundled in the same `gcloud` CLI image) is at least as reliable as
-Firestore's.
+out to `gcloud beta emulators pubsub start` (note the `beta` release
+track — unlike `gcloud emulators firestore start`, the Pub/Sub emulator is
+not promoted to the default track on this CLI image, confirmed by a
+failing local run: `Invalid choice: 'pubsub' ... Try: gcloud beta emulators
+pubsub`) the same way `firestore_emulator()` does, setting
+`PUBSUB_EMULATOR_HOST` instead of `FIRESTORE_EMULATOR_HOST`. No
+mocked-client shortcut — the Firestore precedent already proved
+emulator-backed adapter tests are worth the Docker/CLI-image cost in this
+repo, and Pub/Sub's official emulator (bundled in the same `gcloud` CLI
+image) is at least as reliable as Firestore's.
 
 **Decision — A2A wire subset.** Target only the two pieces needed for a
 single, non-streaming extractor→critic round-trip: an `AgentCard` served

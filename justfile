@@ -119,6 +119,13 @@ access-matrix:
 test-firestore:
     uv run pytest services/portfolio/tests/test_firestore_store.py -m firestore --no-cov
 
+# Pub/Sub adapter tests against Google's emulator; excluded from `just
+# test` by default (needs Docker, pulls the same ~1GB CLI image as
+# test-firestore). The rest of the suite uses LoggingEventPublisher, so run
+# this after touching PubSubEventPublisher or the EventPublisher Protocol.
+test-pubsub:
+    uv run pytest services/portfolio/tests/test_pubsub_publisher.py -m pubsub --no-cov
+
 # Browser e2e tests for the games service (services/games/). Run separately
 # from test-ui — see the comment above for why.
 test-ui-games:

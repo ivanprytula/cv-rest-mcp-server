@@ -127,6 +127,15 @@ variable "firestore_location" {
   default     = "eur3"
 }
 
+# PostingChanged events (Phase 3f). Defaults to false — every earlier PR
+# analyzes postings inline in sync_board, so this is purely additive and
+# revertable (delete this module + PUBSUB_POSTING_CHANGED_TOPIC).
+variable "enable_pubsub_events" {
+  description = "Provision the Pub/Sub topic/DLQ (modules/pubsub) for PostingChanged events."
+  type        = bool
+  default     = false
+}
+
 # Composed from cloud_sql_db_password_secret_id + the instance's connection
 # name by `just deploy bootstrap-database-url` (see CLAUDE.md's Bootstrap &
 # Deployment section) — script-owned like the other secrets, this only names
