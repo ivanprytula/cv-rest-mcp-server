@@ -6,6 +6,8 @@ adapter.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
@@ -25,6 +27,7 @@ from services.portfolio.gaps.phrase_cluster_row import (
     PhraseClusterRow,
     PhraseEmbeddingRow,
 )
+from services.portfolio.tenancy import TenantId
 
 
 # Aggregates the roadmap straight out of the analyses' JSONB. Recomputed per
@@ -50,36 +53,53 @@ _ROADMAP_SQL = text("""
         ]                                         AS strongest_level_asked,
         MAX(gap->>'note')                         AS note
     FROM posting_analyses AS a
+    JOIN job_postings AS p ON p.id = a.posting_id
     CROSS JOIN LATERAL jsonb_array_elements(a.result->'gaps') AS gap
     WHERE a.analyzer_version = :version
       AND gap->>'tier' = ANY(:tiers)
+      AND p.tenant_id = :tenant_id
     GROUP BY 1, 2, 3
     ORDER BY posting_count DESC, term ASC
 """)
 
 
 class GapRepository(Protocol):
-    async def upsert_posting(self, *, posting: JobPostingRow) -> JobPostingRow: ...
-    async def get_posting(self, posting_id: int) -> JobPostingRow | None: ...
-    async def find_by_content_hash(self, content_hash: str) -> JobPostingRow | None: ...
+    async def upsert_posting(
+        self, *, posting: JobPostingRow, tenant_id: TenantId
+    ) -> JobPostingRow: ...
+    async def get_posting(
+        self, posting_id: int, *, tenant_id: TenantId
+    ) -> JobPostingRow | None: ...
+    async def find_by_content_hash(
+        self, content_hash: str, *, tenant_id: TenantId
+    ) -> JobPostingRow | None: ...
     async def find_by_source_external_id(
-        self, source: str, external_id: str
+        self, source: str, external_id: str, *, tenant_id: TenantId
     ) -> JobPostingRow | None: ...
     async def list_postings(
-        self, *, mentions_term: str | None = None, analyzer_version: str = ""
+        self,
+        *,
+        tenant_id: TenantId,
+        mentions_term: str | None = None,
+        analyzer_version: str = "",
     ) -> list[JobPostingRow]: ...
     async def close_missing_postings(
-        self, *, source: str, company_slug: str, seen_external_ids: set[str]
+        self,
+        *,
+        tenant_id: TenantId,
+        source: str,
+        company_slug: str,
+        seen_external_ids: set[str],
     ) -> int: ...
-    async def delete_posting(self, posting_id: int) -> bool: ...
+    async def delete_posting(self, posting_id: int, *, tenant_id: TenantId) -> bool: ...
     async def save_analysis(
-        self, *, analysis: PostingAnalysisRow
+        self, *, analysis: PostingAnalysisRow, tenant_id: TenantId
     ) -> PostingAnalysisRow: ...
     async def get_analysis(
-        self, posting_id: int, analyzer_version: str
+        self, posting_id: int, analyzer_version: str, *, tenant_id: TenantId
     ) -> PostingAnalysisRow | None: ...
     async def aggregate_roadmap(
-        self, *, analyzer_version: str, tiers: list[str]
+        self, *, analyzer_version: str, tiers: list[str], tenant_id: TenantId
     ) -> list[dict[str, Any]]: ...
     async def get_board(self, source: str, company_slug: str) -> AtsBoardRow | None: ...
     async def upsert_board(
@@ -90,9 +110,11 @@ class GapRepository(Protocol):
     ) -> dict[str, list[float]]: ...
     async def save_embeddings(self, *, rows: list[PhraseEmbeddingRow]) -> None: ...
     async def save_phrase_clusters(
-        self, *, row: PhraseClusterRow
+        self, *, row: PhraseClusterRow, tenant_id: TenantId
     ) -> PhraseClusterRow: ...
-    async def get_phrase_clusters(self, posting_id: int) -> PhraseClusterRow | None: ...
+    async def get_phrase_clusters(
+        self, posting_id: int, *, tenant_id: TenantId
+    ) -> PhraseClusterRow | None: ...
 
 
 class SqlAlchemyGapRepository:
@@ -105,15 +127,34 @@ class SqlAlchemyGapRepository:
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self._session_factory = session_factory
 
-    async def upsert_posting(self, *, posting: JobPostingRow) -> JobPostingRow:
+    @asynccontextmanager
+    async def _tenant_session(self, tenant_id: TenantId) -> AsyncIterator[AsyncSession]:
+        """A session whose transaction is pinned to one tenant for RLS.
+
+        Same mechanism as `SqlAlchemyDocumentRepository._tenant_session` —
+        `SET LOCAL` so the pinned tenant cannot leak to the next request
+        that borrows this pooled connection.
+        """
+        async with self._session_factory() as session:
+            async with session.begin():
+                await session.execute(
+                    text("SELECT set_config('app.tenant_id', :tid, true)"),
+                    {"tid": str(tenant_id)},
+                )
+                yield session
+
+    async def upsert_posting(
+        self, *, posting: JobPostingRow, tenant_id: TenantId
+    ) -> JobPostingRow:
         """Insert a posting, or bump `last_seen_at` if the portal already sent it.
 
-        Keyed on (source, external_id). A pasted posting has no external id,
-        so it always inserts — dedup for those is the caller's job via
-        `content_hash`.
+        Keyed on (tenant_id, source, external_id). A pasted posting has no
+        external id, so it always inserts — dedup for those is the caller's
+        job via `content_hash`.
         """
+        posting.tenant_id = tenant_id
         if posting.external_id is None:
-            async with self._session_factory() as session:
+            async with self._tenant_session(tenant_id) as session:
                 session.add(posting)
                 await session.commit()
             return posting
@@ -127,7 +168,7 @@ class SqlAlchemyGapRepository:
             insert(JobPostingRow)
             .values(**values)
             .on_conflict_do_update(
-                constraint="uq_job_postings_source_ext",
+                constraint="uq_job_postings_tenant_source_ext",
                 set_={
                     "last_seen_at": values["last_seen_at"],
                     "content_hash": values["content_hash"],
@@ -136,33 +177,43 @@ class SqlAlchemyGapRepository:
             )
             .returning(JobPostingRow)
         )
-        async with self._session_factory() as session:
+        async with self._tenant_session(tenant_id) as session:
             row = (await session.execute(stmt)).scalar_one()
             await session.commit()
             return row
 
-    async def get_posting(self, posting_id: int) -> JobPostingRow | None:
-        async with self._session_factory() as session:
+    async def get_posting(
+        self, posting_id: int, *, tenant_id: TenantId
+    ) -> JobPostingRow | None:
+        async with self._tenant_session(tenant_id) as session:
             return (
                 await session.execute(
-                    select(JobPostingRow).where(JobPostingRow.id == posting_id)
+                    select(JobPostingRow).where(
+                        JobPostingRow.id == posting_id,
+                        JobPostingRow.tenant_id == tenant_id,
+                    )
                 )
             ).scalar_one_or_none()
 
-    async def find_by_content_hash(self, content_hash: str) -> JobPostingRow | None:
+    async def find_by_content_hash(
+        self, content_hash: str, *, tenant_id: TenantId
+    ) -> JobPostingRow | None:
         """Find an existing posting with identical text (re-paste dedup)."""
-        async with self._session_factory() as session:
+        async with self._tenant_session(tenant_id) as session:
             return (
                 await session.execute(
                     select(JobPostingRow)
-                    .where(JobPostingRow.content_hash == content_hash)
+                    .where(
+                        JobPostingRow.content_hash == content_hash,
+                        JobPostingRow.tenant_id == tenant_id,
+                    )
                     .order_by(JobPostingRow.id)
                     .limit(1)
                 )
             ).scalar_one_or_none()
 
     async def find_by_source_external_id(
-        self, source: str, external_id: str
+        self, source: str, external_id: str, *, tenant_id: TenantId
     ) -> JobPostingRow | None:
         """Find a portal-sourced posting by its stable board identity.
 
@@ -170,18 +221,24 @@ class SqlAlchemyGapRepository:
         last sync — the board identity stays fixed even when a company edits
         the JD, so content_hash alone can't answer "is this the same posting".
         """
-        async with self._session_factory() as session:
+        async with self._tenant_session(tenant_id) as session:
             return (
                 await session.execute(
                     select(JobPostingRow).where(
                         JobPostingRow.source == source,
                         JobPostingRow.external_id == external_id,
+                        JobPostingRow.tenant_id == tenant_id,
                     )
                 )
             ).scalar_one_or_none()
 
     async def close_missing_postings(
-        self, *, source: str, company_slug: str, seen_external_ids: set[str]
+        self,
+        *,
+        tenant_id: TenantId,
+        source: str,
+        company_slug: str,
+        seen_external_ids: set[str],
     ) -> int:
         """Mark open postings from this board absent from the current fetch as closed.
 
@@ -191,10 +248,11 @@ class SqlAlchemyGapRepository:
         (a legitimate outcome: the board itself may have gone empty), so the
         caller must not call this after a failed/partial fetch.
         """
-        async with self._session_factory() as session:
+        async with self._tenant_session(tenant_id) as session:
             result = await session.execute(
                 sa_update(JobPostingRow)
                 .where(
+                    JobPostingRow.tenant_id == tenant_id,
                     JobPostingRow.source == source,
                     JobPostingRow.company_slug == company_slug,
                     JobPostingRow.closed_at.is_(None),
@@ -210,16 +268,19 @@ class SqlAlchemyGapRepository:
             await session.commit()
             return len(closed_ids)
 
-    async def delete_posting(self, posting_id: int) -> bool:
+    async def delete_posting(self, posting_id: int, *, tenant_id: TenantId) -> bool:
         """Permanently remove a posting. `ON DELETE CASCADE` on
         `posting_analyses.posting_id`/`phrase_clusters.posting_id` cleans up
         its analyses and clusters in the same statement — no explicit
         child-row cleanup needed here.
         """
-        async with self._session_factory() as session:
+        async with self._tenant_session(tenant_id) as session:
             result = await session.execute(
                 sa_delete(JobPostingRow)
-                .where(JobPostingRow.id == posting_id)
+                .where(
+                    JobPostingRow.id == posting_id,
+                    JobPostingRow.tenant_id == tenant_id,
+                )
                 .returning(JobPostingRow.id)
             )
             deleted = result.scalars().first() is not None
@@ -227,7 +288,11 @@ class SqlAlchemyGapRepository:
             return deleted
 
     async def list_postings(
-        self, *, mentions_term: str | None = None, analyzer_version: str = ""
+        self,
+        *,
+        tenant_id: TenantId,
+        mentions_term: str | None = None,
+        analyzer_version: str = "",
     ) -> list[JobPostingRow]:
         """List postings, newest first, optionally filtered by a mentioned term.
 
@@ -244,9 +309,11 @@ class SqlAlchemyGapRepository:
         no row, degrading to an empty result rather than raising).
         """
         if mentions_term is None:
-            async with self._session_factory() as session:
+            async with self._tenant_session(tenant_id) as session:
                 result = await session.execute(
-                    select(JobPostingRow).order_by(JobPostingRow.first_seen_at.desc())
+                    select(JobPostingRow)
+                    .where(JobPostingRow.tenant_id == tenant_id)
+                    .order_by(JobPostingRow.first_seen_at.desc())
                 )
                 return list(result.scalars().all())
 
@@ -262,25 +329,39 @@ class SqlAlchemyGapRepository:
             CROSS JOIN LATERAL jsonb_array_elements(a.result->'gaps') AS gap
             WHERE a.analyzer_version = :version
               AND lower(gap->>'term') = lower(:term)
+              AND p.tenant_id = :tenant_id
         """)
-        async with self._session_factory() as session:
+        async with self._tenant_session(tenant_id) as session:
             id_rows = await session.execute(
-                matching_ids_stmt, {"version": analyzer_version, "term": mentions_term}
+                matching_ids_stmt,
+                {
+                    "version": analyzer_version,
+                    "term": mentions_term,
+                    "tenant_id": tenant_id,
+                },
             )
             matching_ids = [row.id for row in id_rows]
             if not matching_ids:
                 return []
             result = await session.execute(
                 select(JobPostingRow)
-                .where(JobPostingRow.id.in_(matching_ids))
+                .where(
+                    JobPostingRow.id.in_(matching_ids),
+                    JobPostingRow.tenant_id == tenant_id,
+                )
                 .order_by(JobPostingRow.first_seen_at.desc())
             )
             return list(result.scalars().all())
 
     async def save_analysis(
-        self, *, analysis: PostingAnalysisRow
+        self, *, analysis: PostingAnalysisRow, tenant_id: TenantId
     ) -> PostingAnalysisRow:
-        """Store an analysis, replacing any prior run at the same version."""
+        """Store an analysis, replacing any prior run at the same version.
+
+        `tenant_id` pins the RLS session, not a column on this row — tenancy
+        is enforced via the `posting_id` FK to `job_postings`, whose policy
+        this session's `app.tenant_id` is checked against.
+        """
         stmt = (
             insert(PostingAnalysisRow)
             .values(
@@ -295,15 +376,15 @@ class SqlAlchemyGapRepository:
             )
             .returning(PostingAnalysisRow)
         )
-        async with self._session_factory() as session:
+        async with self._tenant_session(tenant_id) as session:
             row = (await session.execute(stmt)).scalar_one()
             await session.commit()
             return row
 
     async def get_analysis(
-        self, posting_id: int, analyzer_version: str
+        self, posting_id: int, analyzer_version: str, *, tenant_id: TenantId
     ) -> PostingAnalysisRow | None:
-        async with self._session_factory() as session:
+        async with self._tenant_session(tenant_id) as session:
             return (
                 await session.execute(
                     select(PostingAnalysisRow).where(
@@ -374,8 +455,14 @@ class SqlAlchemyGapRepository:
             )
             await session.commit()
 
-    async def save_phrase_clusters(self, *, row: PhraseClusterRow) -> PhraseClusterRow:
-        """Replace this posting's prior clustering run, if any."""
+    async def save_phrase_clusters(
+        self, *, row: PhraseClusterRow, tenant_id: TenantId
+    ) -> PhraseClusterRow:
+        """Replace this posting's prior clustering run, if any.
+
+        `tenant_id` pins the RLS session — like `save_analysis`, tenancy is
+        enforced via the `posting_id` FK, not a column here.
+        """
         stmt = (
             insert(PhraseClusterRow)
             .values(
@@ -394,13 +481,15 @@ class SqlAlchemyGapRepository:
             )
             .returning(PhraseClusterRow)
         )
-        async with self._session_factory() as session:
+        async with self._tenant_session(tenant_id) as session:
             saved = (await session.execute(stmt)).scalar_one()
             await session.commit()
             return saved
 
-    async def get_phrase_clusters(self, posting_id: int) -> PhraseClusterRow | None:
-        async with self._session_factory() as session:
+    async def get_phrase_clusters(
+        self, posting_id: int, *, tenant_id: TenantId
+    ) -> PhraseClusterRow | None:
+        async with self._tenant_session(tenant_id) as session:
             return (
                 await session.execute(
                     select(PhraseClusterRow).where(
@@ -410,11 +499,16 @@ class SqlAlchemyGapRepository:
             ).scalar_one_or_none()
 
     async def aggregate_roadmap(
-        self, *, analyzer_version: str, tiers: list[str]
+        self, *, analyzer_version: str, tiers: list[str], tenant_id: TenantId
     ) -> list[dict[str, Any]]:
-        async with self._session_factory() as session:
+        async with self._tenant_session(tenant_id) as session:
             result = await session.execute(
-                _ROADMAP_SQL, {"version": analyzer_version, "tiers": tiers}
+                _ROADMAP_SQL,
+                {
+                    "version": analyzer_version,
+                    "tiers": tiers,
+                    "tenant_id": tenant_id,
+                },
             )
             return [dict(row) for row in result.mappings()]
 

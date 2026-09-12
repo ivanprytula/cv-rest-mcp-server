@@ -162,7 +162,7 @@ class TestPostingDocumentConsistency:
         assert listing.json()["postings"] == []
 
     async def test_restoring_a_posting_with_a_lost_document_repairs_it(
-        self, admin_client
+        self, admin_client, operator_tenant_id
     ):
         """Re-storing identical text must rewrite the document, not just
         dedup to the row. Without this, a row whose document went missing
@@ -172,7 +172,9 @@ class TestPostingDocumentConsistency:
 
         posting = await _store(admin_client, JD_KUBERNETES)
         gap_service = app.state.gap_service
-        row = await gap_service._repo.get_posting(posting["id"])
+        row = await gap_service._repo.get_posting(
+            posting["id"], tenant_id=operator_tenant_id
+        )
         gap_service._posting_docs._documents.pop(row.content_hash)
 
         restored = await _store(admin_client, JD_KUBERNETES)
@@ -183,7 +185,7 @@ class TestPostingDocumentConsistency:
         assert resp.status_code == status.HTTP_200_OK, resp.text
 
     async def test_a_posting_missing_its_document_is_reported_not_crashed(
-        self, admin_client
+        self, admin_client, operator_tenant_id
     ):
         # Simulates the residual risk the docstrings call out: a Postgres
         # row exists, but its Firestore document is gone (process killed
@@ -193,7 +195,9 @@ class TestPostingDocumentConsistency:
 
         posting = await _store(admin_client, JD_KUBERNETES)
         gap_service = app.state.gap_service
-        row = await gap_service._repo.get_posting(posting["id"])
+        row = await gap_service._repo.get_posting(
+            posting["id"], tenant_id=operator_tenant_id
+        )
         gap_service._posting_docs._documents.pop(row.content_hash)
 
         resp = await admin_client.post(f"{POSTINGS}/{posting['id']}/analyze")

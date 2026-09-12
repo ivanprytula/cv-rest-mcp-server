@@ -37,7 +37,9 @@ def gap_service(user_service):
 
 
 class TestSyncBoard:
-    async def test_new_posting_is_synced_and_counted(self, gap_service, monkeypatch):
+    async def test_new_posting_is_synced_and_counted(
+        self, gap_service, monkeypatch, operator_tenant_id
+    ):
         client = httpx.AsyncClient(
             transport=httpx.MockTransport(
                 _greenhouse_transport(
@@ -53,6 +55,7 @@ class TestSyncBoard:
             )
         )
         counts = await gap_service.sync_board(
+            tenant_id=operator_tenant_id,
             source="greenhouse",
             company_slug="acme",
             client=client,
@@ -62,11 +65,13 @@ class TestSyncBoard:
         assert counts["new"] == 1
         assert counts["errors"] == 0
 
-        postings = await gap_service.list_postings()
+        postings = await gap_service.list_postings(tenant_id=operator_tenant_id)
         assert len(postings) == 1
         assert postings[0].company == ""
 
-    async def test_second_sync_with_same_payload_is_unchanged(self, gap_service):
+    async def test_second_sync_with_same_payload_is_unchanged(
+        self, gap_service, operator_tenant_id
+    ):
         jobs = [
             {
                 "id": 2,
@@ -79,6 +84,7 @@ class TestSyncBoard:
             transport=httpx.MockTransport(_greenhouse_transport(jobs))
         )
         await gap_service.sync_board(
+            tenant_id=operator_tenant_id,
             source="greenhouse",
             company_slug="acme2",
             client=client1,
@@ -89,6 +95,7 @@ class TestSyncBoard:
             transport=httpx.MockTransport(_greenhouse_transport(jobs))
         )
         counts = await gap_service.sync_board(
+            tenant_id=operator_tenant_id,
             source="greenhouse",
             company_slug="acme2",
             client=client2,
@@ -98,7 +105,9 @@ class TestSyncBoard:
         assert counts["unchanged"] == 1
         assert counts["new"] == 0
 
-    async def test_posting_absent_from_refetch_is_closed(self, gap_service):
+    async def test_posting_absent_from_refetch_is_closed(
+        self, gap_service, operator_tenant_id
+    ):
         client1 = httpx.AsyncClient(
             transport=httpx.MockTransport(
                 _greenhouse_transport(
@@ -114,6 +123,7 @@ class TestSyncBoard:
             )
         )
         await gap_service.sync_board(
+            tenant_id=operator_tenant_id,
             source="greenhouse",
             company_slug="acme3",
             client=client1,
@@ -124,6 +134,7 @@ class TestSyncBoard:
             transport=httpx.MockTransport(_greenhouse_transport([]))
         )
         counts = await gap_service.sync_board(
+            tenant_id=operator_tenant_id,
             source="greenhouse",
             company_slug="acme3",
             client=client2,
@@ -132,11 +143,14 @@ class TestSyncBoard:
         )
         assert counts["closed"] == 1
 
-    async def test_unknown_source_returns_error_count(self, gap_service):
+    async def test_unknown_source_returns_error_count(
+        self, gap_service, operator_tenant_id
+    ):
         client = httpx.AsyncClient(
             transport=httpx.MockTransport(_greenhouse_transport([]))
         )
         counts = await gap_service.sync_board(
+            tenant_id=operator_tenant_id,
             source="workday",
             company_slug="acme",
             client=client,
@@ -145,12 +159,13 @@ class TestSyncBoard:
         )
         assert counts["errors"] == 1
 
-    async def test_fetch_failure_does_not_raise(self, gap_service):
+    async def test_fetch_failure_does_not_raise(self, gap_service, operator_tenant_id):
         def handler(request: httpx.Request) -> httpx.Response:
             return httpx.Response(500)
 
         client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
         counts = await gap_service.sync_board(
+            tenant_id=operator_tenant_id,
             source="greenhouse",
             company_slug="down-board",
             client=client,
@@ -161,7 +176,9 @@ class TestSyncBoard:
 
 
 class TestRefreshAllBoards:
-    async def test_one_dead_board_does_not_abort_others(self, gap_service, monkeypatch):
+    async def test_one_dead_board_does_not_abort_others(
+        self, gap_service, monkeypatch, operator_tenant_id
+    ):
         from services.portfolio.gaps import ats
 
         def fake_fetcher_for(source):
@@ -191,6 +208,7 @@ class TestRefreshAllBoards:
 
         results = await gap_service.refresh_all_boards(
             [("greenhouse", "acme4"), ("lever", "dead-board")],
+            tenant_id=operator_tenant_id,
             analysis_inputs=None,
             live_cv=None,
         )

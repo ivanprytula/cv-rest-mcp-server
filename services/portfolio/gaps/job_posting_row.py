@@ -32,14 +32,21 @@ class JobPostingRow(Base):
     ``first_seen_at``/``last_seen_at`` are the whole "market shift over
     time" model: "new this week" is a filter on the former, "still open" is
     ``closed_at IS NULL``. A per-sighting history table would buy nothing a
-    single operator reads.
+    tenant reads.
     """
 
     __tablename__ = "job_postings"
     __table_args__ = (
-        # Portal ids are unique per source; pasted postings have none, and
-        # Postgres treats NULLs as distinct so they never collide.
-        UniqueConstraint("source", "external_id", name="uq_job_postings_source_ext"),
+        # Portal ids are unique per source per tenant; pasted postings have
+        # none, and Postgres treats NULLs as distinct so they never collide.
+        # Two tenants each tracking the same external posting (e.g. the same
+        # Stripe/Greenhouse listing) get independent rows, not a collision.
+        UniqueConstraint(
+            "tenant_id",
+            "source",
+            "external_id",
+            name="uq_job_postings_tenant_source_ext",
+        ),
         Index("ix_job_postings_content_hash", "content_hash"),
     )
 
@@ -55,9 +62,11 @@ class JobPostingRow(Base):
     title: Mapped[str] = mapped_column(String(512), default="")
     url: Mapped[str] = mapped_column(Text, default="")
     content_hash: Mapped[str] = mapped_column(String(64))
-    # Nullable and unenforced: multi-tenancy is deferred, but adding the
-    # column at table creation costs nothing and saves a backfill later.
-    owner_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    # Deleting a user takes their postings with them; nothing else can
+    # meaningfully own them. Same pattern as DocumentRow.tenant_id.
+    tenant_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
     first_seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )

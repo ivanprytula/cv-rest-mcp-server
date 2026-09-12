@@ -78,6 +78,7 @@ async def _analysis_inputs(
 async def store_job_posting(
     request: Request,
     gap_service: GapService = get_gap_service_dep,
+    tenant_id: TenantId = tenant_id_dep,
 ) -> PostingCreated:
     """Store a job posting for later analysis.
 
@@ -99,6 +100,7 @@ async def store_job_posting(
         raise HTTPException(status_code=422, detail="posting_text is required")
 
     posting, duplicate = await gap_service.store_posting(
+        tenant_id=tenant_id,
         posting_text=parsed.posting_text,
         title=parsed.title,
         company=request.query_params.get("company", ""),
@@ -115,6 +117,7 @@ async def store_job_posting(
 async def list_job_postings(
     mentions: str | None = None,
     gap_service: GapService = get_gap_service_dep,
+    tenant_id: TenantId = tenant_id_dep,
 ) -> PostingList:
     """List stored postings, newest first.
 
@@ -122,17 +125,22 @@ async def list_job_postings(
     in any tier, e.g. `?mentions=Python`. Matches against the term as stored
     (the bank/vocabulary's canonical name), case-insensitively.
     """
-    return PostingList(postings=await gap_service.list_postings(mentions_term=mentions))
+    return PostingList(
+        postings=await gap_service.list_postings(
+            tenant_id=tenant_id, mentions_term=mentions
+        )
+    )
 
 
 @postings_router.delete("/{posting_id}", status_code=204)
 async def delete_job_posting(
     posting_id: int,
     gap_service: GapService = get_gap_service_dep,
+    tenant_id: TenantId = tenant_id_dep,
 ) -> None:
     """Admin-only: permanently remove a stored posting (its analyses and
     phrase clusters cascade with it)."""
-    deleted = await gap_service.delete_posting(posting_id)
+    deleted = await gap_service.delete_posting(posting_id, tenant_id=tenant_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Job posting not found")
 
@@ -158,6 +166,7 @@ async def analyze_job_posting(
     )
     report = await gap_service.analyze_posting(
         posting_id,
+        tenant_id=tenant_id,
         bank_atoms=bank,
         deferred_atoms=deferred,
         vocabulary=vocabulary,
@@ -166,7 +175,7 @@ async def analyze_job_posting(
     )
     if report is None:
         raise HTTPException(status_code=404, detail="Job posting not found")
-    posting = await gap_service.get_posting(posting_id)
+    posting = await gap_service.get_posting(posting_id, tenant_id=tenant_id)
     unrecognized = (
         [
             token
@@ -189,9 +198,10 @@ async def analyze_job_posting(
 async def read_gap_report(
     posting_id: int,
     gap_service: GapService = get_gap_service_dep,
+    tenant_id: TenantId = tenant_id_dep,
 ) -> GapReportOut:
     """Read a stored gap report."""
-    report = await gap_service.get_analysis(posting_id)
+    report = await gap_service.get_analysis(posting_id, tenant_id=tenant_id)
     if report is None:
         raise HTTPException(status_code=404, detail="No analysis for this posting")
     return GapReportOut(
@@ -205,6 +215,7 @@ async def read_gap_report(
 async def cluster_job_posting(
     posting_id: int,
     gap_service: GapService = get_gap_service_dep,
+    tenant_id: TenantId = tenant_id_dep,
 ) -> PhraseClustersOut:
     """Group a posting's paraphrased responsibility sentences.
 
@@ -213,7 +224,7 @@ async def cluster_job_posting(
     "Automated deployment workflows") cluster together here. Idempotent:
     re-clustering replaces the prior result.
     """
-    clusters = await gap_service.cluster_posting(posting_id)
+    clusters = await gap_service.cluster_posting(posting_id, tenant_id=tenant_id)
     if clusters is None:
         raise HTTPException(status_code=404, detail="Job posting not found")
     return PhraseClustersOut(posting_id=posting_id, clusters=clusters)
@@ -223,9 +234,10 @@ async def cluster_job_posting(
 async def read_phrase_clusters(
     posting_id: int,
     gap_service: GapService = get_gap_service_dep,
+    tenant_id: TenantId = tenant_id_dep,
 ) -> PhraseClustersOut:
     """Read a posting's stored clustering result."""
-    clusters = await gap_service.get_phrase_clusters(posting_id)
+    clusters = await gap_service.get_phrase_clusters(posting_id, tenant_id=tenant_id)
     if clusters is None:
         raise HTTPException(status_code=404, detail="No clusters for this posting")
     return PhraseClustersOut(posting_id=posting_id, clusters=clusters)
@@ -234,11 +246,13 @@ async def read_phrase_clusters(
 @router.get("/roadmap", response_model=LearningRoadmap)
 async def read_learning_roadmap(
     gap_service: GapService = get_gap_service_dep,
+    tenant_id: TenantId = tenant_id_dep,
 ) -> LearningRoadmap:
     """Gap terms ranked by how many postings demand them.
 
     The first row is the answer to "what should I learn next?".
     """
     return LearningRoadmap(
-        items=await gap_service.build_roadmap(), analyzer_version=ANALYZER_VERSION
+        items=await gap_service.build_roadmap(tenant_id=tenant_id),
+        analyzer_version=ANALYZER_VERSION,
     )
