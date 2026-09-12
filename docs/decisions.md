@@ -839,16 +839,52 @@ image) is at least as reliable as Firestore's.
 
 **Decision — A2A wire subset.** Target only the two pieces needed for a
 single, non-streaming extractor→critic round-trip: an `AgentCard` served
-at `/.well-known/agent.json` (name/description/url/skills, per spec) and
-the `message/send` JSON-RPC 2.0 method (request/response, no task
-polling, no SSE streaming, no push notifications). The full A2A spec
-also defines multi-turn `tasks/get`/`tasks/cancel` and streaming
-(`message/stream`) — none of that is reachable from a one-shot
+at `/.well-known/agent-card.json` (verified path — see Correction below)
+and the `SendMessage` JSON-RPC 2.0 method
+(request/response, no task polling, no SSE streaming, no push
+notifications). The full A2A spec also defines multi-turn
+`GetTask`/`CancelTask`/`SubscribeToTask` and streaming
+(`SendStreamingMessage`) — none of that is reachable from a one-shot
 extract-then-critique flow, so it is out of scope until a real multi-turn
 need appears.
 
+**Correction (Phase 4, verified against the authoritative
+`specification/a2a.proto` and `docs/specification.md` in
+`a2aproject/A2A`, current as of this repo's Phase 4 work):** this entry's
+first draft assumed a `message/send` method name and an `AgentCard.url`
+field from memory, without checking the spec. Both are wrong for the
+current (v1.0) protocol:
+
+- **Discovery path is `/.well-known/agent-card.json`** (`docs/specification.md`
+  §5, §8.6), not `/.well-known/agent.json`.
+- **Method name is `SendMessage`** (PascalCase, the gRPC RPC name reused
+  verbatim as the JSON-RPC `method` string — `docs/specification.md`
+  §9.4.1), not `message/send`. A JSON-RPC request looks like
+  `{"jsonrpc": "2.0", "id": 1, "method": "SendMessage", "params": {...}}`.
+- **`AgentCard` has no top-level `url` field in v1.0** — it was removed;
+  the primary endpoint is `supportedInterfaces[0].url`, where each
+  `AgentInterface` also carries `protocolBinding` (`"JSONRPC"`/`"GRPC"`/
+  `"HTTP+JSON"`) and `protocolVersion`. `AgentCard`'s actual required
+  fields are `name`, `description`, `supportedInterfaces[]`, `version`,
+  `capabilities`, `defaultInputModes[]`, `defaultOutputModes[]`,
+  `skills[]`.
+- **JSON field casing is camelCase** (ProtoJSON convention:
+  `messageId`, `contextId`, `taskId`), and `Message.role` is the enum
+  string `"ROLE_USER"`/`"ROLE_AGENT"`, not a bare `"user"`/`"agent"`.
+- **`Part` is a single unified message with a `oneof` content field**
+  (`text`/`raw`/`url`/`data`) plus `mediaType`/`filename`/`metadata` —
+  v1.0 removed the earlier separate `TextPart`/`FilePart`/`DataPart`
+  types. This repo's extractor↔critic messages only ever use the `text`
+  variant.
+- **Error responses carry `google.rpc.ErrorInfo` in `data`**, not a bare
+  object: `data: [{"@type": "type.googleapis.com/google.rpc.ErrorInfo",
+  "reason": "...", "domain": "a2a-protocol.org", "metadata": {...}}]`.
+
 **Consequences.** Phase 2's Pub/Sub adapter test and Phase 4's A2A
 envelope both have a settled shape before their PRs are written, so
-neither reopens this decision mid-implementation. If a future phase
+neither reopens this decision mid-implementation. Phase 4's
+implementation follows the corrected shapes above, not this entry's
+original (wrong) draft — a lesson in verifying a named external spec
+against its source before coding to it from memory. If a future phase
 needs A2A streaming or multi-turn tasks, that is a new ADR, not an
 extension smuggled into Phase 4/5's original scope.
