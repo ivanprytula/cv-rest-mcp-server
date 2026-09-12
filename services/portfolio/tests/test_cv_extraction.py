@@ -174,3 +174,77 @@ class TestExtractRoute:
         assert resp.status_code == status.HTTP_502_BAD_GATEWAY
         assert "secret=xyz" not in resp.text
         assert "internal-request-id" not in resp.text
+
+
+@pytest.fixture
+def stub_review_service():
+    """Same pattern as `stub_extraction_service`, for `cv_review_service`."""
+    from services.portfolio.main import app
+
+    installed: dict = {}
+
+    def _install(service):
+        app.state.cv_review_service = service
+        installed["set"] = True
+
+    yield _install
+    if installed:
+        app.state.cv_review_service = None
+
+
+class TestReviewRoute:
+    async def test_unconfigured_review_is_503(self, admin_client):
+        resp = await admin_client.post(
+            f"{DOCS}/cv/review",
+            content=b"Ada Lovelace, mathematician",
+            headers={"content-type": "text/plain"},
+        )
+        assert resp.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+
+    async def test_requires_authentication(self, client):
+        resp = await client.post(
+            f"{DOCS}/cv/review",
+            content=b"resume text",
+            headers={"content-type": "text/plain", "Authorization": ""},
+        )
+        assert resp.status_code == status.HTTP_401_UNAUTHORIZED
+
+    async def test_returns_draft_and_critique(self, admin_client, stub_review_service):
+        from services.portfolio.cv_review.critic_agent import Critique
+        from services.portfolio.cv_review.review_service import CVReviewResult
+
+        class _StubReview:
+            async def run(self, resume_text):
+                return CVReviewResult(
+                    draft={"name": "Ada Lovelace"},
+                    critique=Critique(concerns=[], confidence="high"),
+                )
+
+        stub_review_service(_StubReview())
+        resp = await admin_client.post(
+            f"{DOCS}/cv/review",
+            content=b"Ada Lovelace, mathematician",
+            headers={"content-type": "text/plain"},
+        )
+
+        assert resp.status_code == status.HTTP_200_OK
+        body = resp.json()
+        assert body["draft"]["name"] == "Ada Lovelace"
+        assert body["critique"]["confidence"] == "high"
+
+    async def test_review_failure_does_not_leak_the_raw_exception(
+        self, admin_client, stub_review_service
+    ):
+        class _FailingReview:
+            async def run(self, resume_text):
+                raise CVExtractionError("upstream detail: secret=xyz")
+
+        stub_review_service(_FailingReview())
+        resp = await admin_client.post(
+            f"{DOCS}/cv/review",
+            content=b"some resume text",
+            headers={"content-type": "text/plain"},
+        )
+
+        assert resp.status_code == status.HTTP_502_BAD_GATEWAY
+        assert "secret=xyz" not in resp.text

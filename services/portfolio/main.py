@@ -43,6 +43,8 @@ from services.portfolio.constants import (
     TEMPLATE_DIR,
 )
 from services.portfolio.cv_extraction import CVExtractionService
+from services.portfolio.cv_review.critic_agent import CVCriticService
+from services.portfolio.cv_review.review_service import CVReviewService
 from services.portfolio.db import build_engine, build_session_factory
 from services.portfolio.db_migrations import upgrade_head
 from services.portfolio.documents.document_repository import (
@@ -404,8 +406,13 @@ async def lifespan(app):
     # No API key means the feature is off, not a startup failure — nothing
     # else in this app depends on it.
     if settings.anthropic_api_key:
-        app.state.cv_extraction_service = CVExtractionService(
-            anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+        anthropic_client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+        app.state.cv_extraction_service = CVExtractionService(anthropic_client)
+        # CV-review critique (Phase 3f.5): a second call over the same
+        # client, extractor + critic composed behind one A2A-shaped
+        # orchestration — see services/portfolio/cv_review/review_service.py.
+        app.state.cv_review_service = CVReviewService(
+            app.state.cv_extraction_service, CVCriticService(anthropic_client)
         )
 
     async with mcp_app.lifespan(app):
