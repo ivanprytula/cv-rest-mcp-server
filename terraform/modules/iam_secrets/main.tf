@@ -145,12 +145,22 @@ resource "google_artifact_registry_repository_iam_member" "deployer_cv_images_wr
 # reader/writer above cover pulling/pushing images, but granting a runtime SA
 # (e.g. ats_refresh_trigger_cv_images_reader below) access to this repo is a
 # setIamPolicy call on the repo resource itself, which writer doesn't include.
-resource "google_artifact_registry_repository_iam_member" "deployer_cv_images_admin" {
-  project    = var.project
-  location   = google_artifact_registry_repository.cv_images.location
-  repository = google_artifact_registry_repository.cv_images.name
-  role       = "roles/artifactregistry.repoAdmin"
-  member     = "serviceAccount:${google_service_account.deployer.email}"
+#
+# CORRECTION: the repository-scoped repoAdmin binding above (still present
+# in state) was verified live on the repo (`gcloud artifacts repositories
+# get-iam-policy cv-images`) and does include artifactregistry.repositories.
+# setIamPolicy, yet CI/local-Owner applies both still 403'd creating new
+# runtime-SA reader bindings on this repo — repeatable across two separate
+# applies, ruling out IAM propagation delay. Root cause not fully
+# understood (a resource-scoped-binding quirk on regional Artifact
+# Registry repos, not a permission gap), so the fix moves the grant to a
+# project-level role instead of debugging the resource-scoped path
+# further — same permission set, different binding shape that isn't
+# exhibiting the issue.
+resource "google_project_iam_member" "deployer_artifact_registry_admin" {
+  project = var.project
+  role    = "roles/artifactregistry.admin"
+  member  = "serviceAccount:${google_service_account.deployer.email}"
 }
 
 # Deployer runs `terraform apply` in CI, which reads the serverless NEGs
@@ -166,11 +176,21 @@ resource "google_project_iam_member" "deployer_compute_viewer" {
 # ats-refresh-trigger) was created by a one-time local Owner apply — CI's
 # deployer only ever needed to *read* them (compute.viewer above).
 # analysis-worker is the first NEG CI itself creates from scratch, which
-# needs compute.regionNetworkEndpointGroups.create — networkAdmin covers
-# NEG create/delete without the full compute.admin surface.
-resource "google_project_iam_member" "deployer_compute_network_admin" {
+# needs compute.regionNetworkEndpointGroups.create.
+#
+# CORRECTION: roles/compute.networkAdmin does NOT include
+# regionNetworkEndpointGroups.create (verified via `gcloud iam roles
+# describe roles/compute.networkAdmin` — it only has the read/list/use
+# NEG permissions, the same set compute.viewer above already covers via a
+# different role). Of the roles that do include the create permission
+# (compute.loadBalancerAdmin, compute.instanceAdmin, compute.admin),
+# loadBalancerAdmin is the narrowest — it matches the load-balancer/NEG
+# surface this repo already grants deployer elsewhere (edge_lb's global
+# address, backend services), without instanceAdmin's/compute.admin's much
+# broader VM and network surface.
+resource "google_project_iam_member" "deployer_compute_load_balancer_admin" {
   project = var.project
-  role    = "roles/compute.networkAdmin"
+  role    = "roles/compute.loadBalancerAdmin"
   member  = "serviceAccount:${google_service_account.deployer.email}"
 }
 
