@@ -177,13 +177,11 @@ considered for content management but rejected: the data model is a single
 validated JSON document with no relational needs (see roadmap discussion).
 
 **Decision.** The CV document lives in a private GCS object
-(`CV_DATA_GCS_URI`). `CvSource` loads it at boot, validates against `CVData`,
-and hot-reloads when the object's generation changes (checked every
-`CV_REFRESH_SECONDS`) — publishing an update is `gcloud storage cp` /
-`just deploy upload-cv`, no redeploy. If the object is absent or invalid at boot,
-the service starts anyway on the baked-in `data/cv.example.json` placeholder
-and keeps polling; `/health` reports `"cv_source": "gcs" | "file" |
-"placeholder"`. Runtime refresh failures keep the last good payload.
+(`CV_DATA_GCS_URI`), loaded at boot and validated against `CVData` —
+publishing an update is `gcloud storage cp` / `just deploy upload-cv`. If the
+object is absent or invalid at boot, the service starts anyway on the
+baked-in `data/cv.example.json` placeholder; `/health` reports `"cv_source":
+"gcs" | "file" | "placeholder"`.
 
 **Consequences.** Personal CV data never enters images or build sources
 (`.dockerignore` / `.gcloudignore` whitelist only the example file). The
