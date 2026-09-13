@@ -6,6 +6,7 @@ repos:
         files: \.(py|md|toml|yaml|yml)$
       - id: end-of-file-fixer
         files: \.(py|md|toml|yaml|yml)$
+      - id: check-ast
       - id: check-yaml
       - id: check-toml
       - id: check-added-large-files

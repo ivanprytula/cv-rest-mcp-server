@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol
 
 from sqlalchemy import delete as sa_delete
@@ -18,6 +18,7 @@ from sqlalchemy import update as sa_update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from services.portfolio.events.outbox_row import EventOutboxRow
 from services.portfolio.gaps.job_posting_row import (
     AtsBoardRow,
     JobPostingRow,
@@ -63,10 +64,38 @@ _ROADMAP_SQL = text("""
 """)
 
 
+def _outbox_row(
+    event: dict[str, Any], tenant_id: TenantId, *, posting_id: int
+) -> EventOutboxRow:
+    """Build the outbox row for an event about a posting this transaction wrote.
+
+    `posting_id` is filled in here rather than by the caller: on the insert
+    path the id does not exist until the row is flushed, so the service that
+    describes the event cannot know it yet.
+    """
+    event_type = event["event_type"]
+    payload = {**event["payload"], "posting_id": posting_id}
+    return EventOutboxRow(
+        tenant_id=tenant_id,
+        event_type=event_type,
+        payload=payload,
+        created_at=datetime.now(UTC),
+    )
+
+
 class GapRepository(Protocol):
     async def upsert_posting(
-        self, *, posting: JobPostingRow, tenant_id: TenantId
+        self,
+        *,
+        posting: JobPostingRow,
+        tenant_id: TenantId,
+        outbox_event: dict[str, Any] | None = None,
     ) -> JobPostingRow: ...
+    async def claim_pending_events(
+        self, *, limit: int = 100
+    ) -> list[EventOutboxRow]: ...
+    async def mark_events_published(self, event_ids: list[int]) -> None: ...
+    async def prune_published_events(self, *, older_than_days: int = 7) -> int: ...
     async def get_posting(
         self, posting_id: int, *, tenant_id: TenantId
     ) -> JobPostingRow | None: ...
@@ -144,19 +173,39 @@ class SqlAlchemyGapRepository:
                 yield session
 
     async def upsert_posting(
-        self, *, posting: JobPostingRow, tenant_id: TenantId
+        self,
+        *,
+        posting: JobPostingRow,
+        tenant_id: TenantId,
+        outbox_event: dict[str, Any] | None = None,
     ) -> JobPostingRow:
         """Insert a posting, or bump `last_seen_at` if the portal already sent it.
 
         Keyed on (tenant_id, source, external_id). A pasted posting has no
         external id, so it always inserts — dedup for those is the caller's
         job via `content_hash`.
+
+        `outbox_event`, when given, is written to `event_outbox` in this same
+        transaction — that atomicity is the whole point of the outbox. A
+        publish can no longer fail after the posting has committed, because
+        there is no publish here: only a row the relay picks up later.
+
+        No explicit `commit()`: `_tenant_session` wraps `session.begin()`,
+        which owns the transaction boundary. Committing inside that block
+        would end the transaction early and leave the outbox insert outside
+        the posting's — exactly the atomicity this method promises.
         """
         posting.tenant_id = tenant_id
         if posting.external_id is None:
             async with self._tenant_session(tenant_id) as session:
                 session.add(posting)
-                await session.commit()
+                if outbox_event is not None:
+                    # Flush so the posting's generated id is available to the
+                    # event payload before it is written.
+                    await session.flush()
+                    session.add(
+                        _outbox_row(outbox_event, tenant_id, posting_id=posting.id)
+                    )
             return posting
 
         values = {
@@ -179,7 +228,8 @@ class SqlAlchemyGapRepository:
         )
         async with self._tenant_session(tenant_id) as session:
             row = (await session.execute(stmt)).scalar_one()
-            await session.commit()
+            if outbox_event is not None:
+                session.add(_outbox_row(outbox_event, tenant_id, posting_id=row.id))
             return row
 
     async def get_posting(
@@ -511,6 +561,72 @@ class SqlAlchemyGapRepository:
                 },
             )
             return [dict(row) for row in result.mappings()]
+
+    async def claim_pending_events(self, *, limit: int = 100) -> list[EventOutboxRow]:
+        """Lock and return the next batch of unpublished events, oldest first.
+
+        `FOR UPDATE SKIP LOCKED` is what makes overlapping relay runs safe
+        without a global lock: a second run takes the next batch rather than
+        blocking on, or double-publishing, this one's rows. The rows stay
+        locked until the caller's transaction ends, so this deliberately does
+        NOT open its own — see `dispatch_outbox`, which holds one transaction
+        across claim → publish → stamp.
+
+        No tenant session: `event_outbox` carries no RLS policy by design
+        (see the migration and ADR), because the relay drains every tenant in
+        one pass.
+        """
+        async with self._session_factory() as session:
+            async with session.begin():
+                rows = (
+                    await session.execute(
+                        select(EventOutboxRow)
+                        .where(EventOutboxRow.published_at.is_(None))
+                        .order_by(EventOutboxRow.id)
+                        .limit(limit)
+                        .with_for_update(skip_locked=True)
+                    )
+                ).scalars()
+                return list(rows)
+
+    async def mark_events_published(self, event_ids: list[int]) -> None:
+        """Stamp `published_at` on events Pub/Sub has accepted.
+
+        Separate from `claim_pending_events` rather than one transaction
+        spanning both: holding a lock across a network publish would serialize
+        the relay against itself for the publish's whole duration. The cost is
+        at-least-once delivery — a crash between publish and stamp re-publishes
+        on the next pass — which the consumer is built to tolerate.
+        """
+        if not event_ids:
+            return
+        async with self._session_factory() as session:
+            async with session.begin():
+                await session.execute(
+                    sa_update(EventOutboxRow)
+                    .where(EventOutboxRow.id.in_(event_ids))
+                    .values(published_at=datetime.now(UTC))
+                )
+
+    async def prune_published_events(self, *, older_than_days: int = 7) -> int:
+        """Delete long-published events, keeping the outbox a bounded audit trail.
+
+        One statement at the end of each relay run instead of a separate
+        cleanup job. Pending rows are never touched, however old — an
+        unpublished event is a delivery still owed, not garbage.
+        """
+        cutoff = datetime.now(UTC) - timedelta(days=older_than_days)
+        async with self._session_factory() as session:
+            async with session.begin():
+                result = await session.execute(
+                    sa_delete(EventOutboxRow)
+                    .where(
+                        EventOutboxRow.published_at.is_not(None),
+                        EventOutboxRow.published_at < cutoff,
+                    )
+                    .returning(EventOutboxRow.id)
+                )
+                return len(result.scalars().all())
 
     async def get_board(self, source: str, company_slug: str) -> AtsBoardRow | None:
         async with self._session_factory() as session:

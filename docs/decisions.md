@@ -886,3 +886,101 @@ original (wrong) draft — a lesson in verifying a named external spec
 against its source before coding to it from memory. If a future phase
 needs A2A streaming or multi-turn tasks, that is a new ADR, not an
 extension smuggled into Phase 4/5's original scope.
+
+## ADR-025: Transactional outbox for PostingChanged, at-least-once delivery (Phase 3g)
+
+**Context.** Phase 3f provisioned the event pipeline — topic, push
+subscription, retry policy, dead-letter topic, and the `analysis-worker`
+service — correctly. The *delivery guarantee* was the part that did not
+hold. Tracing the publish path end to end turned up three defects:
+
+1. **A dual write.** `sync_board` published *after* `upsert_posting` had
+   committed in its own transaction, inside `except Exception:
+   logger.warning(...)`. A commit followed by a failed publish silently
+   lost the event: the posting sat marked `changed` in Postgres and
+   nothing would ever analyze it. The canonical transactional-outbox bug.
+2. **The publisher was never wired into the only process that publishes.**
+   `refresh_trigger.py` built its `GapService` with no publisher argument,
+   falling back to `LoggingEventPublisher`. Cloud Scheduler →
+   `ats-refresh-trigger` is the only caller of `sync_board`, and
+   `sync_board` was the only publish site — so no `PostingChanged` event
+   was ever published in production. `api-core` built the real publisher
+   but never calls `sync_board`.
+3. **No request-level dedup.** `POST /api/v1/postings` deduped by
+   `content_hash`, but the check and the insert are separate transactions
+   with no unique constraint behind them, so two concurrent identical
+   posts each created a row and each reported `duplicate: false`.
+
+**Decision — the event is a row, written in the posting's transaction.**
+`GapService.store_posting` takes a `record_event` status and the
+repository writes an `event_outbox` row on the same `session` as the
+posting, inside `_tenant_session`'s `session.begin()`. There is no publish
+left to fail: either both the posting and its event commit, or neither
+does. `upsert_posting`'s inner `await session.commit()` was dropped at the
+same time — it ended the transaction early and would have left the outbox
+insert outside the posting's, defeating the entire guarantee.
+
+**Decision — the relay rides `ats-refresh-trigger`.** `POST
+/dispatch-outbox` reuses that service's existing Cloud Scheduler + OIDC +
+private-ingress setup, so the relay needs no new Cloud Run service, no new
+service account and no new IAM binding. It claims a batch with `SELECT ...
+FOR UPDATE SKIP LOCKED`, which is what makes overlapping runs safe without
+a global lock: a second run takes the next batch rather than blocking on,
+or duplicating, the first's. Fixing defect 2, this service now builds the
+real publisher via `build_event_publisher_from_settings()`.
+
+**Decision — delivery is at-least-once, deliberately.** The claim's lock
+is released before the network publish rather than held across it, so a
+crash between publishing and stamping `published_at` re-publishes on the
+next pass. This is the right trade: holding a row lock across a Pub/Sub
+round trip would serialize the relay against itself for the publish's
+whole duration. The consumer is built for it — both its writes are
+idempotent upserts on real unique constraints, and it additionally drops
+stale events by comparing the event's `content_hash` to the stored
+posting's, so an out-of-order redelivery can no longer overwrite a newer
+analysis with an older one. Two-phase commit would buy exactly-once at a
+cost nothing here needs.
+
+**Decision — `event_outbox` gets no RLS policy, unlike every other
+tenant-scoped table.** This is the deliberate exception and the reason
+this ADR exists. The relay must drain every tenant's events in one pass,
+and it connects as `cv_app` (`NOBYPASSRLS`) with no request tenant to
+scope to — a `tenant_id`-matching policy would force a per-tenant loop
+with `SET LOCAL` and buy no isolation, since the relay is a trusted
+internal process rather than a request handler. `tenant_id` is carried
+here as *data* (it goes into the event payload), not as an isolation
+boundary. `idempotency_keys` is the opposite case and does take the
+standard `tenant_isolation` policy: it is only ever touched inside a
+request that already has a tenant.
+
+**Decision — idempotency keys on one route, not a shared dependency.**
+`POST /api/v1/postings` honors an optional `Idempotency-Key` header; the
+reservation `INSERT ... ON CONFLICT DO NOTHING` against the composite
+primary key *is* the lock, so two concurrent retries cannot both proceed
+and there is no check-then-act window. The header is validated at the
+trust boundary (length-capped, printable-only) rather than trusted into a
+primary key. Scoped to this one route on purpose: the other POST routes
+are admin-only or already upsert-idempotent, so a dependency spanning all
+of them would be scaffolding for a problem they do not have. Notably this
+closes the concurrent-duplicate hole *without* a unique constraint on
+`content_hash`, which would be wrong — ATS postings legitimately share
+text across boards.
+
+**Decision — the inline-analysis branch becomes an explicit flag.**
+`sync_board` used to decide whether to analyze inline by testing
+`isinstance(self._publisher, LoggingEventPublisher)`, conflating "is a
+queue configured?" with "should this analyze inline?". A `GapService`
+constructor flag (`analyze_inline`, defaulting to the old inferred
+behavior) separates them, so a deployment with a topic configured but no
+relay running fails visibly rather than silently analyzing nothing.
+
+**Consequences.** An event survives a publish failure, and the queue
+actually carries traffic for the first time. The outbox doubles as an
+audit trail — rows are kept after publishing and pruned on a 7-day window
+by one `DELETE` at the end of each relay run, not a separate cleanup job.
+Pending rows are never pruned however old: an unpublished event is a
+delivery still owed. The relay's cadence (one minute) is now the queue's
+latency floor, which is the price of routing every event through a durable
+row. Separately, `SqlAlchemyTrackedBoardRepository.update` — the only ORM
+load-mutate-flush in the codebase — gained `.with_for_update()` inside an
+explicit transaction, closing a genuine lost update on partial `PATCH`es.

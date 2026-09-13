@@ -116,6 +116,22 @@ async def handle_posting_changed(request: Request) -> dict[str, str]:
     gap_service: GapService = app.state.gap_service
     documents = app.state.document_service
 
+    # Delivery from the outbox relay is at-least-once and unordered, so an
+    # old event can arrive after a newer one has already been processed.
+    # Analyzing it would overwrite the newer analysis with a stale one. 200,
+    # not an error: the message is genuinely done with: retrying it would
+    # never make it fresh, and a non-2xx would loop it to the DLQ.
+    event_hash = payload.get("content_hash")
+    posting = await gap_service.get_posting(posting_id, tenant_id=tenant_id)
+    if posting is not None and event_hash and posting.content_hash != event_hash:
+        logger.info(
+            "Skipping stale posting_changed for %s: event %s, stored %s",
+            posting_id,
+            event_hash,
+            posting.content_hash,
+        )
+        return {"status": "stale"}
+
     try:
         analysis_inputs = await load_analysis_inputs(documents, tenant_id=tenant_id)
     except BaselineError as exc:

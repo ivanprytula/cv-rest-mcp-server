@@ -93,18 +93,33 @@ class SqlAlchemyTrackedBoardRepository:
     async def update(
         self, board_id: int, fields: dict[str, Any]
     ) -> TrackedBoardRow | None:
+        """Apply a partial update to one board, without losing a concurrent one.
+
+        `SELECT ... FOR UPDATE` inside an explicit transaction, because this
+        is a load-mutate-flush and the route builds `fields` from
+        `model_dump(exclude_unset=True)` — partial updates are the norm. Two
+        overlapping PATCHes would otherwise each load the row, each write back
+        their own snapshot, and the later commit would silently clobber the
+        fields the first one changed but the second never touched.
+
+        The transaction is what makes the lock mean anything: without one
+        spanning select through commit, the row lock would be released at the
+        end of the SELECT's own implicit transaction and buy nothing.
+        """
         async with self._session_factory() as session:
-            row = (
-                await session.execute(
-                    select(TrackedBoardRow).where(TrackedBoardRow.id == board_id)
-                )
-            ).scalar_one_or_none()
-            if row is None:
-                return None
-            for name, value in fields.items():
-                setattr(row, name, value)
-            row.updated_at = datetime.now(UTC)
-            await session.commit()
+            async with session.begin():
+                row = (
+                    await session.execute(
+                        select(TrackedBoardRow)
+                        .where(TrackedBoardRow.id == board_id)
+                        .with_for_update()
+                    )
+                ).scalar_one_or_none()
+                if row is None:
+                    return None
+                for name, value in fields.items():
+                    setattr(row, name, value)
+                row.updated_at = datetime.now(UTC)
             await session.refresh(row)
             return row
 

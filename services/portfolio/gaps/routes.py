@@ -14,6 +14,7 @@ from services.portfolio.constants import API_V1_PREFIX
 from services.portfolio.dependencies import (
     get_document_service,
     get_gap_service,
+    get_idempotency_repository,
     get_pdf_service,
     get_tenant_id,
 )
@@ -27,6 +28,7 @@ from services.portfolio.gaps.gap_service import (
     GapService,
     load_analysis_inputs,
 )
+from services.portfolio.gaps.idempotency_repository import IdempotencyRepository
 from services.portfolio.job_posting_input import (
     PayloadTooLargeError,
     parse_job_posting_input,
@@ -51,6 +53,7 @@ postings_router = APIRouter(prefix=f"{API_V1_PREFIX}/postings", tags=["postings"
 router = APIRouter(prefix=f"{API_V1_PREFIX}/gaps", tags=["gaps"])
 
 get_gap_service_dep = Depends(get_gap_service)
+get_idempotency_repository_dep = Depends(get_idempotency_repository)
 get_pdf_service_dep = Depends(get_pdf_service)
 get_document_service_dep = Depends(get_document_service)
 tenant_id_dep = Depends(get_tenant_id)
@@ -74,10 +77,31 @@ async def _analysis_inputs(
         ) from None
 
 
+def _validated_idempotency_key(request: Request) -> str | None:
+    """The request's `Idempotency-Key`, or None when it carries none.
+
+    Validated at the trust boundary rather than trusted into a primary key:
+    a client-supplied string goes straight into the idempotency table's PK,
+    so it is length-capped and rejected outright if non-printable. Absent is
+    fine — the header is optional and its absence keeps the prior behavior.
+    """
+    key = request.headers.get("Idempotency-Key")
+    if key is None:
+        return None
+    key = key.strip()
+    if not key or len(key) > 255 or not key.isprintable():
+        raise HTTPException(
+            status_code=422,
+            detail="Idempotency-Key must be 1-255 printable characters",
+        )
+    return key
+
+
 @postings_router.post("", response_model=PostingCreated, status_code=201)
 async def store_job_posting(
     request: Request,
     gap_service: GapService = get_gap_service_dep,
+    idempotency: IdempotencyRepository = get_idempotency_repository_dep,
     tenant_id: TenantId = tenant_id_dep,
 ) -> PostingCreated:
     """Store a job posting for later analysis.
@@ -85,7 +109,34 @@ async def store_job_posting(
     Accepts the same formats as `/api/v1/cv/tailor` (JSON, PDF, DOCX, text,
     Markdown) via the shared `parse_job_posting_input`. Re-posting identical text
     returns the existing posting with `duplicate: true`.
+
+    An optional `Idempotency-Key` header makes a retry safe: the first request
+    carrying a given key does the work and stores its response; a second
+    request with the same key replays that response instead of creating a
+    second posting. This closes the concurrent-duplicate window that
+    `content_hash` dedup cannot — that check and the insert are separate
+    transactions — without a unique constraint on `content_hash`, which would
+    be wrong, since ATS postings legitimately share text across boards.
     """
+    idempotency_key = _validated_idempotency_key(request)
+    if idempotency_key is not None:
+        # The reservation insert IS the lock: losing it means another request
+        # owns this key, so replay its response rather than doing the work
+        # twice. No check-then-act window between the two.
+        owns_key = await idempotency.reserve(idempotency_key, tenant_id=tenant_id)
+        if not owns_key:
+            stored = await idempotency.get_response(
+                idempotency_key, tenant_id=tenant_id
+            )
+            if stored is not None:
+                return PostingCreated(**stored)
+            # Reserved but not yet finished: the original request is still in
+            # flight. 409 rather than a duplicate write — the client retries.
+            raise HTTPException(
+                status_code=409,
+                detail="A request with this Idempotency-Key is still in progress",
+            )
+
     try:
         parsed = parse_job_posting_input(
             await request.body(),
@@ -108,9 +159,14 @@ async def store_job_posting(
     )
     if posting is None:
         raise HTTPException(status_code=503, detail="Could not store the job posting")
-    return PostingCreated(
+    created = PostingCreated(
         id=posting.id, content_hash=posting.content_hash, duplicate=duplicate
     )
+    if idempotency_key is not None:
+        await idempotency.store_response(
+            idempotency_key, created.model_dump(), tenant_id=tenant_id
+        )
+    return created
 
 
 @postings_router.get("", response_model=PostingList)

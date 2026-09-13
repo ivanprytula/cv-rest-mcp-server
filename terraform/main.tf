@@ -211,6 +211,40 @@ resource "google_cloud_scheduler_job" "ats_refresh" {
   ]
 }
 
+# Transactional-outbox relay (Phase 3g). Rides the ats-refresh-trigger
+# service rather than its own: same OIDC caller, same private ingress, no new
+# service account or IAM binding. Runs every minute — the outbox is the only
+# path a PostingChanged event takes to Pub/Sub, so this cadence is the
+# queue's latency floor.
+resource "google_cloud_scheduler_job" "outbox_dispatch" {
+  count       = local.ats_trigger_enabled ? 1 : 0
+  project     = var.project_id
+  region      = var.region
+  name        = "outbox-dispatch"
+  description = "Publishes pending event_outbox rows to Pub/Sub and prunes published ones."
+  schedule    = "* * * * *"
+  time_zone   = "Etc/UTC"
+  # One batch is capped at 100 rows and each publish is a single Pub/Sub
+  # round trip, so a run is short; a generous deadline only matters for a
+  # backlog drained after an outage.
+  attempt_deadline = "300s"
+
+  http_target {
+    http_method = "POST"
+    uri         = "${module.run["ats-refresh-trigger"].service_uri}/dispatch-outbox"
+
+    oidc_token {
+      service_account_email = module.iam_secrets.ats_refresh_trigger_runtime_sa_email
+      audience              = module.run["ats-refresh-trigger"].service_uri
+    }
+  }
+
+  depends_on = [
+    module.gcp_apis,
+    google_cloud_run_v2_service_iam_member.ats_refresh_trigger_invoker,
+  ]
+}
+
 # Phase 3f PR3: the posting-changed push subscription invokes the private
 # analysis-worker service via native OIDC, same pattern as the ATS refresh
 # Scheduler job above. Gated on both the topic (enable_pubsub_events) and

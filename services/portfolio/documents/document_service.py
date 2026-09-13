@@ -60,7 +60,7 @@ class DocumentService:
             return None
         try:
             return json.loads(fallback_path.read_text(encoding="utf-8"))
-        except OSError, json.JSONDecodeError:
+        except (OSError, json.JSONDecodeError):  # fmt: skip
             logger.warning(
                 "Document %s has no DB row and no usable file at %s",
                 kind,
@@ -115,7 +115,7 @@ class DocumentService:
                 if await self._repo.get(kind, tenant_id=tenant_id) is not None:
                     continue
                 payload = json.loads(path.read_text(encoding="utf-8"))
-            except OSError, json.JSONDecodeError:
+            except (OSError, json.JSONDecodeError):  # fmt: skip
                 logger.info("No seed file for document %s at %s; skipping", kind, path)
                 continue
             except Exception:
