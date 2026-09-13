@@ -11,10 +11,14 @@ a better-informed draft rather than a blind one.
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any, Protocol
 
 import anthropic
 from pydantic import BaseModel, Field
+
+
+logger = logging.getLogger(__name__)
 
 
 class _Messages(Protocol):
@@ -98,6 +102,14 @@ class CVCriticService:
             )
         except anthropic.APIError as exc:
             raise CVCritiqueError(f"CV critique call failed: {exc}") from exc
+
+        logger.info(
+            "cv_critique_tokens",
+            extra={
+                "input_tokens": response.usage.input_tokens,
+                "output_tokens": response.usage.output_tokens,
+            },
+        )
 
         for block in response.content:
             if block.type == "tool_use" and block.name == _TOOL_NAME:

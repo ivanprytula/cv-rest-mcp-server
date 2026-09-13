@@ -12,6 +12,7 @@ class Settings(BaseSettings):
 
     # Core
     environment: str = "development"
+    log_level: str = "INFO"
     cv_data_path: Path = Path("data/cv.json")
     port: int = 8080
 

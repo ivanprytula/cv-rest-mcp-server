@@ -6,7 +6,7 @@ setup:
     uv sync --group dev
 
 dev-local:
-    uv run uvicorn services.portfolio.main:app --host 0.0.0.0 --port 8080 --reload --reload-include '*.html'
+    uv run uvicorn services.portfolio.main:app --host 0.0.0.0 --port 8080 --reload --reload-include '*.html' --log-config shared/logging_config.json
 
 dev-spa:
     cd frontend && npm run dev -- --port 5173

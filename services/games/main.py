@@ -6,7 +6,6 @@ import base64
 import hashlib
 import logging
 import re
-import sys
 from pathlib import Path
 from typing import cast
 
@@ -22,12 +21,19 @@ from starlette.types import ASGIApp
 
 from services.games.routes import router
 from services.games.settings import settings
+from shared.logging_config import configure_logging
 from shared.rate_limiter import limiter
 
 
-# Cloud Run maps stderr -> ERROR for every line; default logging writes to
-# stderr. Send app logs to stdout so WARNING stays WARNING in Logs Explorer.
-logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+# Structured (JSON-lines) logging — see shared/logging_config.py. Applied
+# here for `python -m services.games.main` (the Dockerfile's entrypoint);
+# a local `--reload` dev server would pass `--log-config
+# shared/logging_config.json` the same way services/portfolio/main.py's
+# comment describes, since uvicorn's own default log_config runs after
+# importing the app and would otherwise reset the root logger regardless
+# of what this call configures. No per-service overrides needed here —
+# unlike api-core, this service has no noisy third-party render pipeline.
+configure_logging(log_level=settings.log_level)
 logger = logging.getLogger(__name__)
 
 
@@ -133,4 +139,7 @@ async def health():
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=settings.port)
+    # log_config=None: configure_logging(log_level=settings.log_level) above already applied the
+    # structured config at import time — uvicorn's default log_config
+    # would otherwise reset the root logger after this point.
+    uvicorn.run(app, host="0.0.0.0", port=settings.port, log_config=None)

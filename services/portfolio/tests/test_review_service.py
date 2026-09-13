@@ -18,7 +18,9 @@ from services.portfolio.cv_review.review_service import CVReviewService
 
 def _tool_use_response(tool_name: str, input_data: dict):
     block = SimpleNamespace(type="tool_use", name=tool_name, input=input_data)
-    return SimpleNamespace(content=[block])
+    return SimpleNamespace(
+        content=[block], usage=SimpleNamespace(input_tokens=0, output_tokens=0)
+    )
 
 
 async def test_run_extracts_then_critiques_in_sequence():
