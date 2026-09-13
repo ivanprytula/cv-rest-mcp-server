@@ -56,6 +56,7 @@ from services.portfolio.gaps.tracked_board_service import TrackedBoardService
 from services.portfolio.matching.baseline import BaselineError
 from services.portfolio.settings import settings
 from shared.logging_config import configure_logging
+from shared.tracing import TraceContextMiddleware, bind_trace_id
 
 
 # Structured (JSON-lines) logging — see shared/logging_config.py and the
@@ -101,6 +102,7 @@ app = FastAPI(
     openapi_url=None,
     lifespan=lifespan,
 )
+app.add_middleware(TraceContextMiddleware)
 
 
 @app.get("/health")
@@ -196,21 +198,27 @@ async def dispatch_outbox() -> dict[str, int]:
     published_ids: list[int] = []
     for event in events:
         payload = event.payload
-        try:
-            await publisher.publish(
-                PostingChanged(
-                    posting_id=payload["posting_id"],
-                    tenant_id=payload["tenant_id"],
-                    status=payload["status"],
-                    content_hash=payload["content_hash"],
+        # Adopt the id of the request that recorded this event, so the relay's
+        # own log lines for it join that trace rather than this drain's.
+        with bind_trace_id(payload.get("trace_id")) as trace_id:
+            try:
+                await publisher.publish(
+                    PostingChanged(
+                        posting_id=payload["posting_id"],
+                        tenant_id=payload["tenant_id"],
+                        status=payload["status"],
+                        content_hash=payload["content_hash"],
+                        trace_id=trace_id,
+                    )
                 )
-            )
-        except Exception:
-            # Leave published_at NULL so the next run retries this row. One
-            # bad event must not strand the rest of the batch.
-            logger.warning("Failed to publish outbox event %s", event.id, exc_info=True)
-            continue
-        published_ids.append(event.id)
+            except Exception:
+                # Leave published_at NULL so the next run retries this row. One
+                # bad event must not strand the rest of the batch.
+                logger.warning(
+                    "Failed to publish outbox event %s", event.id, exc_info=True
+                )
+                continue
+            published_ids.append(event.id)
 
     await repo.mark_events_published(published_ids)
     pruned = await repo.prune_published_events()

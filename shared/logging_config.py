@@ -18,13 +18,19 @@ configure instead of overwriting.
 `extra_loggers` lets a service adapt the shared base without copying it:
 api-core's WeasyPrint render pipeline is noisy at INFO, api-games has no
 such pipeline, so only api-core passes an override for it.
+
+`TraceIdFilter` stamps the in-flight request's correlation id onto every
+record, so one query returns every line a request produced across services.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import os
 from typing import Any
+
+from shared.tracing import current_trace_id
 
 
 class JsonFormatter(logging.Formatter):
@@ -54,6 +60,34 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(payload, default=str)
 
 
+class TraceIdFilter(logging.Filter):
+    """Stamps the in-flight request's correlation id onto every record.
+
+    Attached to the *handler* rather than a logger: uvicorn's loggers set
+    `propagate: False`, so a logger-level filter would miss their records.
+
+    On Cloud Run, `logging.googleapis.com/trace` is the magic field that
+    makes Cloud Logging join the line to the trace the platform already
+    recorded, which is what turns `trace_id` into a clickable trace rather
+    than just a string to grep. It needs the project id, and Cloud Run does
+    *not* inject one (it sets `K_SERVICE`/`K_REVISION`/`K_CONFIGURATION`),
+    so `GOOGLE_CLOUD_PROJECT` is set explicitly in terraform.tfvars. Unset
+    locally and in tests, which is exactly the wanted no-op: dev logs carry
+    the bare `trace_id` and no GCP-specific field.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if trace_id := current_trace_id():
+            record.trace_id = trace_id
+            if project := os.getenv("GOOGLE_CLOUD_PROJECT"):
+                setattr(
+                    record,
+                    "logging.googleapis.com/trace",
+                    f"projects/{project}/traces/{trace_id}",
+                )
+        return True
+
+
 def build_log_config(
     extra_loggers: dict[str, dict[str, Any]] | None = None,
     log_level: str = "INFO",
@@ -66,10 +100,14 @@ def build_log_config(
         "formatters": {
             "json": {"()": f"{__name__}.JsonFormatter"},
         },
+        "filters": {
+            "trace_id": {"()": f"{__name__}.TraceIdFilter"},
+        },
         "handlers": {
             "default": {
                 "class": "logging.StreamHandler",
                 "formatter": "json",
+                "filters": ["trace_id"],
                 "stream": "ext://sys.stdout",
             },
         },

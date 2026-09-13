@@ -17,6 +17,7 @@ from services.portfolio.gaps.gap_repository import SqlAlchemyGapRepository
 from services.portfolio.gaps.job_posting_row import JobPostingRow
 from services.portfolio.main import app
 from services.portfolio.tenancy import TenantId
+from shared.tracing import bind_trace_id
 
 
 @pytest.fixture
@@ -69,6 +70,26 @@ class TestAtomicity:
         assert events[0].payload["posting_id"] == posting.id
         assert events[0].payload["status"] == "new"
         assert events[0].payload["content_hash"] == posting.content_hash
+
+    async def test_event_carries_the_originating_trace_id(
+        self, gap_service, session_factory, operator_tenant_id
+    ):
+        """The relay publishes this row in a later request of its own, so the
+        correlation id has to be persisted here or the chain back to the
+        request that caused the change is lost."""
+        with bind_trace_id("origin-trace-abc"):
+            posting, _ = await gap_service.store_posting(
+                tenant_id=operator_tenant_id,
+                posting_text="Terraform required.",
+                source="greenhouse",
+                external_id="trace-1",
+                company_slug="acme",
+                record_event="new",
+            )
+        assert posting is not None
+
+        events = await _pending_events(session_factory)
+        assert events[0].payload["trace_id"] == "origin-trace-abc"
 
     async def test_no_event_recorded_when_caller_raises_none(
         self, gap_service, session_factory, operator_tenant_id

@@ -67,6 +67,13 @@ services = {
       BLOCKED_IPS_FILE     = "config/blocked_geo.txt"
       FAILBAN_THRESHOLD    = "6"
       CV_DATA_GCS_URI      = "gs://cv-rest-mcp-server-cv-data/cv.json"
+      # Correlation ids (ADR-026). Cloud Run injects K_SERVICE/K_REVISION/
+      # K_CONFIGURATION but NOT the project id, and the
+      # logging.googleapis.com/trace field needs it to make a log line
+      # clickable through to the platform's trace. Omitting it is not an
+      # error — logs still carry trace_id, they just stop linking. Set it on
+      # ats-refresh-trigger and analysis-worker too.
+      GOOGLE_CLOUD_PROJECT = "cv-rest-mcp-server"
       # Phase-1c: CORS pinned to the SPA origin. Only the refresh endpoint
       # (`/api/v1/auth/refresh`) sets `Access-Control-Allow-Credentials: true`;
       # every other CORS response is credential-less. Update when the apex
@@ -221,6 +228,16 @@ enable_firestore = false
 # "empty setting means skip" note).
 #   PUBSUB_POSTING_CHANGED_TOPIC = "projects/cv-rest-mcp-server/topics/posting-changed"
 enable_pubsub_events = false
+
+# Correlation ids (Phase 3h, ADR-026). GOOGLE_CLOUD_PROJECT is a plain
+# (non-secret) Cloud Run env var, same wiring as FIRESTORE_PROJECT above —
+# set it on all three Python services (api-core, ats-refresh-trigger,
+# analysis-worker), since each one logs. It is what turns the trace_id field
+# on every log line into a link to the trace Cloud Run already recorded;
+# without it correlation still works for grepping, just not for clicking.
+# There is no toggle variable: it is an env var only, needing no API and no
+# IAM role, because nothing here exports spans of its own.
+#   GOOGLE_CLOUD_PROJECT = "cv-rest-mcp-server"
 
 # --- Bootstrap (one-time setup before terraform apply) ---
 # Use deploy-cloud-run.sh for first-time setup:

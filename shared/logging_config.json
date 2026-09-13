@@ -4,10 +4,14 @@
   "formatters": {
     "json": { "()": "shared.logging_config.JsonFormatter" }
   },
+  "filters": {
+    "trace_id": { "()": "shared.logging_config.TraceIdFilter" }
+  },
   "handlers": {
     "default": {
       "class": "logging.StreamHandler",
       "formatter": "json",
+      "filters": ["trace_id"],
       "stream": "ext://sys.stdout"
     }
   },

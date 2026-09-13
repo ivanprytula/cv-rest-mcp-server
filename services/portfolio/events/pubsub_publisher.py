@@ -32,9 +32,15 @@ class PubSubEventPublisher:
                 "content_hash": event.content_hash,
             }
         ).encode("utf-8")
+        # Message attributes, not the body: the subscriber reads the id
+        # before parsing anything, and a consumer that ignores it is
+        # unaffected. Omitted entirely when empty — Pub/Sub attribute values
+        # must be strings, and an empty one is noise the subscriber would
+        # have to special-case.
+        attributes = {"trace_id": event.trace_id} if event.trace_id else {}
 
         def _publish_and_wait() -> None:
-            future = self._client.publish(self._topic_path, payload)
+            future = self._client.publish(self._topic_path, payload, **attributes)
             future.result()
 
         await asyncio.to_thread(_publish_and_wait)

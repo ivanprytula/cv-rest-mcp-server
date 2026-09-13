@@ -50,6 +50,7 @@ from services.portfolio.matching.gap import GapReport, detect_gaps, parse_vocabu
 from services.portfolio.matching.taxonomy import build_alias_table
 from services.portfolio.settings import settings
 from services.portfolio.tenancy import TenantId
+from shared.tracing import current_trace_id
 
 
 if TYPE_CHECKING:
@@ -255,6 +256,10 @@ class GapService:
                     "tenant_id": int(tenant_id),
                     "status": record_event,
                     "content_hash": digest,
+                    # Captured here, not at publish time: the relay drains
+                    # this row in a later request of its own, by which point
+                    # the originating request's context is long gone.
+                    "trace_id": current_trace_id(),
                 },
             }
             if record_event is not None
