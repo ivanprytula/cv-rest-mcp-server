@@ -4,6 +4,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="", env_file=".env", extra="ignore")
 
+    log_level: str = "INFO"
     port: int = 8080
 
     # This service is a separate Cloud Run workload from api-core (the

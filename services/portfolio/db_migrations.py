@@ -29,6 +29,10 @@ async def upgrade_head(sync_db_url: str) -> None:
     def _run() -> None:
         config = Config(str(_ALEMBIC_INI))
         config.set_main_option("sqlalchemy.url", sync_db_url)
+        # Tells env.py to skip fileConfig(): this is a programmatic run
+        # (app lifespan / test fixture), and fileConfig() would otherwise
+        # clobber the app's own structured-logging setup — see env.py.
+        config.attributes["skip_logging_config"] = True
         command.upgrade(config, "head")
 
     await asyncio.to_thread(_run)

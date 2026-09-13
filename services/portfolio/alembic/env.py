@@ -21,12 +21,18 @@ from services.portfolio.settings import settings
 # access to the values within the .ini file in use.
 config = context.config
 
-# Interpret the config file for Python logging. disable_existing_loggers=False
-# because fileConfig's default (True) silently disables every logger that
-# already exists at call time -- including the app's own module loggers and,
-# in tests, pytest's caplog handler -- breaking log capture/output for the
-# rest of the process for any code that runs after a migration.
-if config.config_file_name is not None:
+# Interpret the config file for Python logging -- but only for a standalone
+# `alembic upgrade head` CLI invocation. fileConfig() unconditionally resets
+# the *root* logger's handlers/level to alembic.ini's [logger_root] (plain
+# text, WARNING) regardless of disable_existing_loggers, which would
+# silently clobber the app's own structured-logging setup
+# (shared.logging_config.configure_logging) every time db_migrations.py's
+# upgrade_head() runs it from the app lifespan or the test suite's fixture.
+# db_migrations.py sets "skip_logging_config" on programmatic runs, since
+# the app already configured logging before that call.
+if config.config_file_name is not None and not config.attributes.get(
+    "skip_logging_config", False
+):
     fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # Autogenerate target: every Base-registered model across the app.

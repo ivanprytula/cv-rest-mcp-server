@@ -18,7 +18,9 @@ from services.portfolio.cv_review.critic_agent import (
 
 def _tool_use_response(input_data: dict):
     block = SimpleNamespace(type="tool_use", name="record_critique", input=input_data)
-    return SimpleNamespace(content=[block])
+    return SimpleNamespace(
+        content=[block], usage=SimpleNamespace(input_tokens=0, output_tokens=0)
+    )
 
 
 def test_tool_schema_forbids_extra_top_level_keys():
@@ -64,7 +66,12 @@ class TestCritique:
     async def test_raises_when_the_model_returns_no_tool_call(self):
         client = SimpleNamespace(
             messages=SimpleNamespace(
-                create=AsyncMock(return_value=SimpleNamespace(content=[]))
+                create=AsyncMock(
+                    return_value=SimpleNamespace(
+                        content=[],
+                        usage=SimpleNamespace(input_tokens=0, output_tokens=0),
+                    )
+                )
             )
         )
         service = CVCriticService(client)

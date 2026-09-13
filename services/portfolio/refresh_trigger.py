@@ -20,7 +20,6 @@ split exists purely for the auth-verification boundary, not for ingress).
 from __future__ import annotations
 
 import logging
-import sys
 from contextlib import asynccontextmanager
 
 import uvicorn
@@ -52,9 +51,13 @@ from services.portfolio.gaps.tracked_board_row import API_BACKED_KINDS
 from services.portfolio.gaps.tracked_board_service import TrackedBoardService
 from services.portfolio.matching.baseline import BaselineError
 from services.portfolio.settings import settings
+from shared.logging_config import configure_logging
 
 
-logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+# Structured (JSON-lines) logging — see shared/logging_config.py and the
+# equivalent comment in services.portfolio.main. No render pipeline runs
+# in this process, so no per-service overrides are needed here.
+configure_logging(log_level=settings.log_level)
 logger = logging.getLogger(__name__)
 
 
@@ -156,4 +159,7 @@ async def trigger_refresh(group: str | None = None) -> dict[str, object]:
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=settings.port)
+    # log_config=None: configure_logging() above already applied the
+    # structured config at import time — uvicorn's default log_config
+    # would otherwise reset the root logger after this point.
+    uvicorn.run(app, host="0.0.0.0", port=settings.port, log_config=None)

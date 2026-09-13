@@ -2,7 +2,6 @@ import base64
 import hashlib
 import logging
 import re
-import sys
 from contextlib import asynccontextmanager
 from typing import Any, cast
 
@@ -88,16 +87,25 @@ from services.portfolio.revisions.revision_service import RevisionService
 from services.portfolio.routes import router
 from services.portfolio.settings import settings
 from services.portfolio.tenancy import verify_rls_enforced
+from shared.logging_config import configure_logging
 
 
-# Cloud Run maps stderr -> ERROR for every line; default logging writes to
-# stderr. Send app logs to stdout so WARNING stays WARNING in Logs Explorer.
-logging.basicConfig(stream=sys.stdout, level=logging.INFO)
-
-# Third-party render pipeline logs every font-subsetting detail at INFO;
-# keep root at INFO for app messages but silence these.
-for _noisy in ("weasyprint", "fontTools"):
-    logging.getLogger(_noisy).setLevel(logging.WARNING)
+# Structured (JSON-lines) logging — see shared/logging_config.py. Applied
+# here for `python -m services.portfolio.main` (the Dockerfile's
+# entrypoint); uvicorn's CLI path (justfile's dev-local) instead passes
+# `--log-config shared/logging_config.json` (the same base, minus
+# per-service overrides — uvicorn's `--log-config` can't run Python), since
+# uvicorn's own default log_config runs after importing the app and would
+# otherwise reset the root logger regardless of what this call configures.
+# WeasyPrint logs every font-subsetting detail at INFO — muted here, not in
+# the shared base, since api-games has no render pipeline to mute.
+configure_logging(
+    extra_loggers={
+        "weasyprint": {"level": "WARNING"},
+        "fontTools": {"level": "WARNING"},
+    },
+    log_level=settings.log_level,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -508,4 +516,7 @@ app.openapi = cast(Any, _openapi_with_auth_contract)
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=settings.port)
+    # log_config=None: configure_logging() above already applied the
+    # structured config at import time — uvicorn's default log_config
+    # would otherwise reset the root logger after this point.
+    uvicorn.run(app, host="0.0.0.0", port=settings.port, log_config=None)
