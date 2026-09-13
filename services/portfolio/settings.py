@@ -30,7 +30,6 @@ class Settings(BaseSettings):
 
     # CV content delivery (GCS)
     cv_data_gcs_uri: str = ""
-    cv_refresh_seconds: int = 30
 
     # Rate limiting and access control
     trust_proxy: bool = False

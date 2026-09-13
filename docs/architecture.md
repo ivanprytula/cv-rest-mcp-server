@@ -30,11 +30,10 @@ a bounded thread pool.
 
 ## Data Flow
 
-1. `CvSource` (`app/cv_source.py`) resolves the CV document: a private GCS
-   object (`CV_DATA_GCS_URI`, re-checked every `CV_REFRESH_SECONDS` via the
-   object generation) or a local file. If neither is available yet, it serves
-   the baked-in `data/cv.example.json` placeholder and keeps polling —
-   uploading a real cv.json goes live without a redeploy.
+1. The CV document is resolved from a private GCS object (`CV_DATA_GCS_URI`)
+   or a local file. If neither is available yet, it serves the baked-in
+   `data/cv.example.json` placeholder — uploading a real cv.json goes live
+   without a redeploy.
 2. Request hits FastAPI router.
 3. Route injects `PdfService` via `Depends(get_pdf_service)`; `pdf_service.cv_data`
    reads through `CvSource`.
