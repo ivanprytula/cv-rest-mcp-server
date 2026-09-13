@@ -984,3 +984,71 @@ latency floor, which is the price of routing every event through a durable
 row. Separately, `SqlAlchemyTrackedBoardRepository.update` — the only ORM
 load-mutate-flush in the codebase — gained `.with_for_update()` inside an
 explicit transaction, closing a genuine lost update on partial `PATCH`es.
+
+## ADR-026: Correlation ids from Cloud Run's trace header, not the OpenTelemetry SDK (Phase 3h)
+
+**Context.** Five Cloud Run services run in production, and none of their log
+lines carried a request identifier. Two questions had no answer: "show me every
+line this one request produced", and "what happened downstream after this
+posting changed?" The second is the harder one — a posting change is recorded in
+one request, published by the outbox relay minutes later in a second, and
+analyzed by `analysis-worker` in a third, so nothing tied the three together.
+
+The obvious reach is OpenTelemetry: SDK, a Cloud Trace exporter, and the FastAPI
+/ SQLAlchemy / httpx auto-instrumentors. But Cloud Run already stamps
+`X-Cloud-Trace-Context` on every inbound request and already records a trace
+under that id, and nothing in the codebase read it. The gap was never span
+*collection* — the platform was collecting spans the whole time. The gap was
+that logs and spans shared no key, and that nothing survived the Pub/Sub hop.
+
+**Decision — reuse the platform's trace id as the correlation id.** A
+`ContextVar` in the tracing module holds the id; a pure-ASGI middleware binds it
+from the header (generating one when absent, so local dev and direct container
+hits still correlate); a `logging.Filter` on the stdout handler stamps it onto
+every record. `JsonFormatter` already promotes non-reserved record attributes to
+top-level JSON fields, so the filter needed no formatter change. On Cloud Run the
+filter also emits `logging.googleapis.com/trace`, the field that makes Cloud
+Logging join the line to the platform's own trace — that needs the project id,
+and Cloud Run does *not* inject one, so `GOOGLE_CLOUD_PROJECT` is set explicitly
+in `terraform.tfvars` for the three Python services.
+
+The filter is attached to the handler rather than a logger because uvicorn's
+loggers set `propagate: False` and a logger-level filter would miss them. The
+middleware is pure ASGI rather than `BaseHTTPMiddleware` because the latter runs
+the downstream app in a separate task, where a `ContextVar` set by the parent is
+not reliably visible.
+
+**Decision — persist the id in the outbox row, not at publish time.** The
+transaction that records an event and the relay run that publishes it are
+different requests. Capturing context at publish time would attribute the work to
+the relay's drain rather than the request that caused the change, which is
+precisely the link worth having. So `store_posting` writes `trace_id` into the
+event's JSONB `payload`; `_outbox_row` already spreads that dict, so this needed
+no column and no migration. The relay re-binds the id around each publish and
+passes it as a Pub/Sub *message attribute* — attributes rather than the body, so
+a subscriber reads it before parsing anything and one that ignores it is
+unaffected. `analysis-worker` logs it as `origin_trace_id` **alongside** its own
+inbound id: Cloud Run gives the push request its own trace, and collapsing the
+two would either lose this service's local trace or break the chain back.
+
+**Decision — no OpenTelemetry SDK, no exporter, no sampler.** Zero new runtime
+dependencies. Scope is the three Python services that share the root
+`pyproject.toml`; `api-games` (self-contained pyproject, no lockfile, templates
+only) and `spa-origin` (a Node static file server) keep the platform's native
+request traces and were not touched. No `cloudtrace.googleapis.com` and no
+`roles/cloudtrace.agent` either — both are needed only when application code
+exports spans itself, which this does not.
+
+**Consequences.** One query (`jsonPayload.trace_id="…"`) now returns every line a
+request produced, across services and across the queue, and on Cloud Run those
+lines are clickable through to the platform's trace. Rows written before this
+shipped carry no `trace_id`; `.get()` yields empty and the relay falls back to a
+generated id, so no backfill was needed.
+
+What this deliberately does *not* buy is latency attribution *within* a request —
+there are no spans of our own, so "which query was slow" remains unanswerable.
+That is the trigger to revisit: when the question changes from "which logs belong
+together" to "where did the time go", add the SDK and exporter behind the same
+tracing module, and have the filter prefer `trace.get_current_span()` with the
+header as fallback. Both phases then share one code path, and nothing here is
+discarded.

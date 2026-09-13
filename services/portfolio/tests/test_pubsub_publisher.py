@@ -102,6 +102,7 @@ def _event(**overrides) -> PostingChanged:
         tenant_id=TenantId(overrides.get("tenant_id", 1)),
         status=overrides.get("status", "new"),
         content_hash=overrides.get("content_hash", "abc123"),
+        trace_id=overrides.get("trace_id", ""),
     )
 
 
@@ -128,6 +129,45 @@ async def test_published_message_is_readable_via_subscription(
     body = json.loads(response.received_messages[0].message.data)
     assert body["posting_id"] == 42
     assert body["status"] == "changed"
+
+
+async def test_trace_id_travels_as_a_message_attribute(pubsub_emulator, publisher):
+    """The subscriber reads the correlation id before parsing the body, so it
+    rides in an attribute rather than the payload."""
+    from google.cloud.pubsub_v1 import SubscriberClient
+
+    subscriber = SubscriberClient()
+    subscription_path = subscriber.subscription_path(
+        _PROJECT, f"{_SUBSCRIPTION_ID}-{uuid.uuid4().hex[:8]}"
+    )
+    subscriber.create_subscription(name=subscription_path, topic=publisher._topic_path)
+
+    await publisher.publish(_event(trace_id="origin-trace-xyz"))
+
+    response = subscriber.pull(
+        subscription=subscription_path, max_messages=1, timeout=10
+    )
+    message = response.received_messages[0].message
+    assert message.attributes["trace_id"] == "origin-trace-xyz"
+
+
+async def test_empty_trace_id_publishes_no_attribute(pubsub_emulator, publisher):
+    """An empty id is omitted entirely — Pub/Sub attribute values must be
+    strings, and a blank one is noise the subscriber would special-case."""
+    from google.cloud.pubsub_v1 import SubscriberClient
+
+    subscriber = SubscriberClient()
+    subscription_path = subscriber.subscription_path(
+        _PROJECT, f"{_SUBSCRIPTION_ID}-{uuid.uuid4().hex[:8]}"
+    )
+    subscriber.create_subscription(name=subscription_path, topic=publisher._topic_path)
+
+    await publisher.publish(_event())
+
+    response = subscriber.pull(
+        subscription=subscription_path, max_messages=1, timeout=10
+    )
+    assert "trace_id" not in response.received_messages[0].message.attributes
 
 
 def test_emulator_env_is_set(pubsub_emulator):

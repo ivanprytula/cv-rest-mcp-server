@@ -519,6 +519,13 @@ gcloud run services describe api-core --region=europe-west1 --project=<project> 
 
 # 6. Application logs
 gcloud run services logs read api-core --region=europe-west1 --project=<project>
+
+# 7. Every log line from one request, across all services and the queue.
+# Correlation ids come from Cloud Run's own X-Cloud-Trace-Context (ADR-026);
+# analysis-worker also logs origin_trace_id, the id of the request that
+# caused the posting change it is reacting to.
+gcloud logging read 'jsonPayload.trace_id="<TRACE_ID>"' \
+  --project=<project> --format='table(timestamp,resource.labels.service_name,jsonPayload.message)'
 ```
 
 Common symptoms:

@@ -44,6 +44,7 @@ from services.portfolio.matching.baseline import BaselineError
 from services.portfolio.settings import settings
 from services.portfolio.tenancy import TenantId
 from shared.logging_config import configure_logging
+from shared.tracing import TraceContextMiddleware
 
 
 # Structured (JSON-lines) logging — see shared/logging_config.py and the
@@ -78,6 +79,7 @@ app = FastAPI(
     openapi_url=None,
     lifespan=lifespan,
 )
+app.add_middleware(TraceContextMiddleware)
 
 
 @app.get("/health")
@@ -86,19 +88,26 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-def _decode_push_envelope(body: dict[str, Any]) -> dict[str, Any]:
-    """Unwrap a Pub/Sub push envelope's base64 message body to its JSON payload.
+def _decode_push_envelope(
+    body: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, str]]:
+    """Unwrap a Pub/Sub push envelope to its JSON payload and its attributes.
 
     Raises `HTTPException(400)` on anything malformed — a push subscription
     retries a non-2xx response, but a malformed envelope will never become
     well-formed on redelivery, so this is really "give up immediately and
     let the DLQ take it" dressed as a 400.
+
+    Attributes come back alongside the payload because the publisher puts the
+    originating request's correlation id there; missing attributes are a
+    normal envelope, not an error.
     """
     try:
-        data = body["message"]["data"]
-        return json.loads(base64.b64decode(data))
+        message = body["message"]
+        payload = json.loads(base64.b64decode(message["data"]))
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=400, detail="Malformed push envelope") from exc
+    return payload, message.get("attributes") or {}
 
 
 @app.post("/pubsub/posting-changed")
@@ -109,9 +118,20 @@ async def handle_posting_changed(request: Request) -> dict[str, str]:
     (the push subscription's OIDC token) before this handler runs, same as
     `refresh_trigger.py`'s `/trigger`.
     """
-    payload = _decode_push_envelope(await request.json())
+    payload, attributes = _decode_push_envelope(await request.json())
     posting_id = payload["posting_id"]
     tenant_id = TenantId(payload["tenant_id"])
+
+    # Two ids, deliberately both: Cloud Run stamped this push request with its
+    # own trace, while the attribute carries the request that changed the
+    # posting in the first place. Logging only one would either lose this
+    # service's local trace or break the chain back to the originator.
+    origin_trace_id = attributes.get("trace_id", "")
+    if origin_trace_id:
+        logger.info(
+            "posting_changed received",
+            extra={"origin_trace_id": origin_trace_id},
+        )
 
     gap_service: GapService = app.state.gap_service
     documents = app.state.document_service

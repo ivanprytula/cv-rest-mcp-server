@@ -26,6 +26,11 @@ class PostingChanged:
     tenant_id: TenantId
     status: str
     content_hash: str
+    # The correlation id of the request that caused the change, carried so
+    # the subscriber's work joins that request's trace instead of starting a
+    # disconnected one. Defaults to empty: events recorded before this field
+    # existed, and callers with no request in scope, stay valid.
+    trace_id: str = ""
 
 
 class EventPublisher(Protocol):

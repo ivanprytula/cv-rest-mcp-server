@@ -8,6 +8,7 @@ under test here is envelope decoding and orchestration, not persistence.
 
 import base64
 import json
+import logging
 
 import httpx
 import pytest
@@ -17,9 +18,12 @@ from services.portfolio.matching.baseline import BaselineError
 from services.portfolio.tenancy import TenantId
 
 
-def _push_envelope(payload: dict) -> dict:
+def _push_envelope(payload: dict, attributes: dict | None = None) -> dict:
     data = base64.b64encode(json.dumps(payload).encode()).decode()
-    return {"message": {"data": data, "messageId": "1"}, "subscription": "test-sub"}
+    message: dict = {"data": data, "messageId": "1"}
+    if attributes is not None:
+        message["attributes"] = attributes
+    return {"message": message, "subscription": "test-sub"}
 
 
 class _FakePosting:
@@ -157,6 +161,53 @@ async def test_matching_content_hash_is_processed(client):
             }
         ),
     )
+    assert response.status_code == 200
+    assert response.json() == {"status": "processed"}
+    assert len(fake_gap_service.analyze_calls) == 1
+
+
+async def test_originating_trace_id_is_logged(client, caplog):
+    """The publisher puts the originating request's id in a message
+    attribute; losing it would break the chain back to what caused the
+    change, since Cloud Run gives this push its own separate trace."""
+    async_client, _ = client
+    caplog.set_level(logging.INFO)
+
+    response = await async_client.post(
+        "/pubsub/posting-changed",
+        json=_push_envelope(
+            {
+                "posting_id": 42,
+                "tenant_id": 1,
+                "status": "new",
+                "content_hash": "abc",
+            },
+            attributes={"trace_id": "origin-trace-123"},
+        ),
+    )
+
+    assert response.status_code == 200
+    record = next(r for r in caplog.records if r.message == "posting_changed received")
+    assert record.origin_trace_id == "origin-trace-123"
+
+
+async def test_envelope_without_attributes_still_processes(client):
+    """Attributes are optional: a message published before this field
+    existed, or by anything that omits it, must not 400."""
+    async_client, fake_gap_service = client
+
+    response = await async_client.post(
+        "/pubsub/posting-changed",
+        json=_push_envelope(
+            {
+                "posting_id": 42,
+                "tenant_id": 1,
+                "status": "new",
+                "content_hash": "abc",
+            }
+        ),
+    )
+
     assert response.status_code == 200
     assert response.json() == {"status": "processed"}
     assert len(fake_gap_service.analyze_calls) == 1

@@ -91,6 +91,7 @@ from services.portfolio.routes import router
 from services.portfolio.settings import settings
 from services.portfolio.tenancy import verify_rls_enforced
 from shared.logging_config import configure_logging
+from shared.tracing import TraceContextMiddleware
 
 
 # Structured (JSON-lines) logging — see shared/logging_config.py. Applied
@@ -242,6 +243,11 @@ app.add_middleware(GuardMiddleware)
 app.add_middleware(JWTAuthMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(TrustedProxySchemeMiddleware)
+# Outermost of all (added last): the correlation id must be bound before any
+# other middleware logs, so a guard rejection or a 401 is as attributable as
+# a successful request. Safe above TrustedProxyScheme — it only reads a
+# header and never touches scope["scheme"].
+app.add_middleware(TraceContextMiddleware)
 
 mcp = FastMCP("cv-rest-mcp-server")
 
