@@ -60,6 +60,9 @@ from services.portfolio.events.pubsub_publisher import (
 from services.portfolio.failban import register_violation_from_request
 from services.portfolio.gaps.gap_repository import SqlAlchemyGapRepository
 from services.portfolio.gaps.gap_service import GapService
+from services.portfolio.gaps.idempotency_repository import (
+    SqlAlchemyIdempotencyRepository,
+)
 from services.portfolio.gaps.job_posting_document_store import (
     build_job_posting_document_store_from_settings,
 )
@@ -372,6 +375,11 @@ async def lifespan(app):
     posting_docs = build_job_posting_document_store_from_settings()
     event_publisher = build_event_publisher_from_settings()
     app.state.gap_service = GapService(gap_repo, posting_docs, event_publisher)
+
+    # Retry-safety for POST /api/v1/postings. Only that route needs it today,
+    # so it stays a repository on app.state rather than a shared dependency
+    # across every POST — the others are admin-only or already upsert-idempotent.
+    app.state.idempotency_repository = SqlAlchemyIdempotencyRepository(session_factory)
 
     # Tracked-board registry: what the ATS refresh trigger polls. Independent
     # of AtsBoardRow (gap_repo's fetch-cache) — this is the operator-editable

@@ -27,7 +27,6 @@ from services.portfolio.documents.document_service import document_sources
 from services.portfolio.events.publisher import (
     EventPublisher,
     LoggingEventPublisher,
-    PostingChanged,
 )
 from services.portfolio.gaps.ats import TIMEOUT_SECONDS, USER_AGENT, fetcher_for
 from services.portfolio.gaps.gap_repository import GapRepository
@@ -105,10 +104,39 @@ class GapService:
         repo: GapRepository,
         posting_docs: JobPostingDocumentStore,
         publisher: EventPublisher | None = None,
+        *,
+        analyze_inline: bool | None = None,
     ) -> None:
         self._repo = repo
         self._posting_docs = posting_docs
         self._publisher = publisher or LoggingEventPublisher()
+        # Whether sync_board analyzes a changed posting itself instead of
+        # leaving it to the out-of-band worker. Explicit rather than inferred
+        # from the publisher's type: those are two different questions, and
+        # conflating them meant a deployment with a queue configured but a
+        # relay not yet running would silently analyze nothing. Defaults to
+        # "on when no real queue is configured", which keeps local dev working
+        # with no Pub/Sub at all.
+        self._analyze_inline = (
+            isinstance(self._publisher, LoggingEventPublisher)
+            if analyze_inline is None
+            else analyze_inline
+        )
+
+    @property
+    def event_repository(self) -> GapRepository:
+        """The repository, for the outbox relay's claim/stamp/prune calls.
+
+        The relay is not gap *analysis* — it moves rows to a queue — so it
+        reaches the store directly rather than growing three pass-through
+        methods on this service that would add nothing but indirection.
+        """
+        return self._repo
+
+    @property
+    def publisher(self) -> EventPublisher:
+        """The configured publisher, for the outbox relay."""
+        return self._publisher
 
     async def store_posting(
         self,
@@ -122,8 +150,15 @@ class GapService:
         title: str = "",
         url: str = "",
         raw_payload: dict[str, Any] | None = None,
+        record_event: str | None = None,
     ) -> tuple[JobPosting | None, bool]:
         """Persist a posting, returning it and whether it already existed.
+
+        `record_event` (a `PostingChanged` status — "new"/"changed") writes an
+        `event_outbox` row in the *same transaction* as the posting, instead
+        of publishing after the commit. A failed publish can therefore no
+        longer lose an event: the relay retries from the durable row. `None`
+        records nothing, for callers with no event to raise.
 
         Two distinct identities, two distinct dedup strategies:
 
@@ -211,8 +246,24 @@ class GapService:
             first_seen_at=now,
             last_seen_at=now,
         )
+        # The posting id is unknown until the row is written, so the repository
+        # fills it into the payload inside the transaction.
+        outbox_event = (
+            {
+                "event_type": "posting_changed",
+                "payload": {
+                    "tenant_id": int(tenant_id),
+                    "status": record_event,
+                    "content_hash": digest,
+                },
+            }
+            if record_event is not None
+            else None
+        )
         try:
-            stored = await self._repo.upsert_posting(posting=row, tenant_id=tenant_id)
+            stored = await self._repo.upsert_posting(
+                posting=row, tenant_id=tenant_id, outbox_event=outbox_event
+            )
         except Exception:
             logger.warning("Failed to persist job posting", exc_info=True)
             return None, False
@@ -242,6 +293,10 @@ class GapService:
 
         Returns `(posting, status)` where status is one of "new", "changed",
         "unchanged", or "error" (posting is `None` only on "error").
+
+        A "new"/"changed" outcome records a `PostingChanged` event in the
+        posting's own transaction (see `store_posting`'s `record_event`);
+        "unchanged" raises no event, since nothing to re-analyze happened.
         """
         digest = content_hash(posting_text)
         try:
@@ -271,6 +326,7 @@ class GapService:
             title=title,
             url=url,
             raw_payload=raw_payload,
+            record_event=status if status in ("new", "changed") else None,
         )
         if posting is None:
             return None, "error"
@@ -397,31 +453,18 @@ class GapService:
                 continue
             counts[status] += 1
             if status in ("new", "changed"):
-                try:
-                    await self._publisher.publish(
-                        PostingChanged(
-                            posting_id=posting.id,
-                            tenant_id=tenant_id,
-                            status=status,
-                            content_hash=posting.content_hash,
-                        )
-                    )
-                except Exception:
-                    logger.warning(
-                        "Failed to publish posting_changed for %s",
-                        posting.id,
-                        exc_info=True,
-                    )
+                # No publish here: `sync_ats_posting` already recorded the
+                # event in the posting's own transaction, and the relay
+                # (`refresh_trigger.dispatch_outbox`) publishes it. That is
+                # the fix for the dual write — a failed publish used to lose
+                # the event after the posting had already committed.
+                #
                 # A real Pub/Sub subscriber (analysis_worker.py) does this
-                # analysis out-of-band once PUBSUB_POSTING_CHANGED_TOPIC is
-                # configured. Until then — or if it never is, for a smaller
-                # deployment that skips the queue entirely — the default
-                # LoggingEventPublisher means no subscriber will ever run
-                # this, so this inline fallback keeps analysis working
-                # exactly as it did before Phase 3f.
-                if isinstance(self._publisher, LoggingEventPublisher) and (
-                    analysis_inputs is not None
-                ):
+                # analysis out-of-band once the queue is configured. Without
+                # one — a smaller deployment that skips the queue entirely —
+                # `analyze_inline` keeps analysis working exactly as it did
+                # before Phase 3f.
+                if self._analyze_inline and analysis_inputs is not None:
                     bank, deferred, vocabulary, aliases = analysis_inputs
                     await self.analyze_posting(
                         posting.id,

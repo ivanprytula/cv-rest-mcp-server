@@ -544,6 +544,7 @@ async def user_service(auth_settings, _fresh_postgres_url, monkeypatch):
     from services.portfolio.dependencies import (
         get_document_service,
         get_gap_service,
+        get_idempotency_repository,
         get_refresh_token_service,
         get_revision_service,
         get_tracked_board_service,
@@ -554,6 +555,9 @@ async def user_service(auth_settings, _fresh_postgres_url, monkeypatch):
     from services.portfolio.documents.document_service import DocumentService
     from services.portfolio.gaps.gap_repository import SqlAlchemyGapRepository
     from services.portfolio.gaps.gap_service import GapService
+    from services.portfolio.gaps.idempotency_repository import (
+        SqlAlchemyIdempotencyRepository,
+    )
     from services.portfolio.gaps.job_posting_document_store import (
         InMemoryJobPostingDocumentStore,
     )
@@ -594,6 +598,7 @@ async def user_service(auth_settings, _fresh_postgres_url, monkeypatch):
         SqlAlchemyGapRepository(session_factory), InMemoryJobPostingDocumentStore()
     )
     document_service = DocumentService(SqlAlchemyDocumentRepository(session_factory))
+    idempotency_repository = SqlAlchemyIdempotencyRepository(session_factory)
     tracked_board_service = TrackedBoardService(
         SqlAlchemyTrackedBoardRepository(session_factory)
     )
@@ -610,6 +615,9 @@ async def user_service(auth_settings, _fresh_postgres_url, monkeypatch):
     app.dependency_overrides[get_revision_service] = lambda: revision_service
     app.dependency_overrides[get_refresh_token_service] = lambda: refresh_token_service
     app.dependency_overrides[get_gap_service] = lambda: gap_service
+    app.dependency_overrides[get_idempotency_repository] = lambda: (
+        idempotency_repository
+    )
     app.dependency_overrides[get_document_service] = lambda: document_service
     app.dependency_overrides[get_tracked_board_service] = lambda: tracked_board_service
     app.dependency_overrides[get_operator_tenant_id] = lambda: operator_tenant_id
@@ -619,6 +627,7 @@ async def user_service(auth_settings, _fresh_postgres_url, monkeypatch):
     app.state.revision_service = revision_service
     app.state.refresh_token_service = refresh_token_service
     app.state.gap_service = gap_service
+    app.state.idempotency_repository = idempotency_repository
     app.state.tracked_board_service = tracked_board_service
     app.state.operator_tenant_id = operator_tenant_id
     yield service
@@ -626,6 +635,7 @@ async def user_service(auth_settings, _fresh_postgres_url, monkeypatch):
     app.dependency_overrides.pop(get_revision_service, None)
     app.dependency_overrides.pop(get_refresh_token_service, None)
     app.dependency_overrides.pop(get_gap_service, None)
+    app.dependency_overrides.pop(get_idempotency_repository, None)
     app.dependency_overrides.pop(get_document_service, None)
     app.dependency_overrides.pop(get_tracked_board_service, None)
     app.dependency_overrides.pop(get_operator_tenant_id, None)
@@ -635,6 +645,7 @@ async def user_service(auth_settings, _fresh_postgres_url, monkeypatch):
     app.state.revision_service = None
     app.state.refresh_token_service = None
     app.state.gap_service = None
+    app.state.idempotency_repository = None
     app.state.tracked_board_service = None
     app.state.operator_tenant_id = None
     await engine.dispose()

@@ -39,6 +39,10 @@ from services.portfolio.documents.document_service import (
     DocumentService,
     document_sources,
 )
+from services.portfolio.events.publisher import PostingChanged
+from services.portfolio.events.pubsub_publisher import (
+    build_event_publisher_from_settings,
+)
 from services.portfolio.gaps.gap_repository import SqlAlchemyGapRepository
 from services.portfolio.gaps.gap_service import GapService, load_analysis_inputs
 from services.portfolio.gaps.job_posting_document_store import (
@@ -68,9 +72,14 @@ async def lifespan(app: FastAPI):
     # process risks two processes racing the same DDL for no benefit.
     engine = build_engine(settings.database_url)
     session_factory = build_session_factory(engine)
+    # The real publisher, not the default logging fake: this process runs the
+    # outbox relay, so it is the one that actually puts events on the queue.
+    # Without this the topic, subscription, DLQ and worker are all provisioned
+    # and unreachable — nothing would ever be published.
     app.state.gap_service = GapService(
         SqlAlchemyGapRepository(session_factory),
         build_job_posting_document_store_from_settings(),
+        build_event_publisher_from_settings(),
     )
     app.state.document_service = DocumentService(
         SqlAlchemyDocumentRepository(session_factory)
@@ -156,6 +165,60 @@ async def trigger_refresh(group: str | None = None) -> dict[str, object]:
         boards, tenant_id=tenant_id, analysis_inputs=analysis_inputs, live_cv=live_cv
     )
     return {"boards": results}
+
+
+@app.post("/dispatch-outbox")
+async def dispatch_outbox() -> dict[str, int]:
+    """Publish pending `event_outbox` rows to Pub/Sub, then prune old ones.
+
+    Lives on this service rather than its own: it reuses the same Cloud
+    Scheduler + OIDC + private-ingress setup `/trigger` already has, so it
+    needs no new Cloud Run service, service account or IAM binding. No auth
+    check here for the same reason as `/trigger` — Cloud Run's platform IAM
+    verified the caller before this handler ran.
+
+    Delivery is **at-least-once** by design. A crash between publishing a
+    message and stamping `published_at` re-publishes it on the next pass;
+    that is correct rather than a gap to close, because the consumer's writes
+    are idempotent upserts and it additionally drops stale events by
+    `content_hash` (`analysis_worker.handle_posting_changed`). Two-phase
+    commit would buy exactly-once at a cost nothing here needs.
+
+    Overlapping runs are safe without a global lock: the claim uses
+    `FOR UPDATE SKIP LOCKED`, so a second run takes the next batch instead of
+    blocking on or duplicating this one's.
+    """
+    gap_service: GapService = app.state.gap_service
+    repo = gap_service.event_repository
+    publisher = gap_service.publisher
+
+    events = await repo.claim_pending_events()
+    published_ids: list[int] = []
+    for event in events:
+        payload = event.payload
+        try:
+            await publisher.publish(
+                PostingChanged(
+                    posting_id=payload["posting_id"],
+                    tenant_id=payload["tenant_id"],
+                    status=payload["status"],
+                    content_hash=payload["content_hash"],
+                )
+            )
+        except Exception:
+            # Leave published_at NULL so the next run retries this row. One
+            # bad event must not strand the rest of the batch.
+            logger.warning("Failed to publish outbox event %s", event.id, exc_info=True)
+            continue
+        published_ids.append(event.id)
+
+    await repo.mark_events_published(published_ids)
+    pruned = await repo.prune_published_events()
+    return {
+        "claimed": len(events),
+        "published": len(published_ids),
+        "pruned": pruned,
+    }
 
 
 if __name__ == "__main__":

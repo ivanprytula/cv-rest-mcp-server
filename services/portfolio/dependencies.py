@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from services.portfolio.cv_review.review_service import CVReviewService
     from services.portfolio.documents.document_service import DocumentService
     from services.portfolio.gaps.gap_service import GapService
+    from services.portfolio.gaps.idempotency_repository import IdempotencyRepository
     from services.portfolio.gaps.tracked_board_service import TrackedBoardService
     from services.portfolio.revisions.revision_service import RevisionService
 
@@ -132,6 +133,22 @@ async def get_gap_service(request: Request) -> GapService:
             detail="Gap service not initialized",
         )
     return service
+
+
+async def get_idempotency_repository(request: Request) -> IdempotencyRepository:
+    """The idempotency-key store, for routes honoring `Idempotency-Key`.
+
+    A repository rather than a service: there is no domain logic between the
+    route and the table — reserve, read, store — so a service wrapper would
+    be a pass-through.
+    """
+    repo = getattr(request.app.state, "idempotency_repository", None)
+    if repo is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Idempotency store not initialized",
+        )
+    return repo
 
 
 async def get_tracked_board_service(request: Request) -> TrackedBoardService:

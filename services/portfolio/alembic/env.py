@@ -9,6 +9,7 @@ from sqlalchemy import engine_from_config, pool
 import services.portfolio.auth.refresh_token_row  # noqa: F401,E402
 import services.portfolio.auth.user_row  # noqa: F401,E402
 import services.portfolio.documents.document_row  # noqa: F401,E402
+import services.portfolio.events.outbox_row  # noqa: F401,E402
 import services.portfolio.gaps.job_posting_row  # noqa: F401,E402
 import services.portfolio.gaps.phrase_cluster_row  # noqa: F401,E402
 import services.portfolio.gaps.tracked_board_row  # noqa: F401,E402

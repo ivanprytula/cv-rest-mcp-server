@@ -69,16 +69,16 @@ class TestSyncBoard:
         assert len(postings) == 1
         assert postings[0].company == ""
 
-    async def test_new_posting_publishes_a_posting_changed_event(
-        self, gap_service, monkeypatch, operator_tenant_id
+    async def test_new_posting_records_a_posting_changed_event(
+        self, gap_service, session_factory, operator_tenant_id
     ):
-        published = []
+        """sync_board no longer publishes directly (Phase 3g): the event is
+        written to `event_outbox` in the posting's own transaction, and the
+        relay publishes it. A commit-then-failed-publish can no longer lose
+        it."""
+        from sqlalchemy import select
 
-        class _SpyPublisher:
-            async def publish(self, event):
-                published.append(event)
-
-        monkeypatch.setattr(gap_service, "_publisher", _SpyPublisher())
+        from services.portfolio.events.outbox_row import EventOutboxRow
 
         client = httpx.AsyncClient(
             transport=httpx.MockTransport(
@@ -103,9 +103,20 @@ class TestSyncBoard:
             live_cv=None,
         )
 
-        assert len(published) == 1
-        assert published[0].status == "new"
-        assert published[0].tenant_id == operator_tenant_id
+        async with session_factory() as session:
+            events = list(
+                (
+                    await session.execute(
+                        select(EventOutboxRow).where(
+                            EventOutboxRow.published_at.is_(None)
+                        )
+                    )
+                ).scalars()
+            )
+        assert len(events) == 1
+        assert events[0].event_type == "posting_changed"
+        assert events[0].payload["status"] == "new"
+        assert events[0].tenant_id == operator_tenant_id
 
     async def test_new_posting_is_analyzed_inline_when_publisher_unconfigured(
         self, gap_service, operator_tenant_id
@@ -144,18 +155,14 @@ class TestSyncBoard:
         )
         assert analysis is not None
 
-    async def test_new_posting_skips_inline_analysis_when_publisher_configured(
+    async def test_new_posting_skips_inline_analysis_when_disabled(
         self, gap_service, monkeypatch, operator_tenant_id
     ):
-        """Once a real publisher is wired in, analysis moves out-of-band to
-        analysis_worker.py — sync_board must not also do it inline, or every
-        posting would be analyzed twice."""
-
-        class _SpyPublisher:
-            async def publish(self, event):
-                pass
-
-        monkeypatch.setattr(gap_service, "_publisher", _SpyPublisher())
+        """With the queue carrying analysis out-of-band to analysis_worker.py,
+        sync_board must not also do it inline, or every posting is analyzed
+        twice. Driven by the explicit `analyze_inline` flag rather than the
+        publisher's type — those are two different questions (Phase 3g)."""
+        monkeypatch.setattr(gap_service, "_analyze_inline", False)
 
         client = httpx.AsyncClient(
             transport=httpx.MockTransport(
