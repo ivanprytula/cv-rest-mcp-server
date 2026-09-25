@@ -230,7 +230,16 @@ async def test_csp_script_hashes_match_templates(client):
             digest = hashlib.sha256(script.encode()).digest()
             expected_hashes.add(f"'sha256-{base64.b64encode(digest).decode()}'")
 
-    assert len(expected_hashes) >= 4
+    # Guard against a vacuous pass: the loop above must actually have found
+    # templates carrying inline scripts. A fixed count would rot every time a
+    # template moves between services.
+    templates_with_scripts = [
+        path.name
+        for path in sorted(TEMPLATE_DIR.rglob("*.html"))
+        if re.search(r"<script>", path.read_text())
+    ]
+    assert templates_with_scripts, "no inline scripts found in the template dir"
+
     for h in expected_hashes:
         assert h in script_directive
 
