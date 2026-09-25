@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import json
 import logging
-import random
 from pathlib import Path
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse
 from jinja2 import Environment, FileSystemLoader
 
@@ -25,6 +24,7 @@ _jinja_env = Environment(loader=_loader, autoescape=True)
 GAMES_CONTENT_PATH = Path(__file__).parent / "config" / "bingo_content.json"
 
 _BINGO_REQUIRED_KEYS = {"id", "content"}
+PAGE_SIZE = 20
 
 
 def load_bingo_content(path: Path) -> dict:
@@ -53,34 +53,64 @@ def load_bingo_content(path: Path) -> dict:
     return data
 
 
-def _render_bingo_template(title: str, cells: list) -> str:
+def _render_bingo_template(title: str, total_cards: int, total_pages: int) -> str:
     template = _jinja_env.get_template("games/culture_bingo.html")
     return template.render(
         title=title,
-        cells=cells,
+        total_cards=total_cards,
+        total_pages=total_pages,
+        page_size=PAGE_SIZE,
         portfolio_base_url=settings.portfolio_base_url.rstrip("/"),
     )
 
 
+def _interleave_cells(cells: list[dict]) -> list[dict]:
+    """Interleave green/red/yellow cards so every batch has a mix."""
+    buckets = [
+        [c for c in cells if c["id"].startswith(f"{color}-")]
+        for color in ("green", "red", "yellow")
+    ]
+    depth = max((len(bucket) for bucket in buckets), default=0)
+    return [bucket[i] for i in range(depth) for bucket in buckets if i < len(bucket)]
+
+
 _BINGO_CONTENT = load_bingo_content(GAMES_CONTENT_PATH)
+_BINGO_CELLS_MIXED = _interleave_cells(_BINGO_CONTENT["cells"])
 
 router = APIRouter()
 
 
 @router.get("/culture-bingo", tags=["Games"])
 async def culture_bingo(request: Request):
-    """Company Culture Bingo: interactive browser game with click-to-reveal tiles."""
-    cells = list(_BINGO_CONTENT["cells"])
-    random.shuffle(cells)
+    """Company Culture Bingo: paged interactive browser game with click-to-reveal tiles."""
+    total_pages = max(1, -(-len(_BINGO_CELLS_MIXED) // PAGE_SIZE))  # ceiling division
     html = _render_bingo_template(
         title=_BINGO_CONTENT.get("title", "Company Culture Bingo"),
-        cells=cells,
+        total_cards=len(_BINGO_CELLS_MIXED),
+        total_pages=total_pages,
     )
     return HTMLResponse(content=html)
 
 
-@router.get("/api/v1/culture-bingo/content", tags=["Games"])
-@limits("30/minute", "120/hour")
-async def bingo_content(request: Request):
-    """Return the bingo game content as JSON."""
-    return _BINGO_CONTENT
+@router.get("/api/v1/culture-bingo/cards", tags=["Games"])
+@limits("60/minute", "300/hour")
+async def bingo_cards(
+    request: Request,
+    page: int = Query(0, ge=0, description="Zero-based page index"),
+):
+    """Return one page of bingo cards (interleaved green/red/yellow, PAGE_SIZE cards per page).
+
+    Clients track progress in localStorage and call this endpoint to fetch
+    the next batch. Fixed order means page indices are stable across sessions.
+    """
+    total = len(_BINGO_CELLS_MIXED)
+    total_pages = max(1, -(-total // PAGE_SIZE))
+    start = page * PAGE_SIZE
+    end = start + PAGE_SIZE
+    return {
+        "page": page,
+        "total_pages": total_pages,
+        "total_cards": total,
+        "page_size": PAGE_SIZE,
+        "cells": _BINGO_CELLS_MIXED[start:end],
+    }
