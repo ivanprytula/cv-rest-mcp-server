@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import importlib
 import json
+import logging
 import threading
 from collections import OrderedDict
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -9,6 +10,7 @@ from types import ModuleType
 from typing import NoReturn
 
 from fastapi import HTTPException
+from google.cloud import storage
 from weasyprint import HTML
 
 from services.portfolio.constants import (
@@ -24,8 +26,41 @@ from services.portfolio.settings import settings
 from services.portfolio.tenancy import TenantId
 
 
+logger = logging.getLogger(__name__)
+
+
 class _URLFetchDeniedError(Exception):
     pass
+
+
+async def _read_cv_from_gcs(gcs_uri: str) -> dict | None:
+    """Read CV JSON from GCS (gs://bucket/path format).
+
+    Returns the parsed JSON, or None if the URI is empty, the file doesn't
+    exist, or it's not valid JSON. Exceptions are logged and treated as
+    "not found" so the fallback chain continues.
+    """
+    if not gcs_uri:
+        return None
+    try:
+        # Parse gs://bucket/path
+        if not gcs_uri.startswith("gs://"):
+            logger.warning("CV_DATA_GCS_URI does not start with gs://: %s", gcs_uri)
+            return None
+        path = gcs_uri[5:]  # Strip "gs://"
+        bucket_name, _, object_path = path.partition("/")
+        if not bucket_name or not object_path:
+            logger.warning("CV_DATA_GCS_URI malformed: %s", gcs_uri)
+            return None
+
+        client = storage.Client()
+        bucket = client.bucket(bucket_name)
+        blob = bucket.blob(object_path)
+        content = blob.download_as_text(encoding="utf-8")
+        return json.loads(content)
+    except Exception:
+        logger.warning("Failed to read CV from GCS %s", gcs_uri, exc_info=True)
+        return None
 
 
 def _deny_all_url_fetcher(url: str) -> NoReturn:
@@ -99,12 +134,23 @@ class PdfService:
         self._inflight: dict[tuple[str, str], Future[bytes]] = {}
 
     async def cv_data(self) -> dict:
-        """Current CV document: the operator's DB row, else the shipped file.
+        """Current CV document: DB row, GCS file, or shipped fallback file.
 
-        Normalized through `validate_cv_payload` the same way a file read
-        always was — a DB row or fallback file missing an optional list
-        field (e.g. `projects`) still renders with `[]`, not a KeyError.
+        Chain: database → GCS (if configured) → local file.
+        Normalized through `validate_cv_payload` — a missing optional field
+        (e.g. `projects`) still renders with `[]`, not a KeyError.
         """
+        payload = await self._documents.read(
+            KIND_CV, tenant_id=self._tenant_id, fallback_path=None
+        )
+        if payload is not None:
+            return validate_cv_payload(payload)
+
+        if settings.cv_data_gcs_uri:
+            payload = await _read_cv_from_gcs(settings.cv_data_gcs_uri)
+            if payload is not None:
+                return validate_cv_payload(payload)
+
         payload = await self._documents.read(
             KIND_CV, tenant_id=self._tenant_id, fallback_path=settings.cv_data_path
         )
