@@ -13,6 +13,9 @@ class GuardMiddleware:
     Order: allowlist -> static blocklist -> dynamic ban.
     /health always passes so monitoring stays independent of policy.
     When no policy is configured, requests pass through untouched.
+
+    The dynamic ban is path-scoped: a client banned for overrunning one
+    route's rate limit is refused there, not across the whole site.
     """
 
     def __init__(self, app) -> None:
@@ -45,7 +48,7 @@ class GuardMiddleware:
             return
 
         tracker = failban.violation_tracker
-        if tracker.is_banned(client_ip):
+        if tracker.is_banned(client_ip, scope.get("path", "")):
             await self._deny(
                 scope,
                 receive,

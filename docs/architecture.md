@@ -24,7 +24,7 @@ a bounded thread pool.
 | `app/mcp_limits.py` | Rate limits enforced inside MCP tools (slowapi stubs + request context) |
 | `app/guard_middleware.py` | Outermost access gate: allowlist/blocklist/bans |
 | `app/ip_lists.py` | IP/CIDR parsing and membership checks |
-| `app/failban.py` | Dynamic ban tracker (fail2ban-lite) fed by rate-limit violations |
+| `app/failban.py` | Dynamic ban tracker (fail2ban-lite) fed by rate-limit violations; bans are path-scoped |
 | `app/settings.py` | All runtime config (see `.env.example`) |
 | `static/css/` | Vendored Tailwind input and generated browser stylesheet |
 
@@ -113,6 +113,12 @@ dynamic bans (`FAILBAN_*`). Each list is file-based (one CIDR per line, `#`
 comments), and a configured but unreadable file aborts startup. `/health`
 always passes; with no policy configured the middleware short-circuits to
 passthrough.
+
+A dynamic ban is **scoped to the paths that tripped it**: strikes accumulate per
+client across all routes (so spraying violations over many endpoints still reaches
+the threshold), but only the offending routes are then refused — a client that
+overran the PDF limit keeps browsing the HTML CV. A violation with no resolvable
+path widens the ban to every path rather than leaving an enforcement gap.
 
 MCP tools enforce their own limits inside the tool body via FastMCP's request
 context — the mounted `/mcp` sub-app is invisible to route-level middleware
