@@ -96,6 +96,31 @@ code-quality:
 test:
     uv run pytest
 
+# Fast inner loop: skips the DB-backed tests that each build a throwaway
+# testcontainers Postgres and run Alembic against it (2-6s setup apiece, and
+# the dominant cost of a full run). The `slow` marker is applied automatically
+# to anything requesting those fixtures — see the pytest_collection_modifyitems
+# hook in the portfolio conftest, so it never needs hand-maintaining.
+# Use this while iterating on changes that cannot reach persistence; run
+# `just test` before committing.
+#
+# NOTE the full marker expression: a `-m` on the command line REPLACES the one
+# in addopts rather than adding to it, so `-m 'not slow'` would re-enable the
+# e2e/firestore/pubsub tests. Playwright's session-scoped runner then leaves a
+# closed-over event loop behind and every later async test errors with
+# "Runner.run() cannot be called from a running event loop". Keep the
+# addopts exclusions spelled out here whenever the selection changes.
+test-fast:
+    uv run pytest -m 'not e2e and not firestore and not pubsub and not slow' --no-cov
+
+# The slow half on its own (DB-backed tests only).
+test-slow:
+    uv run pytest -m 'not e2e and not firestore and not pubsub and slow' --no-cov
+
+# Per-test timing, slowest first — use this to find what to mark or fix.
+test-timing:
+    uv run pytest --no-cov --durations=25
+
 # Browser e2e tests (Playwright); excluded from `just test` by default.
 # Scoped to services/portfolio/tests/ only: each service owns an independent
 # test suite (see services/games/tests/), and two session-scoped

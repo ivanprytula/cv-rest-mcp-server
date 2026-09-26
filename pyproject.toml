@@ -77,6 +77,7 @@ markers = [
     "firestore: needs the Firestore emulator container; run with `just test-firestore`",
     "pubsub: needs the Pub/Sub emulator container; run with `just test-pubsub`",
     "needs_script: shells out to a repo script rather than importing it",
+    "slow: per-test testcontainers Postgres + Alembic migrate (2-6s setup each); skip with `-m 'not slow'` for a fast inner loop",
 ]
 
 [tool.coverage.run]

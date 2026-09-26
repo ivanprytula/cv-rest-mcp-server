@@ -426,6 +426,27 @@ def _fresh_postgres_url(_make_fresh_postgres_url):
     return _make_fresh_postgres_url()
 
 
+# Every fixture that stands up a throwaway database (container + Alembic
+# migrate) — the 2-6s per test that dominates a full run. `item.fixturenames`
+# is the transitive fixture closure, so a test reaching these directly or
+# through `user_service`/`auth_client`/`session_factory` is caught without
+# hand-annotating anything.
+_DB_FIXTURES = frozenset(
+    {"_postgres_container", "_make_fresh_postgres_url", "_fresh_postgres_url"}
+)
+
+
+def pytest_collection_modifyitems(items: list[pytest.Function]) -> None:
+    """Tag every test whose fixture closure touches Postgres as `slow`.
+
+    Derived rather than declared, so `just test-fast` (`-m 'not slow'`) can
+    never quietly start building a container per test.
+    """
+    for item in items:
+        if _DB_FIXTURES.intersection(item.fixturenames):
+            item.add_marker(pytest.mark.slow)
+
+
 # Throwaway, and never leaves this process: the role exists only for the
 # lifetime of a test database that is dropped at session end.
 _APP_ROLE_PASSWORD = "rls-test-only"
