@@ -36,11 +36,13 @@ def test_get_available_themes():
 async def test_mcp_tools_have_descriptions():
     tools = await mcp.list_tools()
 
+    # match_job_posting is deliberately unpublished — see the note on its
+    # definition in services/portfolio/main.py. Add it back here if it is
+    # re-enabled.
     assert {tool.name for tool in tools} == {
         "get_cv",
         "get_available_themes",
         "generate_cv_pdf_tool",
-        "match_job_posting",
     }
     assert all(tool.description for tool in tools)
 

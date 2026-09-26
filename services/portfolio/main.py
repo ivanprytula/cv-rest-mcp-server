@@ -295,7 +295,12 @@ async def generate_cv_pdf_tool(theme: str) -> str:
     return base64.b64encode(pdf_bytes).decode("utf-8")
 
 
-@mcp.tool
+# Unpublished: the JD-matching tool is disabled and no longer listed by
+# tools/list. The skill bank's trust policy only keeps atoms the live CV
+# already vouches for, so a CV with empty skill sections tailors to an empty
+# result — the tool advertised a capability it could not deliver. Re-enable by
+# restoring the @mcp.tool decorator below; the implementation and its tests are
+# unchanged and still cover the pipeline.
 async def match_job_posting(posting_text: str, title: str = "") -> dict:
     """Match a job description against the skill bank and return a tailored version.
 

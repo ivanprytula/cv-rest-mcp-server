@@ -57,30 +57,30 @@ See [Deployment](#deployment) below.
 
 Public (no auth):
 
-| Method | Path                        | Description                |
-| ------ | --------------------------- | --------------------------- |
-| GET    | `/`                         | Landing page                |
-| GET    | `/health`                   | Health check                |
-| GET    | `/cv`                       | Live CV as JSON             |
-| GET    | `/cv/html?theme=<name>`     | Live CV rendered as HTML    |
-| GET    | `/cv/preview?theme=<name>`  | Preview page with toolbar   |
-| GET    | `/cv/pdf?theme=<name>`      | Live CV as PDF (attachment) |
+| Method | Path                       | Description                 |
+| ------ | -------------------------- | --------------------------- |
+| GET    | `/`                        | Landing page                |
+| GET    | `/health`                  | Health check                |
+| GET    | `/cv`                      | Live CV as JSON             |
+| GET    | `/cv/html?theme=<name>`    | Live CV rendered as HTML    |
+| GET    | `/cv/preview?theme=<name>` | Preview page with toolbar   |
+| GET    | `/cv/pdf?theme=<name>`     | Live CV as PDF (attachment) |
 
 Operator-only (JWT required — `cv:read` / `cv:manage` scopes, see [AGENTS.md](AGENTS.md)):
 
-| Method | Path                                  | Description                                     |
-| ------ | -------------------------------------- | ------------------------------------------------ |
-| GET    | `/api/v1/cv`                           | Operator CV as JSON (supports tailored revisions) |
-| GET    | `/api/v1/cv/pdf`                       | Operator CV as PDF                              |
-| POST   | `/api/v1/cv/tailor`                    | Tailor the CV against a job description         |
-| GET    | `/api/v1/revisions`                    | List saved tailored revisions                   |
-| POST   | `/api/v1/postings`                     | Store a job posting                             |
-| GET    | `/api/v1/postings`                     | List stored postings                            |
-| POST   | `/api/v1/postings/{id}/analyze`        | Run gap analysis on a posting                   |
-| GET    | `/api/v1/postings/{id}`                | Read a stored gap report                        |
-| GET    | `/api/v1/gaps/roadmap`                 | Ranked "what to learn next" roadmap             |
-| \*     | `/api/v1/tracked-boards*`              | CRUD for ATS boards under continuous monitoring |
-| \*     | `/api/v1/documents/{kind}`             | CRUD for operator documents (CV / skill bank / JD vocabulary) |
+| Method | Path                            | Description                                                   |
+| ------ | ------------------------------- | ------------------------------------------------------------- |
+| GET    | `/api/v1/cv`                    | Operator CV as JSON (supports tailored revisions)             |
+| GET    | `/api/v1/cv/pdf`                | Operator CV as PDF                                            |
+| POST   | `/api/v1/cv/tailor`             | Tailor the CV against a job description                       |
+| GET    | `/api/v1/revisions`             | List saved tailored revisions                                 |
+| POST   | `/api/v1/postings`              | Store a job posting                                           |
+| GET    | `/api/v1/postings`              | List stored postings                                          |
+| POST   | `/api/v1/postings/{id}/analyze` | Run gap analysis on a posting                                 |
+| GET    | `/api/v1/postings/{id}`         | Read a stored gap report                                      |
+| GET    | `/api/v1/gaps/roadmap`          | Ranked "what to learn next" roadmap                           |
+| \*     | `/api/v1/tracked-boards*`       | CRUD for ATS boards under continuous monitoring               |
+| \*     | `/api/v1/documents/{kind}`      | CRUD for operator documents (CV / skill bank / JD vocabulary) |
 
 See [docs/using-gap-analysis.md](docs/using-gap-analysis.md) for how the gap-analysis endpoints fit together, and [docs/api.md](docs/api.md) for the full contract.
 
@@ -104,12 +104,11 @@ For deployed: replace `http://localhost:8080` with your public API URL.
 
 Available tools:
 
-| Tool                   | Parameters                     | Returns                                |
-| ---------------------- | ------------------------------- | --------------------------------------- |
-| `get_cv`               | —                                | JSON object with full CV data           |
-| `get_available_themes` | —                                | `list[str]` of theme names              |
-| `generate_cv_pdf_tool` | `theme: str`                     | Base64-encoded PDF bytes                |
-| `match_job_posting`    | `posting_text: str`, `title: str = ""` | Tailored CV JSON matched against a posting |
+| Tool                   | Parameters   | Returns                       |
+| ---------------------- | ------------ | ----------------------------- |
+| `get_cv`               | —            | JSON object with full CV data |
+| `get_available_themes` | —            | `list[str]` of theme names    |
+| `generate_cv_pdf_tool` | `theme: str` | Base64-encoded PDF bytes      |
 
 ## Themes
 
@@ -121,14 +120,14 @@ Add a new theme: create `services/portfolio/themes/yourname.py` with a `CSS` con
 
 Per-IP (`X-Forwarded-For`-aware behind a trusted proxy), in-memory. Loopback peers exempt in local dev. Every limited endpoint stacks a per-minute burst cap with a per-hour sustained cap; a sample:
 
-| Endpoint                  | Limit                    |
-| -------------------------- | ------------------------- |
-| `/`                         | 30/min, 120/hour          |
-| `/health`                   | 60/min                    |
-| `/cv`, `/api/v1/cv`         | 30/min, 600/hour          |
-| `/cv/html`, `/cv/preview`   | 30/min, 300/hour          |
-| `/cv/pdf`, `/api/v1/cv/pdf` | 5/15min, 15/hour          |
-| `/api/v1/cv/tailor`         | 10/min, 60/hour           |
+| Endpoint                    | Limit            |
+| --------------------------- | ---------------- |
+| `/`                         | 30/min, 120/hour |
+| `/health`                   | 60/min           |
+| `/cv`, `/api/v1/cv`         | 30/min, 600/hour |
+| `/cv/html`, `/cv/preview`   | 30/min, 300/hour |
+| `/cv/pdf`, `/api/v1/cv/pdf` | 5/15min, 15/hour |
+| `/api/v1/cv/tailor`         | 10/min, 60/hour  |
 
 ## Development
 
@@ -214,10 +213,10 @@ Budget: **$100/month**. Pre-commit hook and CI/CD automatically warn if costs tr
 Two path-filtered workflows split infrastructure from application releases —
 Terraform owns the platform, `gcloud run deploy` ships the code:
 
-| You changed | Workflow | What runs |
-| --- | --- | --- |
-| `services/`, `frontend/`, Dockerfiles | `deploy-app.yml` | lint + tests → build images to Artifact Registry → `gcloud run deploy` → verify |
-| `terraform/` | `ci-cd.yml` | tflint + checkov → Infracost → `terraform plan` → **approval gate** → `terraform apply` |
+| You changed                           | Workflow         | What runs                                                                               |
+| ------------------------------------- | ---------------- | --------------------------------------------------------------------------------------- |
+| `services/`, `frontend/`, Dockerfiles | `deploy-app.yml` | lint + tests → build images to Artifact Registry → `gcloud run deploy` → verify         |
+| `terraform/`                          | `ci-cd.yml`      | tflint + checkov → Infracost → `terraform plan` → **approval gate** → `terraform apply` |
 
 An app-only commit never runs Terraform, and an infra-only commit never rebuilds
 images. Use `[skip deploy]` in a commit message to run checks without deploying.
