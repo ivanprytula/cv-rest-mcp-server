@@ -120,7 +120,7 @@ In addition to `just code-quality` (ruff + type checking) and `just test`, manua
 After making a change:
 
 1. `just code-quality` — passes all linting/type checks
-2. `just test` — 405 tests pass, coverage ≥96%
+2. `just test` — 693 tests pass, 30 deselected (`e2e`/`firestore`/`pubsub`), coverage 92%
 3. Manually scan your routes for info leaks: grep for `detail=` error messages, check they're generic
 4. Check middleware order in `main.py`: SecurityHeaders first (outermost), Guard/CORS/JWTAuth innermost
 5. If you added an endpoint: verify auth scope/role gate is applied, no user input is trusted without validation, error messages are safe
@@ -163,7 +163,9 @@ check failure — the fix is always the same: rebuild locally and commit.
 
 FastAPI + FastMCP CV rendering service. PDFs via WeasyPrint. Templates in `templates/`, themes in `services/portfolio/themes/`.
 
-Deployed to **GCP Cloud Run** (internet-facing). CV data comes from GCS via `CV_DATA_GCS_URI`.
+Deployed to **GCP Cloud Run** (internet-facing). The CV comes from a three-tier
+chain — Postgres, then GCS (`CV_DATA_GCS_URI`), then a local file. See
+[Key Patterns](#key-patterns) for the precedence rules and their traps.
 
 ## Codebase Map
 
@@ -172,14 +174,14 @@ services/portfolio/
 ├── main.py              # FastAPI app assembly, MCP tools, lifespan, /mcp mount
 ├── constants.py         # Project paths (TEMPLATE_DIR, THEMES_DIR), cache/worker limits
 ├── routes.py            # REST endpoints: /, /health, /cv, /cv/html, /cv/preview, /cv/pdf, /api/v1/cv/tailor
-├── cv_data.py           # Pydantic models + validate_cv_payload/load_cv_data
-├── cv_source.py         # CvSource: local file or GCS object (generation-checked hot reload, example-file placeholder fallback)
-├── pdf_generator.py     # PdfService class: cache, executor, sync/async PDF generation
+├── cv_data.py           # Pydantic models + validate_cv_payload (load_cv_data is test-only now)
+├── pdf_generator.py     # PdfService class: cv_data() source chain, cache, executor, sync/async PDF generation
+├── documents/           # DocumentService + DocumentRepository over `operator_documents` (tier 1 of the CV chain)
 ├── rate_limiter.py      # slowapi Limiter, get_client_ip strategy, @limits stacked decorator
 ├── mcp_limits.py        # MCP tool rate limits (slowapi stubs + fastmcp request context)
 ├── guard_middleware.py  # Outermost access gate: allowlist/blocklist/bans
 ├── ip_lists.py          # IP/CIDR parsing + membership checks
-├── failban.py           # Dynamic ban tracker fed by rate-limit violations
+├── failban.py           # Dynamic ban tracker fed by rate-limit violations (path-scoped)
 ├── renderer.py          # Jinja2 rendering: render_html (CV) + render_template (pages)
 ├── dependencies.py      # get_pdf_service(request) dependency
 ├── settings.py          # Pydantic Settings — all runtime knobs, see .env.example
@@ -249,7 +251,7 @@ tests/
 ├── conftest.py          # AsyncClient fixture via ASGITransport
 ├── test_api.py          # REST endpoint tests
 ├── test_cv_data.py      # Data validation tests
-├── test_cv_source.py    # CvSource file/GCS modes, hot reload, placeholder fallback
+├── test_documents_api.py # operator_documents: file fallback, DB-beats-file, seeding, revert
 ├── test_guards.py       # ip_lists, failban, GuardMiddleware tests
 ├── test_mcp.py          # MCP tool tests
 ├── test_mcp_limits.py   # MCP tool rate-limit tests
@@ -293,9 +295,10 @@ pyproject.toml          # Python 3.14+, deps, ruff/ty config, pytest asyncio_mod
 - **PDF functions**: `generate_cv_pdf(theme, cv_json)` and `generate_cv_pdf_async(theme, cv_json)` both require explicit `cv_json` dict — no module-level state.
 - **Renderer context boundary**: `_build_render_context` in `services/portfolio/renderer.py` strips only the renderer-owned keys (`css`, `consent_enabled`, `consent_company`) from incoming CV data and applies its own values last — never splat raw CV dicts into `template.render`. Harmless extra metadata passes through (`CVData` stays `extra="allow"`).
 - **PDF URL fetch policy**: all WeasyPrint construction goes through `_generate_pdf_sync` with a deny-all `url_fetcher` (`_URLFetchDeniedError` for every scheme). Never construct `HTML(...)` without it; browser static assets are unaffected by this boundary.
-- **Rate limiting**: slowapi `Limiter` keyed by `get_client_ip` (XFF-entry / socket-peer strategies). REST uses the `@limits(...)` stacked decorator (burst + sustained, loopback-socket-peer exempt); MCP tools enforce via `services/portfolio/mcp_limits.py` stubs + `get_http_request()`. `GuardMiddleware` (added last = runs first) handles allowlist/blocklist/dynamic bans; `/health` always passes. Loopback exemptions (limits, failban) are gated by `TRUST_PROXY`: proxied platforms (Cloud Run peer = 127.0.0.1 for everyone) MUST set `TRUST_PROXY=true` + `CLIENT_IP_XFF_ENTRY=2` or limits silently stop applying.
+- **Rate limiting**: slowapi `Limiter` keyed by `get_client_ip` (XFF-entry / socket-peer strategies). REST uses the `@limits(...)` stacked decorator (burst + sustained, loopback-socket-peer exempt); MCP tools enforce via `services/portfolio/mcp_limits.py` stubs + `get_http_request()`. `GuardMiddleware` (added last = runs first) handles allowlist/blocklist/dynamic bans; `/health` always passes. **Dynamic bans are path-scoped**: strikes pool per client (so misbehaviour spread across routes still trips the threshold), but the resulting ban refuses only the paths that actually overran their limit — a client that burst the PDF limit keeps browsing the HTML CV. A strike with no resolvable path widens the ban to every path, so an unattributable offender is never let through. Loopback exemptions (limits, failban) are gated by `TRUST_PROXY`: proxied platforms (Cloud Run peer = 127.0.0.1 for everyone) MUST set `TRUST_PROXY=true` + `CLIENT_IP_XFF_ENTRY=2` or limits silently stop applying.
 - **IP access lists**: `parse_ip_list` accepts commas, whitespace, and newlines; `#` comments run to end of line (stripped BEFORE comma splitting — a comma inside a comment must not split tokens). File-based only (`*_FILE`); missing configured file = startup failure. Large geo lists MUST use the file form (execve caps env args at ~128KB); regenerate via `just update-geo-blocklist`.
-- **Image packaging**: the image ships `data/cv.example.json` ONLY (never real cv.json — CV content comes from GCS via `CV_DATA_GCS_URI`) plus `config/` (geo blocklist, MCP tab definitions). `.dockerignore` and `.gcloudignore` both use `data/*` + `!data/cv.example.json`; gcloud builds submit applies `.gcloudignore` verbatim when present, otherwise it derives one from `.gitignore`, which excludes personal data.
+- **Image packaging**: the image never ships real `data/cv.json` (personal data — CV content reaches the container via Postgres or GCS). It ships `data/cv.example.json` plus the operator-curated `data/cv_baseline.json` (skill bank) and `data/jd_vocabulary.json`, plus `config/` (geo blocklist, MCP tab definitions). Note the two ignore files disagree: `.dockerignore` allowlists all three JSONs, `.gcloudignore` allowlists only `cv.example.json` + `cv_baseline.json` (no `jd_vocabulary.json`) — so a `gcloud builds submit` image and a local `docker build` image are NOT byte-identical. Both use `data/*` + explicit `!` re-includes; gcloud applies `.gcloudignore` verbatim when present, otherwise it derives one from `.gitignore`, which excludes personal data anyway.
+- **CV source chain** (`PdfService.cv_data()`): Postgres `operator_documents` (kind `cv`, tenant-scoped by `operator_tenant_id`, RLS-forced) → GCS `CV_DATA_GCS_URI` (only if the setting is non-empty) → local file `settings.cv_data_path` → `{}`. Traps: the GCS tier lives ONLY in `cv_data()` — `analysis_worker.py`, `refresh_trigger.py` and `gaps/routes.py` call `DocumentService.read(KIND_CV, ...)` directly and therefore skip GCS, so those paths can disagree with the served CV. `cv_source_kind()` (what `/health` reports) is GCS-blind and only ever returns `database` / `file` / `unavailable`, so health can say `unavailable` while GCS is actually serving. `DocumentService.read` swallows DB exceptions into a "miss", so a broken DB silently degrades to the next tier. `_read_cv_from_gcs` has NO test coverage (conftest pins `CV_DATA_GCS_URI=""` suite-wide) — treat changes to it as unverified. The tenant is pinned into `PdfService` at construction; there is no per-request tenant switch on the public surface.
 - **Operator edits `data/cv.json` by hand — unannounced**: the operator maintains the live CV directly and does NOT notify sessions of every edit. Always re-read `data/cv.json` (and `data/cv_baseline.json`) freshly at task start; never assume content seen earlier is still current. Re-validate with `validate_cv_payload` before relying on it. Where granularity matters (trust passes only for keyword-only, bank-aligned items), the operator keeps that contract when hand-editing — a task that runs into a dropped atom should check the CURRENT file, not blame stale structure.
 - **Builder image pin**: the Dockerfile builder stage is digest-pinned (`ghcr.io/astral-sh/uv:0.12.5@sha256:...`); bump deliberately via `docker buildx imagetools inspect ghcr.io/astral-sh/uv:<tag>` and update both Dockerfile and docs together. `python:3.14-slim` stays tag-based by scope decision.
 - **Terraform IaC (Phase 1a edge + 1b CDN/uploads)**: single managed env, flat `terraform/` (no per-env split). Workloads (distinct Cloud Run services) are separate from `host_routing` (hostname → workload) because `www.` and `api.` both route to `api-core`. Pre-commit enforces `terraform fmt` (format), `tflint` (logic, built-in ruleset only — no `--init`), `checkov` (security, isolated via `uvx --from 'checkov'` — NOT a dev-dep because checkov pins `packaging<24.0` vs `fastmcp` `>=24.0`), and the `terraform-deny-public` guard. checkov's `--skip-check` list (see `.pre-commit-config.yaml` for the current set and a one-line justification per check) covers the ONE public-read Cloud CDN origin bucket (`modules/static_bucket`, `allUsers` objectViewer), CI/CD-required deployer IAM, the disabled Cloud Armor module, and CSEK on the Artifact Registry repo (Google-managed encryption is sufficient for this single dev env). `tflint` and `checkov` also run in CI (`ci-cd.yml`'s `terraform-quality` job); `terraform-deny-public` stays pre-commit-only. The path-scoped guarantee that every OTHER bucket has `public_access_prevention="enforced"` + uniform access and no anonymous write is enforced by `scripts/ensure_deny_public.py` (see `tests/test_deny_public.py`) — inline `#checkov:skip` is unreliable in the pinned checkov (measured "Skipped: 0"), and checkov `skip-check` can't be path-scoped, hence the custom guard. `modules/uploads` is a PRIVATE deny-public bucket for user avatars/photos, signed-V4-URL-only (writes/reads via server-minted short-TTL object-scoped URLs; `user_id`-scoped keys) — currently **commented out** in root `main.tf`+`variables.tf`+`outputs.tf` so the operator can practice `tf plan`/`apply` on the CDN piece first; uncomment all three together. Remote state + locking: `just deploy bootstrap-state` creates the versioned GCS bucket (`<project>-<GCP_ENV>-tfstate`, `GCP_ENV` defaulting to `production`; `versions.tf` pins the backend to it) — the GCS backend locks via an object write-hold in that SAME bucket, so there is **no separate lock bucket**; never disable versioning on it. Infra deep-dive + signed-URL recipes: `docs/cloud-cdn.md`. Any infra file that fails `terraform validate` or the pre-commit gates must be fixed before landing.

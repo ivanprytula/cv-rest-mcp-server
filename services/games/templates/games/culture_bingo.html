@@ -80,35 +80,45 @@
 
         .app {
             width: min(1100px, 100%);
-            padding: 28px 16px 42px;
+            padding: 16px 12px 32px;
         }
 
-        header { text-align: center; }
+        /* The theme toggle is position:fixed in the top-right corner, so the
+           header reserves that corner. The gutter is symmetric to keep the
+           title dead-centre; a title too long for one line wraps instead of
+           sliding under the button. */
+        header {
+            text-align: center;
+            padding: 0 52px;
+        }
 
         h1 {
-            font-size: clamp(1.4rem, 4vw, 2rem);
+            font-size: clamp(1.3rem, 5.5vw, 2rem);
             font-weight: 800;
             margin: 0;
+            overflow-wrap: break-word;
         }
 
         .subtitle {
             color: var(--text-muted);
-            margin: .4rem 0 .75rem;
-            font-size: .95rem;
+            margin: .35rem 0 .6rem;
+            font-size: .9rem;
         }
 
         .status {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            font-size: .9rem;
+            flex-wrap: wrap;
+            gap: 2px 12px;
+            font-size: .85rem;
             color: var(--text-status);
-            margin-bottom: 8px;
+            margin-bottom: 6px;
         }
 
         .game {
             position: relative;
-            width: min(1100px, 100%);
+            width: 100%;
             margin: 0 auto;
             border-radius: 16px;
             overflow: hidden;
@@ -118,9 +128,13 @@
                 linear-gradient(135deg, #1d4d57, #5c2944);
         }
 
+        /* minmax(0, 1fr) — not 1fr. A bare 1fr is minmax(auto, 1fr), so a long
+           tile word floors its track at min-content; the tracks then stop being
+           equal, the total exceeds the grid, and .game's overflow:hidden clips
+           the last column. */
         .grid {
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
+            grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: var(--gap);
             padding: var(--gap);
         }
@@ -130,11 +144,11 @@
             border-radius: var(--radius);
             background: var(--cell-bg);
             color: var(--cell-text);
-            padding: 10px 12px;
+            padding: 9px 10px;
             cursor: pointer;
             text-align: left;
             font: inherit;
-            font-size: 13px;
+            font-size: 14px;
             line-height: 1.35;
             overflow-wrap: break-word;
             min-height: 3.5em;
@@ -145,7 +159,7 @@
             display: block;
             margin-top: 5px;
             color: var(--cell-detail);
-            font-size: 11px;
+            font-size: 12px;
             line-height: 1.3;
         }
 
@@ -185,10 +199,14 @@
             pointer-events: none;
         }
 
-        /* Overlay — continue/replay */
+        /* Overlay — continue/replay. Fixed to the viewport, not to the board:
+           the board is taller than a phone screen, so an overlay anchored to
+           the grid's centre lands off-screen depending on where the player
+           happened to scroll when the last tile was revealed. */
         .overlay {
-            position: absolute;
+            position: fixed;
             inset: 0;
+            z-index: 60;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -198,8 +216,10 @@
             opacity: 0;
             pointer-events: none;
             transition: opacity .4s ease;
-            padding: 2rem;
+            padding: 1rem;
             text-align: center;
+            overflow: auto;
+            overscroll-behavior: contain;
         }
 
         .overlay.show {
@@ -210,21 +230,21 @@
         .overlay-card {
             background: var(--complete-badge);
             border-radius: 14px;
-            padding: 1.5rem 2rem;
+            padding: 1.1rem 1rem;
             max-width: 360px;
             width: 100%;
             color: var(--text);
         }
 
         .overlay-card h2 {
-            margin: 0 0 1.25rem;
-            font-size: 1.1rem;
+            margin: 0 0 1rem;
+            font-size: 1.05rem;
             font-weight: 700;
         }
 
         .overlay-actions {
             display: flex;
-            gap: .75rem;
+            gap: .6rem;
             justify-content: center;
             flex-wrap: wrap;
         }
@@ -255,7 +275,7 @@
 
         .controls {
             text-align: center;
-            margin-top: 14px;
+            margin-top: 12px;
         }
 
         .btn-reset {
@@ -275,13 +295,32 @@
         .back-link {
             display: block;
             text-align: center;
-            margin-top: 20px;
+            margin-top: 16px;
             color: var(--text-muted);
             text-decoration: none;
             font-size: .875rem;
         }
 
         .back-link:hover { color: var(--link-hover); }
+
+        /* Touch-sized targets. The controls are finger-operated, so every
+           interactive element keeps a >=44px hit area (WCAG 2.5.5) even
+           though the visual size stays compact. */
+        @media (pointer: coarse) {
+            .btn, .btn-reset { min-height: 44px; }
+
+            .btn-reset { display: inline-flex; align-items: center; padding: 7px 20px; }
+
+            .back-link { min-height: 44px; padding: 0 8px; display: block; line-height: 44px; }
+
+            #theme-toggle {
+                width: 44px;
+                height: 44px;
+                display: grid;
+                place-items: center;
+                padding: 0;
+            }
+        }
 
         @media (prefers-reduced-motion: reduce) {
             *, *::before, *::after {
@@ -290,8 +329,18 @@
             }
         }
 
-        @media (min-width: 640px)  { .grid { grid-template-columns: repeat(5, 1fr); } }
-        @media (min-width: 1024px) { .grid { grid-template-columns: repeat(5, 1fr); } }
+        /* Column ladder. Two columns is the only readable option on a 375px
+           phone (a 4-up tile leaves ~50px of text width); the batch is a
+           vertical scroll either way. */
+        @media (min-width: 480px)  { .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+        @media (min-width: 768px)  {
+            .app { padding: 24px 16px 42px; }
+            header { padding: 0; }
+            .grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+            .cell { font-size: 13px; padding: 10px 12px; }
+            .cell small { font-size: 11px; }
+        }
+        @media (min-width: 1024px) { .grid { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
     </style>
 </head>
 <body>

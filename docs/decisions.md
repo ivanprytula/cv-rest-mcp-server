@@ -137,6 +137,19 @@ no reason to be unavailable on a schedule — the feature was never configured i
 production. `GuardMiddleware`'s evaluation order is now allowlist → blocklist →
 dynamic ban.
 
+**Amendment (2026-09-26).** Dynamic bans became **path-scoped**. Previously a
+ban refused *every* route for its duration, so a recruiter who tripped a PDF
+limit lost access to the whole site — including the public CV pages the service
+exists to serve. Strikes still pool per client, preserving cross-route detection
+(spraying violations over many endpoints still reaches the threshold), but each
+strike now records the path it occurred on and the ban refuses only those paths.
+A strike with no resolvable path widens the ban to every path, so an
+unattributable offender is never let through on an unrelated route. Note the
+granularity is the HTTP path: because every MCP tool call arrives as `POST
+/mcp/`, a ban for MCP PDF renders also covers the other MCP tools. Splitting MCP
+per tool would need enforcement inside the tool (the guard cannot see tool names),
+which is deliberately out of scope here.
+
 ## ADR-011: Loopback exemptions use socket peer only
 
 **Context.** Dev traffic (localhost) must bypass rate limits and bans, but

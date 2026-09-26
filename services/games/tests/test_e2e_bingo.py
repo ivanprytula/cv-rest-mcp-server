@@ -71,6 +71,17 @@ def page(browser, live_server):
     context.close()
 
 
+@pytest.fixture
+def mobile_page(browser, live_server):
+    """A 375x667 touch context — the narrowest layout the game targets."""
+    context = browser.new_context(
+        base_url=live_server, viewport={"width": 375, "height": 667}, has_touch=True
+    )
+    pg = context.new_page()
+    yield pg
+    context.close()
+
+
 BATCH_SIZE = PAGE_SIZE
 
 
@@ -188,3 +199,123 @@ def test_back_link_present_and_relative_without_portfolio_base_url(page):
     back_link = page.locator(".back-link")
     expect(back_link).to_have_text("← Back to portfolio")
     assert back_link.get_attribute("href") == "/"
+
+
+def test_no_horizontal_overflow_on_a_phone(mobile_page):
+    page = mobile_page
+    page.goto("/culture-bingo")
+    page.wait_for_selector(".cell[data-id]")
+
+    widths = page.evaluate(
+        "() => document.documentElement.scrollWidth - window.innerWidth"
+    )
+    assert widths <= 0, f"page scrolls sideways by {widths}px"
+
+
+def test_grid_tracks_stay_equal_and_inside_the_board(mobile_page):
+    """A bare 1fr track is minmax(auto, 1fr): a long tile word floors its
+    track at min-content, the tracks stop being equal, and the board's
+    overflow:hidden silently clips the last column. minmax(0, 1fr) is the fix
+    and this is what keeps it in place."""
+    page = mobile_page
+    page.goto("/culture-bingo")
+    page.wait_for_selector(".cell[data-id]")
+
+    result = page.evaluate(
+        """() => {
+            const grid = document.getElementById('grid');
+            const box = grid.getBoundingClientRect();
+            const cells = [...grid.querySelectorAll('.cell[data-id]')].map(c => {
+                const r = c.getBoundingClientRect();
+                return {w: Math.round(r.width), spills: r.right > box.right + 0.5};
+            });
+            return {
+                widths: [...new Set(cells.map(c => c.w))],
+                spilling: cells.filter(c => c.spills).length,
+            };
+        }"""
+    )
+
+    assert len(result["widths"]) == 1, f"unequal columns: {result['widths']}"
+    assert result["spilling"] == 0, f"{result['spilling']} tiles clipped by the board"
+
+
+def test_touch_targets_are_at_least_44px(mobile_page):
+    """The controls are finger-operated; a 35px reset button is a mis-tap."""
+    page = mobile_page
+    page.goto("/culture-bingo")
+    page.wait_for_selector(".cell[data-id]")
+
+    too_small = page.evaluate(
+        """() => [...document.querySelectorAll('button, a')]
+            .map(e => ({e, r: e.getBoundingClientRect()}))
+            .filter(x => x.r.width && (x.r.height < 44 || x.r.width < 44))
+            .map(x => `${x.e.tagName.toLowerCase()}${x.e.id ? '#' + x.e.id : ''} `
+                      + `${Math.round(x.r.width)}x${Math.round(x.r.height)}`)"""
+    )
+    assert not too_small, f"undersized touch targets: {too_small}"
+
+
+def test_title_stays_clear_of_the_theme_toggle(mobile_page):
+    """The theme toggle is position:fixed in the top-right corner and the title
+    is centred, so the header reserves that corner with a symmetric gutter.
+    Asserted on the title's *box*, not its ink: the current title leaves only
+    ~13px of slack in the reserved space, and ink-only checking would pass for
+    any heading until the day someone lengthens it.
+    """
+    page = mobile_page
+    page.goto("/culture-bingo")
+
+    box = page.evaluate(
+        """() => {
+            const h1 = document.querySelector('h1');
+            const t = document.querySelector('#theme-toggle');
+            const a = h1.getBoundingClientRect(), b = t.getBoundingClientRect();
+            const intersects = !(a.right <= b.left || a.left >= b.right
+                              || a.bottom <= b.top || a.top >= b.bottom);
+            return {intersects, h1mid: (a.left + a.right) / 2, vw: window.innerWidth};
+        }"""
+    )
+    assert not box["intersects"], "title box collides with the fixed theme toggle"
+    assert abs(box["h1mid"] - box["vw"] / 2) < 1, "title is not centred"
+
+
+def test_completion_overlay_is_pinned_to_the_viewport(mobile_page):
+    """The board is taller than a phone screen, so an overlay anchored to the
+    grid's centre ends up off-screen once the player scrolls down to tap the
+    last tile. It is pinned to the viewport instead.
+
+    Asserts the overlay's own box spans the viewport — a property of
+    position:fixed, independent of how tall the board happens to be. Merely
+    checking the buttons are on-screen would pass for a board short enough
+    that the board's centre is still visible, which is the regression's
+    lucky case, not its fixed one.
+    """
+    page = mobile_page
+    page.goto("/culture-bingo")
+    cells = page.locator(".cell[data-id]")
+    for i in range(cells.count()):
+        cells.nth(i).click()
+    expect(page.locator("#overlay")).to_have_class(re.compile(r"show"))
+    page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+
+    box = page.evaluate(
+        """() => {
+            const r = document.querySelector('#overlay').getBoundingClientRect();
+            return {top: r.top, left: r.left,
+                    height: r.height, width: r.width,
+                    vh: window.innerHeight, vw: window.innerWidth};
+        }"""
+    )
+    assert abs(box["top"]) < 1 and abs(box["left"]) < 1, (
+        f"overlay not at the viewport origin: {box}"
+    )
+    assert abs(box["height"] - box["vh"]) < 1, (
+        f"overlay does not span the viewport: {box}"
+    )
+    assert abs(box["width"] - box["vw"]) < 1, (
+        f"overlay does not span the viewport: {box}"
+    )
+
+    expect(page.locator("#btn-continue")).to_be_in_viewport()
+    expect(page.locator("#btn-replay")).to_be_in_viewport()
