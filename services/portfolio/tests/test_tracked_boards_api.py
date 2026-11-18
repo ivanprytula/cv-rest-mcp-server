@@ -5,6 +5,11 @@ import pytest
 from fastapi import status
 
 
+pytestmark = pytest.mark.skip(
+    reason="Tracked boards service dropped (no DB); tests require PostgreSQL"
+)
+
+
 BOARDS = "/api/v1/tracked-boards"
 
 

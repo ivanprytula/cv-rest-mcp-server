@@ -5,7 +5,6 @@ import re
 from contextlib import asynccontextmanager
 from typing import Any, cast
 
-import anthropic
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -24,16 +23,18 @@ from services.portfolio.auth import (
     api_v1_route_requires_bearer,
     auth_router,
 )
-from services.portfolio.auth.refresh_token_repository import (
-    SqlAlchemyRefreshTokenRepository,
-)
-from services.portfolio.auth.refresh_token_service import RefreshTokenService
-from services.portfolio.auth.user_repository import SqlAlchemyUserRepository
-from services.portfolio.auth.user_service import (
-    UserService,
-    resolve_operator_tenant_id,
-    seed_first_admin_from_settings,
-)
+
+# DB-dependent auth imports (commented out for api-core without DB)
+# from services.portfolio.auth.refresh_token_repository import (
+#     SqlAlchemyRefreshTokenRepository,
+# )
+# from services.portfolio.auth.refresh_token_service import RefreshTokenService
+# from services.portfolio.auth.user_repository import SqlAlchemyUserRepository
+# from services.portfolio.auth.user_service import (
+#     UserService,
+#     resolve_operator_tenant_id,
+#     seed_first_admin_from_settings,
+# )
 from services.portfolio.constants import (
     API_V1_PREFIX,
     PDF_CACHE_MAX_ENTRIES,
@@ -41,40 +42,43 @@ from services.portfolio.constants import (
     STATIC_DIR,
     TEMPLATE_DIR,
 )
-from services.portfolio.cv_extraction import CVExtractionService
-from services.portfolio.cv_review.critic_agent import CVCriticService
-from services.portfolio.cv_review.review_service import CVReviewService
-from services.portfolio.db import build_engine, build_session_factory
-from services.portfolio.db_migrations import upgrade_head
-from services.portfolio.documents.document_repository import (
-    SqlAlchemyDocumentRepository,
-)
-from services.portfolio.documents.document_service import (
-    DocumentService,
-    document_sources,
-)
-from services.portfolio.documents.routes import router as documents_router
-from services.portfolio.events.pubsub_publisher import (
-    build_event_publisher_from_settings,
-)
+
+# DB-dependent service imports (commented out for api-core without DB)
+# from services.portfolio.cv_extraction import CVExtractionService
+# from services.portfolio.cv_review.critic_agent import CVCriticService
+# from services.portfolio.cv_review.review_service import CVReviewService
+# from services.portfolio.db import build_engine, build_session_factory
+# from services.portfolio.db_migrations import upgrade_head
+# from services.portfolio.documents.document_repository import (
+#     SqlAlchemyDocumentRepository,
+# )
+# from services.portfolio.documents.document_service import (
+#     DocumentService,
+#     document_sources,
+# )
+# from services.portfolio.documents.routes import router as documents_router
+# from services.portfolio.events.pubsub_publisher import (
+#     build_event_publisher_from_settings,
+# )
 from services.portfolio.failban import register_violation_from_request
-from services.portfolio.gaps.gap_repository import SqlAlchemyGapRepository
-from services.portfolio.gaps.gap_service import GapService
-from services.portfolio.gaps.idempotency_repository import (
-    SqlAlchemyIdempotencyRepository,
-)
-from services.portfolio.gaps.job_posting_document_store import (
-    build_job_posting_document_store_from_settings,
-)
-from services.portfolio.gaps.routes import postings_router
-from services.portfolio.gaps.routes import router as gaps_router
-from services.portfolio.gaps.tracked_board_repository import (
-    SqlAlchemyTrackedBoardRepository,
-)
-from services.portfolio.gaps.tracked_board_routes import (
-    router as tracked_boards_router,
-)
-from services.portfolio.gaps.tracked_board_service import TrackedBoardService
+
+# from services.portfolio.gaps.gap_repository import SqlAlchemyGapRepository
+# from services.portfolio.gaps.gap_service import GapService
+# from services.portfolio.gaps.idempotency_repository import (
+#     SqlAlchemyIdempotencyRepository,
+# )
+# from services.portfolio.gaps.job_posting_document_store import (
+#     build_job_posting_document_store_from_settings,
+# )
+# from services.portfolio.gaps.routes import postings_router
+# from services.portfolio.gaps.routes import router as gaps_router
+# from services.portfolio.gaps.tracked_board_repository import (
+#     SqlAlchemyTrackedBoardRepository,
+# )
+# from services.portfolio.gaps.tracked_board_routes import (
+#     router as tracked_boards_router,
+# )
+# from services.portfolio.gaps.tracked_board_service import TrackedBoardService
 from services.portfolio.guard_middleware import GuardMiddleware
 from services.portfolio.mcp_limits import (
     enforce_mcp_pdf_render_limit,
@@ -83,13 +87,15 @@ from services.portfolio.mcp_limits import (
 from services.portfolio.pdf_generator import PdfService, ThemeNotFoundError
 from services.portfolio.proxy_scheme_middleware import TrustedProxySchemeMiddleware
 from services.portfolio.rate_limiter import limiter
-from services.portfolio.revisions.revision_repository import (
-    SqlAlchemyRevisionRepository,
-)
-from services.portfolio.revisions.revision_service import RevisionService
+
+# from services.portfolio.revisions.revision_repository import (
+#     SqlAlchemyRevisionRepository,
+# )
+# from services.portfolio.revisions.revision_service import RevisionService
 from services.portfolio.routes import router
 from services.portfolio.settings import settings
-from services.portfolio.tenancy import verify_rls_enforced
+
+# from services.portfolio.tenancy import verify_rls_enforced
 from shared.logging_config import configure_logging
 from shared.tracing import TraceContextMiddleware
 
@@ -349,6 +355,7 @@ mcp_app = mcp.http_app(path="/")
 
 @asynccontextmanager
 async def lifespan(app):
+    # DB-dependent lifespan (commented out for api-core without DB)
     # One app-wide engine/pool (ADR-023), shared by every repository —
     # NOT one engine per repository (see services.portfolio.db's docstring).
     # Run Alembic migrations up to head, then idempotently seed the first
@@ -356,96 +363,147 @@ async def lifespan(app):
     # (dependencies.get_user_service/get_revision_service), same pattern as
     # pdf_service above. Schema is migration-managed, not derived from the
     # current model state via create_all.
-    await upgrade_head(settings.sync_database_url)
-    engine = build_engine(settings.database_url)
-    session_factory = build_session_factory(engine)
+    # await upgrade_head(settings.sync_database_url)
+    # engine = build_engine(settings.database_url)
+    # session_factory = build_session_factory(engine)
     # Migrations connect as the superuser; the app must not. Checked here
     # rather than repaired, because a role that bypasses the tenant policy
     # fails silently — every query succeeds and returns too many rows.
-    await verify_rls_enforced(session_factory)
+    # await verify_rls_enforced(session_factory)
+    #
+    # user_repo = SqlAlchemyUserRepository(session_factory)
+    # user_service = UserService(user_repo)
+    # app.state.user_service = user_service
+    # await seed_first_admin_from_settings(user_service)
+    #
+    # # Revision store: additive (ADR-023 PR4). The tailor route degrades to
+    # # the file-glob path on any RevisionService error rather than 500ing.
+    # revision_repo = SqlAlchemyRevisionRepository(session_factory)
+    # app.state.revision_service = RevisionService(revision_repo)
+    #
+    # # Refresh-token families (ADR-023 PR5): replaces the in-memory store so
+    # # rotation/replay-detection stays correct across restarts and instances.
+    # refresh_token_repo = SqlAlchemyRefreshTokenRepository(session_factory)
+    # app.state.refresh_token_service = RefreshTokenService(refresh_token_repo)
+    #
+    # # Gap analysis: stores job postings and ranks what to learn next.
+    # # Raw posting text/payload live in Firestore, not
+    # # Postgres — gap_repo only ever sees the relational skeleton.
+    # gap_repo = SqlAlchemyGapRepository(session_factory)
+    # posting_docs = build_job_posting_document_store_from_settings()
+    # event_publisher = build_event_publisher_from_settings()
+    # app.state.gap_service = GapService(gap_repo, posting_docs, event_publisher)
+    #
+    # # Retry-safety for POST /api/v1/postings. Only that route needs it today,
+    # # so it stays a repository on app.state rather than a shared dependency
+    # # across every POST — the others are admin-only or already upsert-idempotent.
+    # app.state.idempotency_repository = SqlAlchemyIdempotencyRepository(session_factory)
+    #
+    # # Tracked-board registry: what the ATS refresh trigger polls. Independent
+    # # of AtsBoardRow (gap_repo's fetch-cache) — this is the operator-editable
+    # # "what to track" list, not fetch state.
+    # tracked_board_repo = SqlAlchemyTrackedBoardRepository(session_factory)
+    # app.state.tracked_board_service = TrackedBoardService(tracked_board_repo)
+    #
+    # # Operator documents (live CV, skill bank, JD vocabulary) in Postgres.
+    # # Seeding is idempotent — an existing row is never overwritten, so a
+    # # redeploy cannot clobber edits made through the API. Reads fall back to
+    # # the JSON files, so local dev works with no database at all.
+    # document_service = DocumentService(SqlAlchemyDocumentRepository(session_factory))
+    # app.state.document_service = document_service
+    # # Seeds into the operator's tenant, so the shipped JSON becomes their
+    # # documents rather than belonging to nobody. Skipped when no operator
+    # # exists yet (no FIRST_ADMIN_PASSWORD configured): the files still serve
+    # # every read through the fallback, and the next boot seeds them.
+    # operator_tenant_id = await resolve_operator_tenant_id(user_service)
+    # app.state.operator_tenant_id = operator_tenant_id
+    # if operator_tenant_id is not None:
+    #     await document_service.seed_from_files(
+    #         document_sources(settings), tenant_id=operator_tenant_id
+    #     )
 
-    user_repo = SqlAlchemyUserRepository(session_factory)
-    user_service = UserService(user_repo)
-    app.state.user_service = user_service
-    await seed_first_admin_from_settings(user_service)
+    # File-based CV source for api-core (portfolio) without DB dependency.
+    # Uses the local cv.json file directly via a minimal DocumentService that
+    # reads from the fallback path (data/cv.json).
+    import json
+    from pathlib import Path
 
-    # Revision store: additive (ADR-023 PR4). The tailor route degrades to
-    # the file-glob path on any RevisionService error rather than 500ing.
-    revision_repo = SqlAlchemyRevisionRepository(session_factory)
-    app.state.revision_service = RevisionService(revision_repo)
+    from services.portfolio.documents.document_row import KIND_CV
+    from services.portfolio.documents.document_service import DocumentService
+    from services.portfolio.settings import settings as portfolio_settings
+    from services.portfolio.tenancy import TenantId
 
-    # Refresh-token families (ADR-023 PR5): replaces the in-memory store so
-    # rotation/replay-detection stays correct across restarts and instances.
-    refresh_token_repo = SqlAlchemyRefreshTokenRepository(session_factory)
-    app.state.refresh_token_service = RefreshTokenService(refresh_token_repo)
+    class FileOnlyDocumentRepository:
+        """Minimal document repository that reads only from local files."""
 
-    # Gap analysis: stores job postings and ranks what to learn next.
-    # Raw posting text/payload live in Firestore, not
-    # Postgres — gap_repo only ever sees the relational skeleton.
-    gap_repo = SqlAlchemyGapRepository(session_factory)
-    posting_docs = build_job_posting_document_store_from_settings()
-    event_publisher = build_event_publisher_from_settings()
-    app.state.gap_service = GapService(gap_repo, posting_docs, event_publisher)
+        def __init__(self, cv_data_path: Path) -> None:
+            self._cv_data_path = cv_data_path
 
-    # Retry-safety for POST /api/v1/postings. Only that route needs it today,
-    # so it stays a repository on app.state rather than a shared dependency
-    # across every POST — the others are admin-only or already upsert-idempotent.
-    app.state.idempotency_repository = SqlAlchemyIdempotencyRepository(session_factory)
+        async def get(self, kind: str, *, tenant_id: TenantId) -> Any:
+            if kind == KIND_CV:
+                try:
+                    return type(
+                        "Row",
+                        (),
+                        {
+                            "payload": json.loads(
+                                self._cv_data_path.read_text(encoding="utf-8")
+                            )
+                        },
+                    )()
+                except OSError, json.JSONDecodeError:
+                    return None
+            return None
 
-    # Tracked-board registry: what the ATS refresh trigger polls. Independent
-    # of AtsBoardRow (gap_repo's fetch-cache) — this is the operator-editable
-    # "what to track" list, not fetch state.
-    tracked_board_repo = SqlAlchemyTrackedBoardRepository(session_factory)
-    app.state.tracked_board_service = TrackedBoardService(tracked_board_repo)
+        async def put(
+            self, kind: str, payload: dict[str, Any], *, tenant_id: TenantId
+        ) -> Any:
+            return None
 
-    # Operator documents (live CV, skill bank, JD vocabulary) in Postgres.
-    # Seeding is idempotent — an existing row is never overwritten, so a
-    # redeploy cannot clobber edits made through the API. Reads fall back to
-    # the JSON files, so local dev works with no database at all.
-    document_service = DocumentService(SqlAlchemyDocumentRepository(session_factory))
-    app.state.document_service = document_service
-    # Seeds into the operator's tenant, so the shipped JSON becomes their
-    # documents rather than belonging to nobody. Skipped when no operator
-    # exists yet (no FIRST_ADMIN_PASSWORD configured): the files still serve
-    # every read through the fallback, and the next boot seeds them.
-    operator_tenant_id = await resolve_operator_tenant_id(user_service)
-    app.state.operator_tenant_id = operator_tenant_id
-    if operator_tenant_id is not None:
-        await document_service.seed_from_files(
-            document_sources(settings), tenant_id=operator_tenant_id
-        )
+        async def list_all(self, *, tenant_id: TenantId) -> list[Any]:
+            return []
 
-    # Public CV/PDF surface (routes.py, MCP tools): unauthenticated, so it
-    # always serves the operator's own tenant — see get_operator_tenant_id.
-    # No operator configured yet means no public CV to serve; every route
-    # already degrades on a None pdf_service (503), same as before Phase 3d.
-    pdf_service = None
-    if operator_tenant_id is not None:
-        pdf_service = PdfService(
-            document_service,
-            operator_tenant_id,
-            max_entries=PDF_CACHE_MAX_ENTRIES,
-            max_workers=PDF_EXECUTOR_MAX_WORKERS,
-        )
+        async def delete(self, kind: str, *, tenant_id: TenantId) -> bool:
+            return False
+
+        async def list_kinds(self, *, tenant_id: TenantId) -> list[str]:
+            return [KIND_CV]
+
+    # Create a minimal document service that reads from the local cv.json file
+    cv_data_path = portfolio_settings.cv_data_path
+    file_repo = FileOnlyDocumentRepository(cv_data_path)
+    document_service = DocumentService(file_repo)
+
+    # Use a dummy tenant_id (0) since we're not using multi-tenancy
+    dummy_tenant_id = TenantId(0)
+
+    pdf_service = PdfService(
+        document_service,
+        dummy_tenant_id,
+        max_entries=PDF_CACHE_MAX_ENTRIES,
+        max_workers=PDF_EXECUTOR_MAX_WORKERS,
+    )
     app.state.pdf_service = pdf_service
 
     # CV-intake extraction (Phase 3b): optional, unlike every service above.
     # No API key means the feature is off, not a startup failure — nothing
     # else in this app depends on it.
-    if settings.anthropic_api_key:
-        anthropic_client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
-        app.state.cv_extraction_service = CVExtractionService(anthropic_client)
-        # CV-review critique (Phase 3f.5): a second call over the same
-        # client, extractor + critic composed behind one A2A-shaped
-        # orchestration — see services/portfolio/cv_review/review_service.py.
-        app.state.cv_review_service = CVReviewService(
-            app.state.cv_extraction_service, CVCriticService(anthropic_client)
-        )
+    # DB-dependent services (commented out for api-core without DB)
+    # if settings.anthropic_api_key:
+    #     import anthropic
+    #     anthropic_client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    #     app.state.cv_extraction_service = CVExtractionService(anthropic_client)
+    #     # CV-review critique (Phase 3f.5): a second call over the same
+    #     # client, extractor + critic composed behind one A2A-shaped
+    #     # orchestration — see services/portfolio/cv_review/review_service.py.
+    #     app.state.cv_review_service = CVReviewService(
+    #         app.state.cv_extraction_service, CVCriticService(anthropic_client)
+    #     )
 
     async with mcp_app.lifespan(app):
         yield
 
-    await engine.dispose()
+    # await engine.dispose()
     if pdf_service is not None:
         pdf_service._executor.shutdown(wait=False)
 
@@ -455,10 +513,11 @@ app.mount("/mcp", mcp_app)
 app.mount("/static", StaticFiles(directory=STATIC_DIR))
 app.include_router(router)
 app.include_router(auth_router)
-app.include_router(gaps_router)
-app.include_router(postings_router)
-app.include_router(documents_router)
-app.include_router(tracked_boards_router)
+# DB-dependent routers (commented out for api-core without DB)
+# app.include_router(gaps_router)
+# app.include_router(postings_router)
+# app.include_router(documents_router)
+# app.include_router(tracked_boards_router)
 
 
 # The /cv/tailor endpoint reads the raw body itself (multi-format: JSON,

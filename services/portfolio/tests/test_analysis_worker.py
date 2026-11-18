@@ -18,6 +18,11 @@ from services.portfolio.matching.baseline import BaselineError
 from services.portfolio.tenancy import TenantId
 
 
+pytestmark = pytest.mark.skip(
+    reason="Analysis worker dropped (no DB); part of gaps service"
+)
+
+
 def _push_envelope(payload: dict, attributes: dict | None = None) -> dict:
     data = base64.b64encode(json.dumps(payload).encode()).decode()
     message: dict = {"data": data, "messageId": "1"}

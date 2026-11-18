@@ -106,11 +106,12 @@ variable "enable_cloud_sql" {
 # Secret container + version are script-owned (scripts/deploy-cloud-run.sh
 # bootstrap_secrets(), cv-db-password) — never in .tfvars or state. This var
 # only names the secret ID for modules/cloud_sql to read via data source.
-variable "cloud_sql_db_password_secret_id" {
-  description = "Secret Manager secret ID holding the Cloud SQL app user password."
-  type        = string
-  default     = "cv-db-password"
-}
+# DISABLED: Cloud SQL removed (enable_cloud_sql=false)
+# variable "cloud_sql_db_password_secret_id" {
+#   description = "Secret Manager secret ID holding the Cloud SQL app user password."
+#   type        = string
+#   default     = "cv-db-password"
+# }
 
 # Firestore for raw JD documents (Phase 2b PR8). Defaults to false — every
 # earlier PR stores postings in Postgres, so this is purely additive and
@@ -121,11 +122,12 @@ variable "enable_firestore" {
   default     = false
 }
 
-variable "firestore_location" {
-  description = "Firestore location id. Not always identical to var.region's Cloud Run region name — check `gcloud firestore locations list` for the project."
-  type        = string
-  default     = "eur3"
-}
+# DISABLED: Firestore removed (enable_firestore=false)
+# variable "firestore_location" {
+#   description = "Firestore location id. Not always identical to var.region's Cloud Run region name — check `gcloud firestore locations list` for the project."
+#   type        = string
+#   default     = "eur3"
+# }
 
 # PostingChanged events (Phase 3f). Defaults to false — every earlier PR
 # analyzes postings inline in sync_board, so this is purely additive and
@@ -152,42 +154,43 @@ variable "database_url_secret_id" {
 # run on different cadences. Cloud Scheduler is a general cron scheduler, not
 # limited to once a day; the ETag-based conditional GET in gaps/ats.py keeps
 # a more frequent schedule cheap against unchanged boards.
-variable "ats_refresh_groups" {
-  description = <<-EOT
-    Cloud Scheduler jobs polling the ATS refresh trigger, keyed by job-name
-    suffix (job becomes "ats-refresh-<key>"). Each entry becomes its own
-    scheduler job hitting POST /trigger (with ?group=<group> appended when
-    group is set).
-      <key> = {
-        schedule = "0 8 * * *"   # unix-cron
-        timezone = "Etc/UTC"     # IANA timezone
-        group    = null          # tracked_boards.group to scope to, or null for "every active board"
-      }
-    Example: to add an hourly sweep of a "priority" group alongside the
-    once-daily default, set in terraform.tfvars:
-      ats_refresh_groups = {
-        default  = { schedule = "0 8 * * *", group = null }
-        priority = { schedule = "0 * * * *", group = "priority" }
-      }
-  EOT
-  type = map(object({
-    schedule = string
-    timezone = optional(string, "Etc/UTC")
-    group    = optional(string)
-  }))
-  # Matches the previously deployed behavior exactly — one ungrouped daily
-  # job. Applying this module with zero tfvars changes is a no-op; add an
-  # entry in terraform.tfvars when ready, per the example above. This
-  # default deliberately does NOT turn on a second scheduler job (and its
-  # cost) for every user of this module.
-  default = {
-    default = {
-      schedule = "0 8 * * *" # once daily, 08:00
-      timezone = "Etc/UTC"
-      group    = null
-    }
-  }
-}
+# DISABLED: ATS/Cloud Scheduler removed
+# variable "ats_refresh_groups" {
+#   description = <<-EOT
+#     Cloud Scheduler jobs polling the ATS refresh trigger, keyed by job-name
+#     suffix (job becomes "ats-refresh-<key>"). Each entry becomes its own
+#     scheduler job hitting POST /trigger (with ?group=<group> appended when
+#     group is set).
+#       <key> = {
+#         schedule = "0 8 * * *"   # unix-cron
+#         timezone = "Etc/UTC"     # IANA timezone
+#         group    = null          # tracked_boards.group to scope to, or null for "every active board"
+#       }
+#     Example: to add an hourly sweep of a "priority" group alongside the
+#     once-daily default, set in terraform.tfvars:
+#       ats_refresh_groups = {
+#         default  = { schedule = "0 8 * * *", group = null }
+#         priority = { schedule = "0 * * * *", group = "priority" }
+#       }
+#   EOT
+#   type = map(object({
+#     schedule = string
+#     timezone = optional(string, "Etc/UTC")
+#     group    = optional(string)
+#   }))
+#   # Matches the previously deployed behavior exactly — one ungrouped daily
+#   # job. Applying this module with zero tfvars changes is a no-op; add an
+#   # entry in terraform.tfvars when ready, per the example above. This
+#   # default deliberately does NOT turn on a second scheduler job (and its
+#   # cost) for every user of this module.
+#   default = {
+#     default = {
+#       schedule = "0 8 * * *" # once daily, 08:00
+#       timezone = "Etc/UTC"
+#       group    = null
+#     }
+#   }
+# }
 
 # Private upload bucket for user content (avatars/photos). Signed-URL only writes.
 # Kept commented with the module (main.tf) — uncomment both together to provision.

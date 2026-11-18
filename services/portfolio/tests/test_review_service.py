@@ -11,9 +11,16 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import pytest
+
 from services.portfolio.cv_extraction import CVExtractionService
 from services.portfolio.cv_review.critic_agent import CVCriticService
 from services.portfolio.cv_review.review_service import CVReviewService
+
+
+pytestmark = pytest.mark.skip(
+    reason="CV review service dropped (no DB); requires Anthropic API"
+)
 
 
 def _tool_use_response(tool_name: str, input_data: dict):

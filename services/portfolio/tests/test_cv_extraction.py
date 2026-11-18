@@ -21,6 +21,11 @@ from services.portfolio.cv_extraction import (
 )
 
 
+pytestmark = pytest.mark.skip(
+    reason="CV extraction service dropped (no DB); requires Anthropic API"
+)
+
+
 def _tool_use_response(input_data: dict):
     block = SimpleNamespace(type="tool_use", name="record_cv", input=input_data)
     return SimpleNamespace(

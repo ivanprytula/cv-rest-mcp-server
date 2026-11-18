@@ -11,6 +11,11 @@ import pytest
 from fastapi import status
 
 
+pytestmark = pytest.mark.skip(
+    reason="Documents service dropped (no DB); tests require PostgreSQL"
+)
+
+
 DOCS = "/api/v1/documents"
 
 

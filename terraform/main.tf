@@ -12,16 +12,16 @@ module "gcp_apis" {
 
 # Cloud SQL Postgres for the auth/user store (ADR-023 Phase 2). Infra-only in
 # this PR — no service reads it yet; PR3 wires DATABASE_URL into api-core.
-module "cloud_sql" {
-  count      = var.enable_cloud_sql ? 1 : 0
-  depends_on = [module.gcp_apis]
-  source     = "./modules/cloud_sql"
-
-  project               = var.project_id
-  region                = var.region
-  db_password_secret_id = var.cloud_sql_db_password_secret_id
-  labels                = merge(local.base_labels, { service = "cloud-sql" })
-}
+# module "cloud_sql" {
+#   count      = var.enable_cloud_sql ? 1 : 0
+#   depends_on = [module.gcp_apis]
+#   source     = "./modules/cloud_sql"
+#
+#   project               = var.project_id
+#   region                = var.region
+#   db_password_secret_id = var.cloud_sql_db_password_secret_id
+#   labels                = merge(local.base_labels, { service = "cloud-sql" })
+# }
 
 # IAM, service accounts, and secrets (centralized, away from shell scripts).
 # No module-level depends_on on gcp_apis: the APIs this module's resources
@@ -38,6 +38,7 @@ module "iam_secrets" {
 
   project                = var.project_id
   region                 = var.region
+  services               = var.services
   jwt_signing_secret_id  = var.jwt_signing_secret_id
   api_core_secret_ids    = var.api_core_secret_ids
   database_url_secret_id = var.database_url_secret_id
@@ -49,33 +50,33 @@ module "iam_secrets" {
 
 # Firestore for raw JD documents (Phase 2b PR8). Depends on iam_secrets for
 # the runtime service account emails it grants roles/datastore.user to.
-module "firestore" {
-  count      = var.enable_firestore ? 1 : 0
-  depends_on = [module.gcp_apis]
-  source     = "./modules/firestore"
-
-  project  = var.project_id
-  location = var.firestore_location
-  runtime_service_account_emails = [
-    module.iam_secrets.api_core_runtime_sa_email,
-    module.iam_secrets.ats_refresh_trigger_runtime_sa_email,
-  ]
-}
+# module "firestore" {
+#   count      = var.enable_firestore ? 1 : 0
+#   depends_on = [module.gcp_apis]
+#   source     = "./modules/firestore"
+#
+#   project  = var.project_id
+#   location = var.firestore_location
+#   runtime_service_account_emails = [
+#     module.iam_secrets.api_core_runtime_sa_email,
+#     module.iam_secrets.ats_refresh_trigger_runtime_sa_email,
+#   ]
+# }
 
 # PostingChanged events (Phase 3f). Depends on iam_secrets for the runtime
 # service account emails it grants roles/pubsub.publisher to.
-module "pubsub" {
-  count      = var.enable_pubsub_events ? 1 : 0
-  depends_on = [module.gcp_apis]
-  source     = "./modules/pubsub"
-
-  project = var.project_id
-  publisher_service_account_emails = [
-    module.iam_secrets.api_core_runtime_sa_email,
-    module.iam_secrets.ats_refresh_trigger_runtime_sa_email,
-  ]
-  labels = merge(local.base_labels, { service = "pubsub" })
-}
+# module "pubsub" {
+#   count      = var.enable_pubsub_events ? 1 : 0
+#   depends_on = [module.gcp_apis]
+#   source     = "./modules/pubsub"
+#
+#   project = var.project_id
+#   publisher_service_account_emails = [
+#     module.iam_secrets.api_core_runtime_sa_email,
+#     module.iam_secrets.ats_refresh_trigger_runtime_sa_email,
+#   ]
+#   labels = merge(local.base_labels, { service = "pubsub" })
+# }
 
 # GitHub Workload Identity Federation for CI/CD (optional)
 module "github_wif" {
@@ -147,9 +148,9 @@ module "run" {
   memory                = each.value.memory
   ingress               = each.value.ingress
   command               = each.value.command
-  # api-core, the ATS refresh trigger, and the analysis worker talk to
-  # Postgres directly; games/spa-origin never mount the socket.
-  cloud_sql_instances = contains(["api-core", "ats-refresh-trigger", "analysis-worker"], each.key) && var.enable_cloud_sql ? [module.cloud_sql[0].connection_name] : []
+  # Only api-core talks to Postgres directly; games/spa-origin never mount the socket.
+  # Cloud SQL module is disabled (commented out) — no socket mounted.
+  cloud_sql_instances = []
   labels              = merge(local.base_labels, { service = each.key })
 }
 
@@ -157,145 +158,145 @@ module "run" {
 # service via native OIDC. Gated on the service actually being defined in
 # var.services, so a services map without it (e.g. before an operator
 # configures ATS_TRACKED_BOARDS) doesn't break `terraform plan`.
-locals {
-  ats_trigger_enabled = contains(keys(var.services), "ats-refresh-trigger")
-}
+# locals {
+#   ats_trigger_enabled = contains(keys(var.services), "ats-refresh-trigger")
+# }
 
-# run.invoker scoped to exactly this one service — not project-wide, and
-# distinct from api-core's allUsers grant (this service has none; Cloud
-# Run's platform enforces the check for every other caller by default-deny).
-resource "google_cloud_run_v2_service_iam_member" "ats_refresh_trigger_invoker" {
-  count = local.ats_trigger_enabled ? 1 : 0
-
-  project  = var.project_id
-  location = var.region
-  name     = module.run["ats-refresh-trigger"].service_name
-  role     = "roles/run.invoker"
-  member   = "serviceAccount:${module.iam_secrets.ats_refresh_trigger_runtime_sa_email}"
-}
-
-# One scheduler job per var.ats_refresh_groups entry — adding a new
-# group/cadence is a tfvars edit, not a new resource block. The default
-# value (one "default" entry, group = null) matches the previously single,
-# non-for_each resource's exact behavior.
-resource "google_cloud_scheduler_job" "ats_refresh" {
-  for_each    = local.ats_trigger_enabled ? var.ats_refresh_groups : {}
-  project     = var.project_id
-  region      = var.region
-  name        = "ats-refresh-${each.key}"
-  description = each.value.group != null ? "Polls the '${each.value.group}' group of tracked ATS boards and re-analyzes changed postings." : "Polls tracked ATS boards and re-analyzes changed postings."
-  schedule    = each.value.schedule
-  time_zone   = each.value.timezone
-  # Refresh may touch several boards sequentially (gap_service.py caps
-  # concurrency at 2) — generous deadline so a slow board doesn't cut the
-  # run short before close_missing_postings runs for the others.
-  attempt_deadline = "300s"
-
-  http_target {
-    http_method = "POST"
-    uri = each.value.group != null ? (
-      "${module.run["ats-refresh-trigger"].service_uri}/trigger?group=${each.value.group}"
-      ) : (
-      "${module.run["ats-refresh-trigger"].service_uri}/trigger"
-    )
-
-    oidc_token {
-      service_account_email = module.iam_secrets.ats_refresh_trigger_runtime_sa_email
-      audience              = module.run["ats-refresh-trigger"].service_uri
-    }
-  }
-
-  depends_on = [
-    module.gcp_apis,
-    google_cloud_run_v2_service_iam_member.ats_refresh_trigger_invoker,
-  ]
-}
-
-# Transactional-outbox relay (Phase 3g). Rides the ats-refresh-trigger
-# service rather than its own: same OIDC caller, same private ingress, no new
-# service account or IAM binding. Runs every minute — the outbox is the only
-# path a PostingChanged event takes to Pub/Sub, so this cadence is the
-# queue's latency floor.
-resource "google_cloud_scheduler_job" "outbox_dispatch" {
-  count       = local.ats_trigger_enabled ? 1 : 0
-  project     = var.project_id
-  region      = var.region
-  name        = "outbox-dispatch"
-  description = "Publishes pending event_outbox rows to Pub/Sub and prunes published ones."
-  schedule    = "* * * * *"
-  time_zone   = "Etc/UTC"
-  # One batch is capped at 100 rows and each publish is a single Pub/Sub
-  # round trip, so a run is short; a generous deadline only matters for a
-  # backlog drained after an outage.
-  attempt_deadline = "300s"
-
-  http_target {
-    http_method = "POST"
-    uri         = "${module.run["ats-refresh-trigger"].service_uri}/dispatch-outbox"
-
-    oidc_token {
-      service_account_email = module.iam_secrets.ats_refresh_trigger_runtime_sa_email
-      audience              = module.run["ats-refresh-trigger"].service_uri
-    }
-  }
-
-  depends_on = [
-    module.gcp_apis,
-    google_cloud_run_v2_service_iam_member.ats_refresh_trigger_invoker,
-  ]
-}
-
-# Phase 3f PR3: the posting-changed push subscription invokes the private
-# analysis-worker service via native OIDC, same pattern as the ATS refresh
-# Scheduler job above. Gated on both the topic (enable_pubsub_events) and
-# the worker service being defined in var.services.
-locals {
-  analysis_worker_enabled = contains(keys(var.services), "analysis-worker") && var.enable_pubsub_events
-}
-
-# run.invoker scoped to exactly this one service, mirroring
-# ats_refresh_trigger_invoker's reasoning above.
-resource "google_cloud_run_v2_service_iam_member" "analysis_worker_invoker" {
-  count = local.analysis_worker_enabled ? 1 : 0
-
-  project  = var.project_id
-  location = var.region
-  name     = module.run["analysis-worker"].service_name
-  role     = "roles/run.invoker"
-  member   = "serviceAccount:${module.iam_secrets.analysis_worker_runtime_sa_email}"
-}
-
-resource "google_pubsub_subscription" "posting_changed_push" {
-  count   = local.analysis_worker_enabled ? 1 : 0
-  project = var.project_id
-  name    = "posting-changed-push"
-  topic   = module.pubsub[0].posting_changed_topic_id
-
-  push_config {
-    push_endpoint = "${module.run["analysis-worker"].service_uri}/pubsub/posting-changed"
-    oidc_token {
-      service_account_email = module.iam_secrets.analysis_worker_runtime_sa_email
-      audience              = module.run["analysis-worker"].service_uri
-    }
-  }
-
-  # Pub/Sub's own retry, not a hand-rolled one in analysis_worker.py — a
-  # non-2xx nacks, this policy controls redelivery backoff.
-  retry_policy {
-    minimum_backoff = "10s"
-    maximum_backoff = "600s"
-  }
-
-  dead_letter_policy {
-    dead_letter_topic     = module.pubsub[0].posting_changed_dlq_topic_id
-    max_delivery_attempts = 5
-  }
-
-  depends_on = [
-    module.gcp_apis,
-    google_cloud_run_v2_service_iam_member.analysis_worker_invoker,
-  ]
-}
+# # run.invoker scoped to exactly this one service — not project-wide, and
+# # distinct from api-core's allUsers grant (this service has none; Cloud
+# # Run's platform enforces the check for every other caller by default-deny).
+# resource "google_cloud_run_v2_service_iam_member" "ats_refresh_trigger_invoker" {
+#   count = local.ats_trigger_enabled ? 1 : 0
+#
+#   project  = var.project_id
+#   location = var.region
+#   name     = module.run["ats-refresh-trigger"].service_name
+#   role     = "roles/run.invoker"
+#   member   = "serviceAccount:${module.iam_secrets.ats_refresh_trigger_runtime_sa_email}"
+# }
+#
+# # One scheduler job per var.ats_refresh_groups entry — adding a new
+# # group/cadence is a tfvars edit, not a new resource block. The default
+# # value (one "default" entry, group = null) matches the previously single,
+# # non-for_each resource's exact behavior.
+# resource "google_cloud_scheduler_job" "ats_refresh" {
+#   for_each    = local.ats_trigger_enabled ? var.ats_refresh_groups : {}
+#   project     = var.project_id
+#   region      = var.region
+#   name        = "ats-refresh-${each.key}"
+#   description = each.value.group != null ? "Polls the '${each.value.group}' group of tracked ATS boards and re-analyzes changed postings." : "Polls tracked ATS boards and re-analyzes changed postings."
+#   schedule    = each.value.schedule
+#   time_zone   = each.value.timezone
+#   # Refresh may touch several boards sequentially (gap_service.py caps
+#   # concurrency at 2) — generous deadline so a slow board doesn't cut the
+#   # run short before close_missing_postings runs for the others.
+#   attempt_deadline = "300s"
+#
+#   http_target {
+#     http_method = "POST"
+#     uri = each.value.group != null ? (
+#       "${module.run["ats-refresh-trigger"].service_uri}/trigger?group=${each.value.group}"
+#       ) : (
+#       "${module.run["ats-refresh-trigger"].service_uri}/trigger"
+#     )
+#
+#     oidc_token {
+#       service_account_email = module.iam_secrets.ats_refresh_trigger_runtime_sa_email
+#       audience              = module.run["ats-refresh-trigger"].service_uri
+#     }
+#   }
+#
+#   depends_on = [
+#     module.gcp_apis,
+#     google_cloud_run_v2_service_iam_member.ats_refresh_trigger_invoker,
+#   ]
+# }
+#
+# # Transactional-outbox relay (Phase 3g). Rides the ats-refresh-trigger
+# # service rather than its own: same OIDC caller, same private ingress, no new
+# # service account or IAM binding. Runs every minute — the outbox is the only
+# # path a PostingChanged event takes to Pub/Sub, so this cadence is the
+# # queue's latency floor.
+# resource "google_cloud_scheduler_job" "outbox_dispatch" {
+#   count       = local.ats_trigger_enabled ? 1 : 0
+#   project     = var.project_id
+#   region      = var.region
+#   name        = "outbox-dispatch"
+#   description = "Publishes pending event_outbox rows to Pub/Sub and prunes published ones."
+#   schedule    = "* * * * *"
+#   time_zone   = "Etc/UTC"
+#   # One batch is capped at 100 rows and each publish is a single Pub/Sub
+#   # round trip, so a run is short; a generous deadline only matters for a
+#   # backlog drained after an outage.
+#   attempt_deadline = "300s"
+#
+#   http_target {
+#     http_method = "POST"
+#     uri         = "${module.run["ats-refresh-trigger"].service_uri}/dispatch-outbox"
+#
+#     oidc_token {
+#       service_account_email = module.iam_secrets.ats_refresh_trigger_runtime_sa_email
+#       audience              = module.run["ats-refresh-trigger"].service_uri
+#     }
+#   }
+#
+#   depends_on = [
+#     module.gcp_apis,
+#     google_cloud_run_v2_service_iam_member.ats_refresh_trigger_invoker,
+#   ]
+# }
+#
+# # Phase 3f PR3: the posting-changed push subscription invokes the private
+# # analysis-worker service via native OIDC, same pattern as the ATS refresh
+# # Scheduler job above. Gated on both the topic (enable_pubsub_events) and
+# # the worker service being defined in var.services.
+# locals {
+#   analysis_worker_enabled = contains(keys(var.services), "analysis-worker") && var.enable_pubsub_events
+# }
+#
+# # run.invoker scoped to exactly this one service, mirroring
+# # ats_refresh_trigger_invoker's reasoning above.
+# resource "google_cloud_run_v2_service_iam_member" "analysis_worker_invoker" {
+#   count = local.analysis_worker_enabled ? 1 : 0
+#
+#   project  = var.project_id
+#   location = var.region
+#   name     = module.run["analysis-worker"].service_name
+#   role     = "roles/run.invoker"
+#   member   = "serviceAccount:${module.iam_secrets.analysis_worker_runtime_sa_email}"
+# }
+#
+# resource "google_pubsub_subscription" "posting_changed_push" {
+#   count   = local.analysis_worker_enabled ? 1 : 0
+#   project = var.project_id
+#   name    = "posting-changed-push"
+#   topic   = module.pubsub[0].posting_changed_topic_id
+#
+#   push_config {
+#     push_endpoint = "${module.run["analysis-worker"].service_uri}/pubsub/posting-changed"
+#     oidc_token {
+#       service_account_email = module.iam_secrets.analysis_worker_runtime_sa_email
+#       audience              = module.run["analysis-worker"].service_uri
+#     }
+#   }
+#
+#   # Pub/Sub's own retry, not a hand-rolled one in analysis_worker.py — a
+#   # non-2xx nacks, this policy controls redelivery backoff.
+#   retry_policy {
+#     minimum_backoff = "10s"
+#     maximum_backoff = "600s"
+#   }
+#
+#   dead_letter_policy {
+#     dead_letter_topic     = module.pubsub[0].posting_changed_dlq_topic_id
+#     max_delivery_attempts = 5
+#   }
+#
+#   depends_on = [
+#     module.gcp_apis,
+#     google_cloud_run_v2_service_iam_member.analysis_worker_invoker,
+#   ]
+# }
 
 # HTTPS edge: global IP, managed certs, URL-map host routing, Cloud CDN bucket.
 module "edge_lb" {

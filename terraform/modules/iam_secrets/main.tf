@@ -8,12 +8,14 @@ resource "google_service_account" "api_core_runtime" {
 }
 
 resource "google_service_account" "spa_origin_runtime" {
+  count        = contains(keys(var.services), "spa-origin") ? 1 : 0
   account_id   = "spa-origin-runtime"
   display_name = "spa-origin Cloud Run service account"
   project      = var.project
 }
 
 resource "google_service_account" "api_games_runtime" {
+  count        = contains(keys(var.services), "api-games") ? 1 : 0
   account_id   = "api-games-runtime"
   display_name = "api-games Cloud Run service account"
   project      = var.project
@@ -29,6 +31,7 @@ resource "google_service_account" "deployer" {
 # token (Phase 2b PR4) — granted run.invoker on that one service, nowhere
 # else, in main.tf where the service itself is defined.
 resource "google_service_account" "ats_refresh_trigger_runtime" {
+  count        = contains(keys(var.services), "ats-refresh-trigger") ? 1 : 0
   account_id   = "ats-refresh-trigger-runtime"
   display_name = "ATS refresh trigger Cloud Run service account"
   project      = var.project
@@ -39,6 +42,7 @@ resource "google_service_account" "ats_refresh_trigger_runtime" {
 # ats_refresh_trigger_runtime above, granted run.invoker on that one
 # service, nowhere else, in main.tf where the service itself is defined.
 resource "google_service_account" "analysis_worker_runtime" {
+  count        = contains(keys(var.services), "analysis-worker") ? 1 : 0
   account_id   = "analysis-worker-runtime"
   display_name = "Analysis worker Cloud Run service account"
   project      = var.project
@@ -276,25 +280,29 @@ resource "google_service_account_iam_member" "deployer_actas_api_core" {
 }
 
 resource "google_service_account_iam_member" "deployer_actas_spa_origin" {
-  service_account_id = google_service_account.spa_origin_runtime.name
+  count              = contains(keys(var.services), "spa-origin") ? 1 : 0
+  service_account_id = google_service_account.spa_origin_runtime[0].name
   role               = "roles/iam.serviceAccountUser"
   member             = "serviceAccount:${google_service_account.deployer.email}"
 }
 
 resource "google_service_account_iam_member" "deployer_actas_api_games" {
-  service_account_id = google_service_account.api_games_runtime.name
+  count              = contains(keys(var.services), "api-games") ? 1 : 0
+  service_account_id = google_service_account.api_games_runtime[0].name
   role               = "roles/iam.serviceAccountUser"
   member             = "serviceAccount:${google_service_account.deployer.email}"
 }
 
 resource "google_service_account_iam_member" "deployer_actas_ats_refresh_trigger" {
-  service_account_id = google_service_account.ats_refresh_trigger_runtime.name
+  count              = contains(keys(var.services), "ats-refresh-trigger") ? 1 : 0
+  service_account_id = google_service_account.ats_refresh_trigger_runtime[0].name
   role               = "roles/iam.serviceAccountUser"
   member             = "serviceAccount:${google_service_account.deployer.email}"
 }
 
 resource "google_service_account_iam_member" "deployer_actas_analysis_worker" {
-  service_account_id = google_service_account.analysis_worker_runtime.name
+  count              = contains(keys(var.services), "analysis-worker") ? 1 : 0
+  service_account_id = google_service_account.analysis_worker_runtime[0].name
   role               = "roles/iam.serviceAccountUser"
   member             = "serviceAccount:${google_service_account.deployer.email}"
 }
@@ -319,15 +327,17 @@ resource "google_project_iam_member" "api_core_gcr_pull" {
 }
 
 resource "google_project_iam_member" "spa_origin_gcr_pull" {
+  count   = contains(keys(var.services), "spa-origin") ? 1 : 0
   project = var.project
   role    = "roles/storage.objectViewer"
-  member  = "serviceAccount:${google_service_account.spa_origin_runtime.email}"
+  member  = "serviceAccount:${google_service_account.spa_origin_runtime[0].email}"
 }
 
 resource "google_project_iam_member" "api_games_gcr_pull" {
+  count   = contains(keys(var.services), "api-games") ? 1 : 0
   project = var.project
   role    = "roles/storage.objectViewer"
-  member  = "serviceAccount:${google_service_account.api_games_runtime.email}"
+  member  = "serviceAccount:${google_service_account.api_games_runtime[0].email}"
 }
 
 # Runtime SAs pull images from the new cv-images Artifact Registry repo.
@@ -340,19 +350,21 @@ resource "google_artifact_registry_repository_iam_member" "api_core_cv_images_re
 }
 
 resource "google_artifact_registry_repository_iam_member" "spa_origin_cv_images_reader" {
+  count      = contains(keys(var.services), "spa-origin") ? 1 : 0
   project    = var.project
   location   = google_artifact_registry_repository.cv_images.location
   repository = google_artifact_registry_repository.cv_images.name
   role       = "roles/artifactregistry.reader"
-  member     = "serviceAccount:${google_service_account.spa_origin_runtime.email}"
+  member     = "serviceAccount:${google_service_account.spa_origin_runtime[0].email}"
 }
 
 resource "google_artifact_registry_repository_iam_member" "api_games_cv_images_reader" {
+  count      = contains(keys(var.services), "api-games") ? 1 : 0
   project    = var.project
   location   = google_artifact_registry_repository.cv_images.location
   repository = google_artifact_registry_repository.cv_images.name
   role       = "roles/artifactregistry.reader"
-  member     = "serviceAccount:${google_service_account.api_games_runtime.email}"
+  member     = "serviceAccount:${google_service_account.api_games_runtime[0].email}"
 }
 
 # Cloud SQL Auth Proxy socket mount (Phase 2) requires the runtime SA to
@@ -391,75 +403,81 @@ resource "google_secret_manager_secret_iam_member" "api_core_secrets" {
 # ATS refresh trigger (Phase 2b PR4): same DATABASE_URL secret as api-core,
 # nothing else — it has no JWT signing, no CV bucket, no other runtime need.
 resource "google_project_iam_member" "ats_refresh_trigger_gcr_pull" {
+  count   = contains(keys(var.services), "ats-refresh-trigger") ? 1 : 0
   project = var.project
   role    = "roles/storage.objectViewer"
-  member  = "serviceAccount:${google_service_account.ats_refresh_trigger_runtime.email}"
+  member  = "serviceAccount:${google_service_account.ats_refresh_trigger_runtime[0].email}"
 }
 
 resource "google_project_iam_member" "ats_refresh_trigger_logging" {
+  count   = contains(keys(var.services), "ats-refresh-trigger") ? 1 : 0
   project = var.project
   role    = "roles/logging.logWriter"
-  member  = "serviceAccount:${google_service_account.ats_refresh_trigger_runtime.email}"
+  member  = "serviceAccount:${google_service_account.ats_refresh_trigger_runtime[0].email}"
 }
 
 resource "google_artifact_registry_repository_iam_member" "ats_refresh_trigger_cv_images_reader" {
+  count      = contains(keys(var.services), "ats-refresh-trigger") ? 1 : 0
   project    = var.project
   location   = google_artifact_registry_repository.cv_images.location
   repository = google_artifact_registry_repository.cv_images.name
   role       = "roles/artifactregistry.reader"
-  member     = "serviceAccount:${google_service_account.ats_refresh_trigger_runtime.email}"
+  member     = "serviceAccount:${google_service_account.ats_refresh_trigger_runtime[0].email}"
 }
 
 resource "google_project_iam_member" "ats_refresh_trigger_cloudsql_client" {
-  count   = var.enable_cloud_sql ? 1 : 0
+  count   = contains(keys(var.services), "ats-refresh-trigger") && var.enable_cloud_sql ? 1 : 0
   project = var.project
   role    = "roles/cloudsql.client"
-  member  = "serviceAccount:${google_service_account.ats_refresh_trigger_runtime.email}"
+  member  = "serviceAccount:${google_service_account.ats_refresh_trigger_runtime[0].email}"
 }
 
 resource "google_secret_manager_secret_iam_member" "ats_refresh_trigger_database_url" {
-  count     = var.database_url_secret_id != "" ? 1 : 0
+  count     = contains(keys(var.services), "ats-refresh-trigger") && var.database_url_secret_id != "" ? 1 : 0
   project   = var.project
   secret_id = var.database_url_secret_id
   role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.ats_refresh_trigger_runtime.email}"
+  member    = "serviceAccount:${google_service_account.ats_refresh_trigger_runtime[0].email}"
 }
 
 # Analysis worker (Phase 3f PR3): same DATABASE_URL secret as api-core,
 # nothing else — it has no JWT signing, no CV bucket, no other runtime need.
 resource "google_project_iam_member" "analysis_worker_gcr_pull" {
+  count   = contains(keys(var.services), "analysis-worker") ? 1 : 0
   project = var.project
   role    = "roles/storage.objectViewer"
-  member  = "serviceAccount:${google_service_account.analysis_worker_runtime.email}"
+  member  = "serviceAccount:${google_service_account.analysis_worker_runtime[0].email}"
 }
 
 resource "google_project_iam_member" "analysis_worker_logging" {
+  count   = contains(keys(var.services), "analysis-worker") ? 1 : 0
   project = var.project
   role    = "roles/logging.logWriter"
-  member  = "serviceAccount:${google_service_account.analysis_worker_runtime.email}"
+  member  = "serviceAccount:${google_service_account.analysis_worker_runtime[0].email}"
 }
 
 resource "google_artifact_registry_repository_iam_member" "analysis_worker_cv_images_reader" {
+  count      = contains(keys(var.services), "analysis-worker") ? 1 : 0
   project    = var.project
   location   = google_artifact_registry_repository.cv_images.location
   repository = google_artifact_registry_repository.cv_images.name
   role       = "roles/artifactregistry.reader"
-  member     = "serviceAccount:${google_service_account.analysis_worker_runtime.email}"
+  member     = "serviceAccount:${google_service_account.analysis_worker_runtime[0].email}"
 }
 
 resource "google_project_iam_member" "analysis_worker_cloudsql_client" {
-  count   = var.enable_cloud_sql ? 1 : 0
+  count   = contains(keys(var.services), "analysis-worker") && var.enable_cloud_sql ? 1 : 0
   project = var.project
   role    = "roles/cloudsql.client"
-  member  = "serviceAccount:${google_service_account.analysis_worker_runtime.email}"
+  member  = "serviceAccount:${google_service_account.analysis_worker_runtime[0].email}"
 }
 
 resource "google_secret_manager_secret_iam_member" "analysis_worker_database_url" {
-  count     = var.database_url_secret_id != "" ? 1 : 0
+  count     = contains(keys(var.services), "analysis-worker") && var.database_url_secret_id != "" ? 1 : 0
   project   = var.project
   secret_id = var.database_url_secret_id
   role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.analysis_worker_runtime.email}"
+  member    = "serviceAccount:${google_service_account.analysis_worker_runtime[0].email}"
 }
 
 # Cloud Build permissions (shared across all builders)

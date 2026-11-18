@@ -176,8 +176,8 @@ jobs:
           }
 
           build_service "api-core" "Dockerfile"
-          build_service "api-games" "services/games/Dockerfile"
-          build_service "spa-origin" "frontend/Dockerfile" "PORTFOLIO_BASE_URL=${PORTFOLIO_BASE_URL}"
+          # build_service "api-games" "services/games/Dockerfile"
+          # build_service "spa-origin" "frontend/Dockerfile" "PORTFOLIO_BASE_URL=${PORTFOLIO_BASE_URL}"
 
   deploy:
     needs: build
@@ -209,7 +209,7 @@ jobs:
           SHORT_SHA=${GIT_SHA:0:7}
           REPO="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT}/cv-images"
 
-          for svc in "api-core" "api-games" "spa-origin"; do
+          for svc in "api-core"; do
             gcloud run deploy "$svc" \
               --project "${GCP_PROJECT}" \
               --region "${GCP_REGION}" \
@@ -240,7 +240,7 @@ jobs:
           GCP_PROJECT: ${{ vars.GCP_PROJECT }}
           GCP_REGION: ${{ vars.GCP_REGION }}
         run: |
-          for svc in "api-core" "spa-origin" "api-games"; do
+          for svc in "api-core"; do
             echo "=== $svc service ==="
             gcloud run services describe "$svc" \
               --project "${{ vars.GCP_PROJECT }}" \

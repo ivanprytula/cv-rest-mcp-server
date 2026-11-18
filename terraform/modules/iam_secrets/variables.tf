@@ -45,6 +45,23 @@ variable "database_url_secret_id" {
   default     = ""
 }
 
+variable "services" {
+  description = "Map of Cloud Run workloads (keys) to their config. Used to conditionally create service accounts and IAM bindings only for services that exist."
+  type = map(object({
+    image                 = string
+    service_account       = string
+    allow_unauthenticated = bool
+    env_vars              = optional(map(string), {})
+    secrets               = optional(map(object({ secret_id = string, version = string })), {})
+    max_instances         = optional(number, 1)
+    min_instances         = optional(number, 0)
+    memory                = optional(string, "512Mi")
+    ingress               = optional(string, "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER")
+    command               = optional(list(string), [])
+  }))
+  default = {}
+}
+
 variable "labels" {
   description = "GCP resource labels for cost attribution (e.g. { service = \"iam-secrets\", environment = \"production\" })."
   type        = map(string)

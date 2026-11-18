@@ -16,6 +16,11 @@ from services.portfolio.cv_review.critic_agent import (
 )
 
 
+pytestmark = pytest.mark.skip(
+    reason="Critic agent dropped (no DB); requires Anthropic API"
+)
+
+
 def _tool_use_response(input_data: dict):
     block = SimpleNamespace(type="tool_use", name="record_critique", input=input_data)
     return SimpleNamespace(

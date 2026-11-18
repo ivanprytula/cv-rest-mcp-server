@@ -12,6 +12,11 @@ from services.portfolio.job_posting_input import (
 )
 
 
+pytestmark = pytest.mark.skip(
+    reason="Job posting input dropped (no DB); part of gaps service"
+)
+
+
 JD_TEXT = "Required: Python, FastAPI, PostgreSQL"
 
 

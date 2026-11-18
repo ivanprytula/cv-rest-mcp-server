@@ -12,6 +12,11 @@ from services.portfolio.gaps.ats import (
 )
 
 
+pytestmark = pytest.mark.skip(
+    reason="ATS fetchers part of dropped gaps service (no DB)"
+)
+
+
 def _client_returning(json_body, status_code=200, headers=None) -> httpx.AsyncClient:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(status_code, json=json_body, headers=headers or {})

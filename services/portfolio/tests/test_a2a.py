@@ -21,6 +21,9 @@ from services.portfolio.cv_review.a2a import (
 )
 
 
+pytestmark = pytest.mark.skip(reason="A2A dropped (no DB); part of CV review service")
+
+
 def _agent_card() -> AgentCard:
     return AgentCard(
         name="Echo Agent",
