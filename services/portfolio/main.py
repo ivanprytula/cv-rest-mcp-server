@@ -17,26 +17,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from starlette.types import ASGIApp
 
-from services.portfolio.auth import (
-    CredentialedCORSMiddleware,
-    JWTAuthMiddleware,
-    api_v1_route_requires_bearer,
-    auth_router,
-)
-
-# DB-dependent auth imports (commented out for api-core without DB)
-# from services.portfolio.auth.refresh_token_repository import (
-#     SqlAlchemyRefreshTokenRepository,
-# )
-# from services.portfolio.auth.refresh_token_service import RefreshTokenService
-# from services.portfolio.auth.user_repository import SqlAlchemyUserRepository
-# from services.portfolio.auth.user_service import (
-#     UserService,
-#     resolve_operator_tenant_id,
-#     seed_first_admin_from_settings,
-# )
 from services.portfolio.constants import (
-    API_V1_PREFIX,
     PDF_CACHE_MAX_ENTRIES,
     PDF_EXECUTOR_MAX_WORKERS,
     STATIC_DIR,
@@ -234,19 +215,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.add_middleware(CredentialedCORSMiddleware)
 app.add_middleware(GuardMiddleware)
 # Middleware order (Starlette wraps inside-out as we add, but runs
 # outside-in on the request): SecurityHeaders is outermost (added last)
 # so it stamps CSP etc. on every response, including the 401/403/503 from
-# JWTAuth. CredentialedCORS runs before the wildcard CORS so it can
-# override the wildcard `*` header on the auth endpoints. Guard runs before
-# JWTAuth so geo/failban/service-hours still apply to the /api/v1/* surface
-# (which now includes /api/v1/cv/tailor) and the ?tailored= reads, and
-# failban can ban a client before we even bother verifying a JWT. JWTAuth
-# short-circuits on the /api/v1/* namespace and the remaining tailoring
-# surface (?tailored= reads); everything else passes through untouched.
-app.add_middleware(JWTAuthMiddleware)
+# Guard. Guard runs before SecurityHeaders so geo/failban/service-hours
+# still apply to the public surface.
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(TrustedProxySchemeMiddleware)
 # Outermost of all (added last): the correlation id must be bound before any
@@ -439,34 +413,30 @@ async def lifespan(app):
         def __init__(self, cv_data_path: Path) -> None:
             self._cv_data_path = cv_data_path
 
-        async def get(self, kind: str, *, tenant_id: TenantId) -> Any:
+        async def get(self, kind: str, *, tenant_id: int) -> Any:
             if kind == KIND_CV:
                 try:
-                    return type(
-                        "Row",
-                        (),
-                        {
-                            "payload": json.loads(
-                                self._cv_data_path.read_text(encoding="utf-8")
-                            )
-                        },
-                    )()
+                    return {
+                        "payload": json.loads(
+                            self._cv_data_path.read_text(encoding="utf-8")
+                        )
+                    }
                 except OSError, json.JSONDecodeError:
                     return None
             return None
 
         async def put(
-            self, kind: str, payload: dict[str, Any], *, tenant_id: TenantId
+            self, *, kind: str, payload: dict[str, Any], tenant_id: int
         ) -> Any:
             return None
 
-        async def list_all(self, *, tenant_id: TenantId) -> list[Any]:
+        async def list_all(self, *, tenant_id: int) -> list[Any]:
             return []
 
-        async def delete(self, kind: str, *, tenant_id: TenantId) -> bool:
+        async def delete(self, kind: str, *, tenant_id: int) -> bool:
             return False
 
-        async def list_kinds(self, *, tenant_id: TenantId) -> list[str]:
+        async def list_kinds(self, *, tenant_id: int) -> list[str]:
             return [KIND_CV]
 
     # Create a minimal document service that reads from the local cv.json file
@@ -512,85 +482,11 @@ app.router.lifespan_context = lifespan
 app.mount("/mcp", mcp_app)
 app.mount("/static", StaticFiles(directory=STATIC_DIR))
 app.include_router(router)
-app.include_router(auth_router)
 # DB-dependent routers (commented out for api-core without DB)
 # app.include_router(gaps_router)
 # app.include_router(postings_router)
 # app.include_router(documents_router)
 # app.include_router(tracked_boards_router)
-
-
-# The /cv/tailor endpoint reads the raw body itself (multi-format: JSON,
-# PDF, DOCX, text, Markdown) so it declares no FastAPI body parameter —
-# FastAPI would otherwise validate any declared param against Content-Type
-# and reject e.g. JSON bodies before the handler runs. Swagger/OpenAPI
-# still needs a requestBody, so we document it here post-generation.
-_TAILOR_REQUEST_BODY = {
-    "required": True,
-    "description": (
-        "Job description in any supported format (max 10 MB): raw text, "
-        'Markdown, JSON ({"posting_text": ..., "title": ...}), PDF, or DOCX. '
-        "For PDF/DOCX set Content-Type accordingly and send the binary body; "
-        "anything else is read as plain text."
-    ),
-    "content": {
-        "text/plain": {
-            "schema": {"type": "string"},
-            "examples": {
-                "raw text": {
-                    "summary": "Pasted JD",
-                    "value": "Required: Python, FastAPI, PostgreSQL\nWork at EPC Network...",
-                },
-                "json": {
-                    "summary": "JSON payload",
-                    "value": '{"posting_text": "Required: Python, FastAPI", "title": ""}',
-                },
-                "markdown": {
-                    "summary": "Markdown JD",
-                    "value": "# The Role\n\nWe need **Python** engineers...",
-                },
-            },
-        },
-        "application/json": {"schema": {"type": "object"}},
-        "application/pdf": {"schema": {"type": "string", "format": "binary"}},
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {
-            "schema": {"type": "string", "format": "binary"}
-        },
-    },
-}
-
-_openapi_getter = app.openapi
-
-# Every /api/v1/* route (except login/refresh/logout) is JWT-gated by
-# JWTAuthMiddleware — see auth.api_v1_route_requires_bearer, the same rule the
-# middleware itself enforces, so Swagger's Authorize padlock can never drift
-# from what actually 401s. /cv/html sits outside /api/v1 and is only
-# protected WHEN a `tailored` selector is present (a static OpenAPI operation
-# can't express that condition), so it stays an explicit, hardcoded case.
-_BEARER_SECURITY_SCHEME = {"type": "http", "scheme": "bearer"}
-_CONDITIONALLY_SECURE_OPERATIONS = {("/cv/html", "get")}
-
-
-def _openapi_with_auth_contract() -> dict[str, Any]:
-    schema = _openapi_getter()
-    paths = schema.get("paths", {})
-    for path, methods in paths.items():
-        for method, operation in methods.items():
-            is_secure = (path, method) in _CONDITIONALLY_SECURE_OPERATIONS or (
-                method != "options" and api_v1_route_requires_bearer(path)
-            )
-            if not is_secure:
-                continue
-            operation["security"] = [{"HTTPBearer": []}]
-            if path == f"{API_V1_PREFIX}/cv/tailor" and "requestBody" not in operation:
-                operation["requestBody"] = _TAILOR_REQUEST_BODY
-    components = schema.setdefault("components", {})
-    security_schemes = components.setdefault("securitySchemes", {})
-    security_schemes.setdefault("HTTPBearer", _BEARER_SECURITY_SCHEME)
-    return schema
-
-
-app.openapi = cast(Any, _openapi_with_auth_contract)
 
 
 if __name__ == "__main__":

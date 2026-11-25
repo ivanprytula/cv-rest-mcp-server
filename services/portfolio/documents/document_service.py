@@ -1,14 +1,6 @@
-"""Operator document service: DB-first, file-on-miss.
+"""Operator document service: file-only for api-core without DB.
 
-The live CV, skill bank and JD vocabulary are operator-edited documents.
-They live in Postgres so they can be edited through the API and versioned,
-but every read falls back to the on-disk JSON when the DB has no row or is
-unreachable.
-
-That fallback is the point, not a nicety: without it `just dev-local` would
-need Postgres running to render a CV at all, and a transient DB error would
-take down CV rendering entirely. Same degrade-don't-crash posture as
-`RevisionService`.
+Reads operator documents (CV, skill bank, JD vocabulary) from local JSON files.
 """
 
 from __future__ import annotations
@@ -24,37 +16,28 @@ from services.portfolio.documents.document_row import (
     KIND_JD_VOCABULARY,
     KIND_SKILL_BANK,
 )
-from services.portfolio.tenancy import TenantId
 
 
 logger = logging.getLogger(__name__)
 
 
 class DocumentService:
-    """Reads and writes operator documents, degrading to files on any miss.
-
-    Depends on the `DocumentRepository` Protocol, not a concrete adapter.
-    """
+    """Reads operator documents from local files."""
 
     def __init__(self, repo: DocumentRepository) -> None:
         self._repo = repo
 
     async def read(
-        self, kind: str, *, tenant_id: TenantId, fallback_path: Path | None = None
+        self, kind: str, *, tenant_id: int, fallback_path: Path | None = None
     ) -> dict[str, Any] | None:
-        """Return one tenant's document: the DB row, else the file, else None.
-
-        A DB error is logged and treated as a miss — the file answer is
-        better than an exception. The file fallback is tenant-agnostic: it
-        is the shipped seed data, served when a tenant has no row yet.
-        """
+        """Return one tenant's document from the file fallback."""
         try:
             row = await self._repo.get(kind, tenant_id=tenant_id)
         except Exception:
-            logger.warning("Document %s unreadable from Postgres", kind, exc_info=True)
+            logger.warning("Document %s unreadable from repo", kind, exc_info=True)
             row = None
         if row is not None:
-            return row.payload
+            return row.get("payload")
 
         if fallback_path is None:
             return None
@@ -69,62 +52,24 @@ class DocumentService:
             return None
 
     async def write(
-        self, kind: str, payload: dict[str, Any], *, tenant_id: TenantId
+        self, kind: str, payload: dict[str, Any], *, tenant_id: int
     ) -> int | None:
-        """Store a tenant's document, returning its new version (None on failure)."""
-        try:
-            row = await self._repo.put(kind=kind, payload=payload, tenant_id=tenant_id)
-        except Exception:
-            logger.warning("Failed to write document %s", kind, exc_info=True)
-            return None
-        return row.version
+        """Not supported in file-only mode."""
+        return None
 
-    async def revert_to_file(self, kind: str, *, tenant_id: TenantId) -> bool:
-        """Drop the stored document so reads fall back to the shipped file.
+    async def revert_to_file(self, kind: str, *, tenant_id: int) -> bool:
+        """Not supported in file-only mode."""
+        return False
 
-        Named for the effect, not the mechanism: the document does not
-        disappear — the next read serves the JSON file instead. That is the
-        undo for a bad edit, without hand-restoring the previous payload.
-        """
-        try:
-            return await self._repo.delete(kind, tenant_id=tenant_id)
-        except Exception:
-            logger.warning("Failed to revert document %s", kind, exc_info=True)
-            return False
-
-    async def versions(self, *, tenant_id: TenantId) -> dict[str, int]:
-        """Current version per stored document kind, for one tenant."""
-        try:
-            rows = await self._repo.list_all(tenant_id=tenant_id)
-        except Exception:
-            logger.warning("Failed to list documents", exc_info=True)
-            return {}
-        return {row.kind: row.version for row in rows}
+    async def versions(self, *, tenant_id: int) -> dict[str, int]:
+        """Not supported in file-only mode."""
+        return {}
 
     async def seed_from_files(
-        self, sources: dict[str, Path], *, tenant_id: TenantId
+        self, sources: dict[str, Path], *, tenant_id: int
     ) -> None:
-        """Import each file into the DB if that document has no row yet.
-
-        Idempotent: an existing row is never overwritten, so a redeploy does
-        not clobber edits made through the API. Runs in the app lifespan,
-        alongside `seed_first_admin_from_settings`.
-        """
-        for kind, path in sources.items():
-            try:
-                if await self._repo.get(kind, tenant_id=tenant_id) is not None:
-                    continue
-                payload = json.loads(path.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):  # fmt: skip
-                logger.info("No seed file for document %s at %s; skipping", kind, path)
-                continue
-            except Exception:
-                logger.warning(
-                    "Could not check document %s for seeding", kind, exc_info=True
-                )
-                continue
-            if await self.write(kind, payload, tenant_id=tenant_id) is not None:
-                logger.info("Seeded document %s from %s", kind, path)
+        """Not supported in file-only mode."""
+        pass
 
 
 def document_sources(settings: Any) -> dict[str, Path]:

@@ -229,16 +229,31 @@ tf-apply:
 tf-graph:
     cd terraform && terraform graph -type=plan | dot -Tpng > ../docs/graph.png
 
-# ── Local multi-service dev (Docker Compose) ─────────────────────────────────
+# ── Local api-core container (no Compose, no Postgres/Scheduler) ─────────────
 
-up:
-    docker compose up -d --build --remove-orphans
+# Build and start api-core alone on PORT, using the sample CV baked into the
+# image. No .env or database is needed for the public CV surface.
+up PORT="8080":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    docker build -t cv-api-core-dev .
+    docker rm -f cv-api-core-dev >/dev/null 2>&1 || true
+    docker run -d --name cv-api-core-dev -p {{PORT}}:8080 \
+        -e CV_DATA_PATH=data/cv.example.json \
+        -e FAILBAN_THRESHOLD=0 \
+        cv-api-core-dev
+    for _ in $(seq 1 30); do
+        curl -fsS "http://localhost:{{PORT}}/health" >/dev/null && break
+        sleep 1
+    done
+    curl -fsS "http://localhost:{{PORT}}/health" >/dev/null
+    echo "api-core on http://localhost:{{PORT}} (just logs to tail, just down to stop)"
 
 down:
-    docker compose down
+    docker rm -f cv-api-core-dev >/dev/null 2>&1 || true
 
 logs:
-    docker compose logs --follow
+    docker logs --follow cv-api-core-dev
 
 tf-fmt:
     cd terraform && terraform fmt -recursive && terraform validate
