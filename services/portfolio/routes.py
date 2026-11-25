@@ -1,47 +1,37 @@
+"""Public REST endpoints for api-core without DB.
+
+Provides: /, /health, /cv, /cv/html, /cv/preview, /cv/pdf
+"""
+
 import json
-import logging
 import re
 import sys
-from datetime import UTC, datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, Response
 
-from services.portfolio.constants import API_V1_PREFIX, CONFIG_DIR
-from services.portfolio.dependencies import (
-    get_document_service,
-    get_operator_tenant_id,
-    get_optional_gap_service,
-    get_pdf_service,
-    get_revision_service,
-)
-from services.portfolio.job_posting_input import (
-    PayloadTooLargeError,
-    parse_job_posting_input,
-)
-from services.portfolio.matching.baseline import BaselineError, get_baseline_async
-from services.portfolio.matching.tailor import tailor_cv
-from services.portfolio.matching.taxonomy import build_alias_table
+from services.portfolio.constants import CONFIG_DIR
+from services.portfolio.dependencies import get_pdf_service
 from services.portfolio.pdf_generator import ThemeNotFoundError
-from services.portfolio.rate_limiter import limiter, limits
+from services.portfolio.rate_limiter import limits
 from services.portfolio.renderer import render_html, render_template
-from services.portfolio.revisions.revision_service import RevisionService
-from services.portfolio.schemas.tailor import RevisionSummary
-from services.portfolio.settings import settings
 
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 get_pdf_service_dep = Depends(get_pdf_service)
-get_revision_service_dep = Depends(get_revision_service)
-get_optional_gap_service_dep = Depends(get_optional_gap_service)
-get_document_service_dep = Depends(get_document_service)
-get_operator_tenant_id_dep = Depends(get_operator_tenant_id)
 
 MCP_CLIENTS_PATH = CONFIG_DIR / "mcp_clients.json"
+
+_MCP_CLIENTS_REQUIRED_KEYS = {
+    "id",
+    "label",
+    "file",
+    "docs_url",
+    "verified",
+    "config_template",
+}
 
 _RESP_DETAIL_JSON = {
     "application/json": {
@@ -58,29 +48,129 @@ _RESP_DESCRIPTIONS = {
     422: "Malformed or empty JD body",
     429: "Rate limit exceeded",
     500: "Internal server error",
-    503: "CV source or PDF service unavailable",
+    503: "Service not initialized",
 }
 
 
 def _responses(*codes: int) -> dict:
-    """Declare the documented error responses for a route in OpenAPI."""
-    return {
-        code: {"description": _RESP_DESCRIPTIONS[code], "content": _RESP_DETAIL_JSON}
-        for code in codes
-    }
+    return {c: _RESP_DETAIL_JSON for c in codes}
 
 
-_MCP_CLIENTS_REQUIRED_KEYS = {
-    "id",
-    "label",
-    "file",
-    "docs_url",
-    "verified",
-    "config_template",
-}
+def _consent_kwargs(company: str, consent: bool) -> dict:
+    """Normalize recruiter input into render kwargs."""
+    clean = re.sub(r"\s+", " ", company).strip()[:120]
+    return {"consent": consent or bool(clean), "consent_company": clean}
 
 
-def load_mcp_clients(path) -> list[dict]:
+def _client_mcp_configs(mcp_url: str) -> list[dict]:
+    """Per-client MCP snippets in each agent's native config format."""
+    return [
+        {
+            **entry,
+            "config_template": entry["config_template"].replace("{mcp_url}", mcp_url),
+        }
+        for entry in _MCP_CLIENTS
+    ]
+
+
+@router.get("/", tags=["Pages"], responses=_responses(429))
+async def landing(request: Request, pdf_service=get_pdf_service_dep) -> HTMLResponse:
+    """Landing page with theme picker, MCP config, and API table."""
+    cv = await pdf_service.cv_data()
+    mcp_url = str(request.base_url).rstrip("/") + "/mcp"
+    html = render_template(
+        "landing.html",
+        service_name="CV REST/MCP Server",
+        cv_name=str(cv.get("name", "")).strip() or "CV REST/MCP Server",
+        cv_title=str(cv.get("title", "")).strip(),
+        cv_summary=str(cv.get("summary", "")).strip(),
+        cv_location=str(cv.get("location", "")).strip(),
+        cv_github=str(cv.get("github", "")).strip(),
+        cv_linkedin=str(cv.get("linkedin", "")).strip(),
+        cv_telegram=str(cv.get("telegram", "")).strip(),
+        python_version=f"{sys.version_info.major}.{sys.version_info.minor}",
+        mcp_clients=_client_mcp_configs(mcp_url),
+        themes=pdf_service.list_themes(),
+    )
+    return HTMLResponse(content=html)
+
+
+@router.get("/health", tags=["System"], responses=_responses(429))
+async def health() -> dict:
+    """Health check endpoint."""
+    return {"status": "ok"}
+
+
+@router.get("/cv", tags=["CV"], responses=_responses(429, 503))
+async def cv_json(pdf_service=get_pdf_service_dep) -> dict:
+    """Return the live CV as JSON."""
+    return await pdf_service.cv_data()
+
+
+@router.get("/cv/html", tags=["CV"], responses=_responses(404, 429, 503))
+async def cv_html(
+    request: Request,
+    theme: str = "modern",
+    company: str = "",
+    consent: bool = False,
+    pdf_service=get_pdf_service_dep,
+) -> HTMLResponse:
+    """Render the CV as an HTML page with the given theme."""
+    if theme not in pdf_service.themes:
+        raise ThemeNotFoundError(theme)
+    cv = await pdf_service.cv_data()
+    html = render_html(
+        cv, pdf_service.themes[theme].CSS, **_consent_kwargs(company, consent)
+    )
+    return HTMLResponse(content=html)
+
+
+@router.get("/cv/preview", tags=["Pages"], responses=_responses(404, 429, 503))
+async def cv_preview(
+    request: Request,
+    theme: str = "modern",
+    company: str = "",
+    consent: bool = False,
+    pdf_service=get_pdf_service_dep,
+) -> HTMLResponse:
+    """Preview page with toolbar embedding /cv/html in an iframe."""
+    if theme not in pdf_service.themes:
+        raise ThemeNotFoundError(theme)
+    cv = await pdf_service.cv_data()
+    kwargs = _consent_kwargs(company, consent)
+    html = render_template(
+        "preview.html",
+        cv_name=cv.get("name", ""),
+        theme=theme,
+        themes=pdf_service.list_themes(),
+        consent=kwargs["consent"],
+        company=kwargs["consent_company"],
+    )
+    return HTMLResponse(content=html)
+
+
+@router.get("/cv/pdf", tags=["CV"], responses=_responses(404, 429, 503))
+@limits("5/15minute", "15/hour")
+async def cv_pdf(
+    request: Request,
+    theme: str = "modern",
+    company: str = "",
+    consent: bool = False,
+    pdf_service=get_pdf_service_dep,
+) -> Response:
+    """Download the CV as a themed PDF."""
+    cv = await pdf_service.cv_data()
+    pdf_bytes = await pdf_service.generate_cv_pdf_async(
+        theme, cv, **_consent_kwargs(company, consent)
+    )
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="cv-{theme}.pdf"'},
+    )
+
+
+def load_mcp_clients(path: Path) -> list[dict]:
     """Parse and validate the MCP client tab definitions.
 
     Single source of truth shared with scripts/check_mcp_docs.py; a broken
@@ -109,468 +199,6 @@ def load_mcp_clients(path) -> list[dict]:
 _MCP_CLIENTS = load_mcp_clients(MCP_CLIENTS_PATH)
 
 
-def _pdf_filename(cv: dict) -> str:
-    def _safe(value: str) -> str:
-        return re.sub(r"[^\w\s-]", "", str(value)).strip().replace(" ", "_")
-
-    stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    return f"CV_{_safe(cv.get('name', ''))}_{_safe(cv.get('title', ''))}_{stamp}.pdf"
-
-
-def _consent_kwargs(company: str, consent: bool) -> dict:
-    """Normalize recruiter input into render kwargs.
-
-    A non-empty company name implies consent even if the checkbox was missed.
-    """
-    clean = re.sub(r"\s+", " ", company).strip()[:120]
-    return {"consent": consent or bool(clean), "consent_company": clean}
-
-
-def _load_tailored_revision_from_file(name: str, *, default: dict) -> dict:
-    """File-glob fallback: resolve a bare ``cv_tailored-<ts>.json`` filename
-    (the pre-Postgres selector shape) or ``latest`` from ``settings.cv_tailored_dir``.
-
-    Only ``.json`` files directly inside that directory are accepted — path
-    separators and everything else is rejected.
-    """
-    if name == "latest":
-        candidates = sorted(settings.cv_tailored_dir.glob("cv_tailored-*.json"))
-        if not candidates:
-            raise HTTPException(
-                status_code=404, detail="No tailored CV revisions written yet"
-            )
-        revision_path = candidates[-1]
-    elif name != Path(name).name or not name.endswith(".json"):
-        raise HTTPException(
-            status_code=404, detail="Tailored revision must be a bare .json filename"
-        )
-    else:
-        revision_path = settings.cv_tailored_dir / name
-
-    try:
-        revision = json.loads(revision_path.read_text(encoding="utf-8"))
-    except (FileNotFoundError, PermissionError, json.JSONDecodeError) as exc:
-        raise HTTPException(
-            status_code=404, detail="Tailored CV revision not found"
-        ) from exc
-    if not isinstance(revision, dict):
-        raise HTTPException(
-            status_code=404, detail="Tailored CV revision is not a CV object"
-        )
-    return revision
-
-
-async def _load_tailored_revision(
-    selector: str, *, default: dict, revision_service: RevisionService | None
-) -> dict:
-    """Resolve an optional ``?tailored=`` revision selector to a CV dict.
-
-    ``selector`` is the numeric ``id`` returned by ``/api/v1/cv/tailor`` in
-    ``saved_to`` (or the literal ``latest``), looked up in Postgres first.
-    On any DB error (or a selector predating Postgres — a bare
-    ``cv_tailored-<ts>.json`` filename), falls back to the file-glob path
-    (degrade-don't-crash, mirrors ``DocumentService``). An empty ``selector`` falls
-    back to the live CV without ever touching ``revision_service`` — the
-    public, untailored surface (most traffic on ``/cv/html`` etc.) must stay
-    independent of whether the revision service initialized at all.
-    ``revision_service`` is only ``None`` if the app never wired it up
-    (503, matching every other uninitialized-service case in this app).
-    """
-    if not selector:
-        return default
-    if revision_service is None:
-        raise HTTPException(status_code=503, detail="Revision service not initialized")
-
-    selector = selector.strip().strip("/\\")
-
-    if selector == "latest":
-        revisions = await revision_service.list_all()
-        if revisions:
-            return revisions[0].tailored_cv
-        return _load_tailored_revision_from_file(selector, default=default)
-
-    if selector.endswith(".json"):
-        # Legacy filename-shaped selector — never a Postgres id.
-        return _load_tailored_revision_from_file(selector, default=default)
-
-    if selector.isdigit():
-        revision = await revision_service.get_by_id(int(selector))
-        if revision is not None:
-            return revision.tailored_cv
-    return _load_tailored_revision_from_file(selector, default=default)
-
-
-def _revision_summary_from_file(path: Path) -> RevisionSummary:
-    stat = path.stat()
-    return RevisionSummary(
-        id=path.name,
-        name=path.name,
-        created_at=datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat(),
-        size_bytes=stat.st_size,
-    )
-
-
-def _client_mcp_configs(mcp_url: str) -> list[dict]:
-    """Per-client MCP snippets in each agent's native config format."""
-    return [
-        {
-            **entry,
-            "config_template": entry["config_template"].replace("{mcp_url}", mcp_url),
-        }
-        for entry in _MCP_CLIENTS
-    ]
-
-
-@router.get("/", tags=["Pages"], responses=_responses(429))
-@limits("30/minute", "120/hour")
-async def root(request: Request, pdf_service=get_pdf_service_dep):
-    """Landing page introducing the CV owner, with ready-to-copy MCP config and PDF download."""
-    cv = await pdf_service.cv_data()
-    mcp_url = str(request.base_url).rstrip("/") + "/mcp"
-    html = render_template(
-        "landing.html",
-        service_name="CV REST/MCP Server",
-        cv_name=str(cv.get("name", "")).strip() or "CV REST/MCP Server",
-        cv_title=str(cv.get("title", "")).strip(),
-        cv_summary=str(cv.get("summary", "")).strip(),
-        cv_location=str(cv.get("location", "")).strip(),
-        cv_github=str(cv.get("github", "")).strip(),
-        cv_linkedin=str(cv.get("linkedin", "")).strip(),
-        cv_telegram=str(cv.get("telegram", "")).strip(),
-        python_version=f"{sys.version_info.major}.{sys.version_info.minor}",
-        mcp_clients=_client_mcp_configs(mcp_url),
-        themes=pdf_service.list_themes(),
-        games_base_url=settings.games_base_url.rstrip("/"),
-    )
-    return HTMLResponse(content=html)
-
-
-@router.get("/health", tags=["System"], responses=_responses(429))
-@limiter.limit("60/minute")
-async def health(request: Request):
-    """Liveness probe: returns service status and the active CV source kind (database/file)."""
-    pdf_service = getattr(request.app.state, "pdf_service", None)
-    return {
-        "status": "ok",
-        "cv_source": await pdf_service.cv_source_kind() if pdf_service else "unknown",
-    }
-
-
-@router.get("/cv", tags=["CV"], responses=_responses(429, 503))
-@limits("30/minute", "600/hour")
-async def get_cv_json(request: Request, pdf_service=get_pdf_service_dep):
-    """Return the raw CV data as JSON, exactly as served to renderers.
-
-    Public, unauthenticated, live-CV-only — see /api/v1/cv for the
-    operator-only tailored equivalent.
-    """
-    return await pdf_service.cv_data()
-
-
-@router.get(f"{API_V1_PREFIX}/cv", tags=["CV"], responses=_responses(404, 429, 503))
-@limits("30/minute", "600/hour")
-async def get_tailored_cv_json(
-    request: Request,
-    tailored: str = "latest",
-    pdf_service=get_pdf_service_dep,
-    revision_service=get_revision_service_dep,
-):
-    """Return a tailored revision's raw CV JSON (operator console only).
-
-    Requires a JWT with the `cv:read` scope (see JWTAuthMiddleware). `tailored`
-    is the revision `id` from /api/v1/cv/tailor's `saved_to`, or the literal
-    `latest`. Powers the SPA's revision-preview page.
-    """
-    return await _load_tailored_revision(
-        tailored, default=await pdf_service.cv_data(), revision_service=revision_service
-    )
-
-
-@router.get("/cv/html", tags=["CV"], responses=_responses(404, 429, 503))
-@limits("30/minute", "300/hour")
-async def get_cv_html(
-    request: Request,
-    theme: str = "classic",
-    company: str = "",
-    consent: bool = False,
-    tailored: str = "",
-    pdf_service=get_pdf_service_dep,
-):
-    """Render the full CV page as HTML using the given theme (no toolbar chrome).
-
-    With `consent` (or a non-empty `company`), appends the GDPR/RODO
-    recruitment-consent clause, naming the company when provided. With
-    `tailored` (the revision `id` from /api/v1/cv/tailor's `saved_to`, or
-    `latest`), renders that revision instead of the live CV.
-
-    `tailored` is the only path that touches the revision service — most
-    traffic here is the public, untailored page, which must stay reachable
-    even if the revision service never initialized (no Depends() on it).
-    """
-    if theme not in pdf_service.themes:
-        raise ThemeNotFoundError(theme)
-    cv = await _load_tailored_revision(
-        tailored,
-        default=await pdf_service.cv_data(),
-        revision_service=getattr(request.app.state, "revision_service", None),
-    )
-    html = render_html(
-        cv,
-        pdf_service.themes[theme].CSS,
-        **_consent_kwargs(company, consent),
-    )
-    return HTMLResponse(content=html)
-
-
-@router.get("/cv/preview", tags=["Pages"], responses=_responses(429, 503))
-@limits("30/minute", "300/hour")
-async def preview_cv(
-    request: Request,
-    theme: str = "classic",
-    company: str = "",
-    consent: bool = False,
-    pdf_service=get_pdf_service_dep,
-):
-    """Interactive preview page: theme picker toolbar embedding the live CV (/cv/html).
-
-    Forwards `consent` / `company` to the embedded CV, the theme links, and the
-    download button so previews match the final PDF. Public, unauthenticated,
-    live-CV-only surface — tailored revisions are previewed only in the
-    operator SPA (see /revisions/:name), never here.
-    """
-    if theme not in pdf_service.themes:
-        raise ThemeNotFoundError(theme)
-    kwargs = _consent_kwargs(company, consent)
-    cv = await pdf_service.cv_data()
-    html = render_template(
-        "preview.html",
-        cv_name=cv.get("name", ""),
-        theme=theme,
-        themes=pdf_service.list_themes(),
-        consent=kwargs["consent"],
-        company=kwargs["consent_company"],
-    )
-    return HTMLResponse(content=html)
-
-
-async def _render_cv_pdf_response(
-    cv: dict, theme: str, company: str, consent: bool, pdf_service
-) -> Response:
-    pdf_bytes = await pdf_service.generate_cv_pdf_async(
-        theme, cv, **_consent_kwargs(company, consent)
-    )
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{_pdf_filename(cv)}"'},
-    )
-
-
-@router.get("/cv/pdf", tags=["CV"], responses=_responses(404, 429, 503))
-@limits("5/15minute", "15/hour")
-async def get_cv_pdf(
-    request: Request,
-    theme: str = "classic",
-    company: str = "",
-    consent: bool = False,
-    pdf_service=get_pdf_service_dep,
-):
-    """Generate the live CV as a themed PDF and return it as a downloadable attachment.
-
-    With `consent` (or a non-empty `company`), the PDF carries the
-    GDPR/RODO recruitment-consent clause on its last page. Public, unauthenticated
-    surface — tailored revisions are never reachable here; see
-    `/api/v1/cv/pdf` for the authenticated, operator-only equivalent.
-    """
-    return await _render_cv_pdf_response(
-        await pdf_service.cv_data(), theme, company, consent, pdf_service
-    )
-
-
-@router.get(f"{API_V1_PREFIX}/cv/pdf", tags=["CV"], responses=_responses(404, 429, 503))
-@limits("5/15minute", "15/hour")
-async def get_tailored_cv_pdf(
-    request: Request,
-    theme: str = "classic",
-    company: str = "",
-    consent: bool = False,
-    tailored: str = "latest",
-    pdf_service=get_pdf_service_dep,
-    revision_service=get_revision_service_dep,
-):
-    """Generate a tailored CV revision as a themed PDF (operator console only).
-
-    Requires a JWT with the `cv:read` scope (see JWTAuthMiddleware). `tailored`
-    is the revision `id` from /api/v1/cv/tailor's `saved_to`, or the literal
-    `latest`. Powers the SPA's revision-preview download button; the public
-    `/cv/pdf` never accepts a `tailored` selector.
-    """
-    cv = await _load_tailored_revision(
-        tailored, default=await pdf_service.cv_data(), revision_service=revision_service
-    )
-    return await _render_cv_pdf_response(cv, theme, company, consent, pdf_service)
-
-
-@router.post(
-    f"{API_V1_PREFIX}/cv/tailor",
-    tags=["CV"],
-    responses=_responses(413, 422, 429, 500, 503),
-)
-@limits("10/minute", "60/hour")
-async def tailor_cv_endpoint(
-    request: Request,
-    pdf_service=get_pdf_service_dep,
-    revision_service=get_revision_service_dep,
-    gap_service=get_optional_gap_service_dep,
-    document_service=get_document_service_dep,
-    operator_tenant_id=get_operator_tenant_id_dep,
-):
-    """Match a job posting against the skill bank and emit a tailored CV revision.
-
-    The posting can be sent in several formats (max 10 MB) — a supported
-    ``Content-Type`` is honored, a generic one is sniffed by magic bytes,
-    and anything unexpected is treated as raw posting text:
-
-    * Raw text / txt — the whole body is the posting.
-    * Markdown — the whole body is the posting (syntax left intact for the matcher).
-    * JSON — ``{"posting_text": "...", "title": ""}``.
-    * PDF — ``application/pdf``.
-    * DOCX — ``application/vnd.openxmlformats-officedocument.wordprocessingml.document``.
-
-    Skills come from the **skill bank** (``data/cv_baseline.json``), not the
-    live CV: JD qualifiers ("Solid experience with X" → expert) filter bank
-    atoms by level, and the trust policy drops any matched atom the operator
-    has not vouched for on the live CV. The response is the tailored CV plus
-    ``saved_to`` — the new revision's `id` (Postgres-backed; degrades to a
-    ``cv_tailored-<UTC-timestamp>.json`` file path in ``settings.cv_tailored_dir``
-    on any DB error) the operator may promote.
-
-    ``?title=`` overrides the CV title; a ``title`` inside the JSON payload
-    wins for the JSON format.
-    """
-    try:
-        posting = parse_job_posting_input(
-            await request.body(),
-            request.headers.get("content-type", ""),
-            title=request.query_params.get("title", ""),
-        )
-    except PayloadTooLargeError as exc:
-        raise HTTPException(status_code=413, detail=str(exc)) from None
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from None
-    if not posting.posting_text:
-        raise HTTPException(status_code=422, detail="posting_text is required")
-
-    try:
-        baseline_atoms = await get_baseline_async(
-            document_service, tenant_id=operator_tenant_id
-        )
-    except BaselineError as exc:
-        logger.warning("Skill bank unavailable: %s", exc)
-        raise HTTPException(status_code=500, detail="CV tailoring failed") from None
-
-    try:
-        aliases = build_alias_table(baseline_atoms)
-        tailored = tailor_cv(
-            posting.posting_text,
-            baseline_atoms,
-            await pdf_service.cv_data(),
-            title=posting.title,
-            aliases=aliases,
-        )
-    except Exception:
-        logger.exception("CV tailoring failed")
-        raise HTTPException(status_code=500, detail="CV tailoring failed") from None
-
-    # Keep the posting itself, not just its hash. Tailoring used to discard
-    # the text, so every tailored revision pointed at a job posting nobody
-    # could read back. Storing it here feeds the same corpus the gap roadmap
-    # ranks, and `revisions.jd_hash == job_postings.content_hash` (both are
-    # SHA-256 of this same normalized text) links the two.
-    #
-    # Strictly a side effect: the service is optional (absent in tests and
-    # before the lifespan wires it) and `store_posting` already degrades to
-    # None on any DB error, so neither can fail an otherwise-good tailoring.
-    if gap_service is not None:
-        await gap_service.store_posting(
-            tenant_id=operator_tenant_id,
-            posting_text=posting.posting_text,
-            source="tailor",
-            title=posting.title,
-        )
-
-    # `revisions` keeps its own `jd_*` naming; translated at the boundary.
-    revision = await revision_service.create(
-        jd_text=posting.posting_text, tailored_cv=tailored
-    )
-    if revision is not None:
-        return {**tailored, "saved_to": str(revision.id)}
-
-    stamp = datetime.now(UTC).strftime("%Y-%m-%d_%H-%M-%S")
-    revision_path = settings.cv_tailored_dir / f"cv_tailored-{stamp}.json"
-    try:
-        revision_path.parent.mkdir(parents=True, exist_ok=True)
-        revision_path.write_text(
-            json.dumps(tailored, indent=2, ensure_ascii=False) + "\n",
-            encoding="utf-8",
-        )
-    except OSError as exc:
-        logger.exception("Failed to write tailored CV revision")
-        raise HTTPException(status_code=500, detail="CV tailoring failed") from exc
-
-    return {**tailored, "saved_to": revision_path.name}
-
-
-@router.get(f"{API_V1_PREFIX}/revisions", tags=["CV"], responses=_responses(429, 503))
-@limits("30/minute", "300/hour")
-async def list_tailored_revisions(
-    request: Request, revision_service=get_revision_service_dep
-):
-    """List tailored CV revisions written by ``/api/v1/cv/tailor``, newest first.
-
-    Requires the `cv:read` scope (same as the `?tailored=` revision reads).
-    Reads Postgres first; falls back to the file-glob path (degrade-don't-
-    crash) only when Postgres has no rows yet — a DB error surfaces as an
-    empty list from `RevisionService.list_all()`, same as "no rows".
-    """
-    revisions = await revision_service.list_all()
-    if revisions:
-        return {
-            "revisions": [
-                RevisionSummary(
-                    id=str(r.id),
-                    name=r.name,
-                    created_at=r.created_at.isoformat(),
-                    size_bytes=len(json.dumps(r.tailored_cv)),
-                )
-                for r in revisions
-            ]
-        }
-
-    files = sorted(
-        settings.cv_tailored_dir.glob("cv_tailored-*.json"),
-        key=lambda p: p.stat().st_mtime,
-        reverse=True,
-    )
-    return {"revisions": [_revision_summary_from_file(p) for p in files]}
-
-
-@router.delete(
-    f"{API_V1_PREFIX}/revisions/{{revision_id}}",
-    status_code=204,
-    tags=["CV"],
-    responses=_responses(404, 429),
-)
-@limits("30/minute", "300/hour")
-async def delete_tailored_revision(
-    request: Request, revision_id: int, revision_service=get_revision_service_dep
-):
-    """Admin-only: permanently remove a tailored CV revision.
-
-    Only removes Postgres-backed revisions — the legacy file-glob fallback
-    (served when Postgres has no rows) has no delete path; it's a read-only
-    dev-mode fallback, not a store this endpoint manages.
-    """
-    deleted = await revision_service.delete(revision_id)
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Revision not found")
+# The /api/v1/cv and /api/v1/cv/pdf endpoints require auth and DB, so they are
+# not included in this api-core build. See the DB-backed version in the main
+# branch for those endpoints.

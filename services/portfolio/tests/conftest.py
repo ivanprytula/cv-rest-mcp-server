@@ -5,6 +5,30 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 
+collect_ignore = [
+    "test_access_matrix.py",
+    "test_analysis_worker.py",
+    "test_ats.py",
+    "test_ats_sync.py",
+    "test_auth.py",
+    "test_cv_extraction.py",
+    "test_critic_agent.py",
+    "test_matching/test_clustering.py",
+    "test_documents_api.py",
+    "test_events_publisher.py",
+    "test_firestore_store.py",
+    "test_gaps_api.py",
+    "test_gen_secrets.py",
+    "test_idempotency.py",
+    "test_outbox.py",
+    "test_pubsub_publisher.py",
+    "test_review_service.py",
+    "test_tenant_isolation.py",
+    "test_tenancy_type.py",
+    "test_tailor_jwt.py",
+    "test_tracked_boards_api.py",
+]
+
 os.environ.update(
     {
         "FAILBAN_THRESHOLD": "0",
@@ -12,24 +36,20 @@ os.environ.update(
         "CLIENT_IP_XFF_ENTRY": "0",
         "CV_DATA_PATH": "data/cv.example.json",
         "CV_DATA_GCS_URI": "",
-        # Placeholder only: settings.database_url has no default (fail-fast
-        # by design, ADR-023), so importing services.portfolio.main below
-        # would crash at collection time without SOME value here. The
-        # `user_service` fixture always swaps in a real per-test database
-        # before any test actually touches the store; nothing ever connects
-        # to this placeholder.
-        "DATABASE_URL": "postgresql+asyncpg://unconfigured/unconfigured",
     }
 )
 os.environ.pop("ALLOWED_IPS_FILE", None)
 os.environ.pop("BLOCKED_IPS_FILE", None)
 
-from services.portfolio.constants import PDF_CACHE_MAX_ENTRIES, PDF_EXECUTOR_MAX_WORKERS
-from services.portfolio.dependencies import get_pdf_service, get_user_service
-from services.portfolio.documents.document_service import DocumentService
-from services.portfolio.main import app
-from services.portfolio.pdf_generator import PdfService
-from services.portfolio.tenancy import APP_ROLE, TenantId
+from services.portfolio.constants import (  # noqa: E402
+    PDF_CACHE_MAX_ENTRIES,
+    PDF_EXECUTOR_MAX_WORKERS,
+)
+from services.portfolio.dependencies import get_pdf_service  # noqa: E402
+from services.portfolio.documents.document_service import DocumentService  # noqa: E402
+from services.portfolio.main import app  # noqa: E402
+from services.portfolio.pdf_generator import PdfService  # noqa: E402
+from services.portfolio.tenancy import TenantId  # noqa: E402
 
 
 # Synthetic CV content so tests never depend on data/cv.json wording.
@@ -134,15 +154,7 @@ def pdf_service(synthetic_cv_path, fake_document_service, monkeypatch):
 
 @pytest.fixture
 def override_pdf_service(pdf_service, fake_document_service):
-    """Wires the public CV surface: pdf_service plus the document_service +
-    operator_tenant_id it shares with routes that also read the skill bank
-    (e.g. `/api/v1/cv/tailor`), so both sides see the same fake CV/bank data.
-
-    Skips the document_service/operator_tenant_id wiring when a more specific
-    fixture (`user_service`, real Postgres) already set them up — this
-    fixture must not clobber a real, seeded document_service with the fake
-    one when both are requested together (e.g. via `auth_client`).
-    """
+    """Wire the file-backed PDF service into the public CV surface."""
     from services.portfolio.dependencies import (
         get_document_service,
         get_operator_tenant_id,
@@ -170,87 +182,10 @@ def override_pdf_service(pdf_service, fake_document_service):
         app.state.operator_tenant_id = None
 
 
-class FakeRevisionRepository:
-    """In-memory `RevisionRepository` for tests that only exercise tailoring/
-    rendering logic, not real Postgres persistence — no testcontainers needed.
-
-    `fail=True` makes every method raise, for exercising `RevisionService`'s
-    degrade-don't-crash path (mirrors a real DB outage) without actually
-    breaking a Postgres connection.
-    """
-
-    def __init__(self, *, fail: bool = False):
-        self._rows: dict = {}
-        self._fail = fail
-        self._next_id = 1
-
-    async def create(self, *, revision):
-        if self._fail:
-            raise RuntimeError("simulated DB failure")
-        revision.id = self._next_id  # simulate Postgres autoincrement
-        self._next_id += 1
-        self._rows[revision.id] = revision
-        return revision
-
-    async def get_by_id(self, revision_id: int):
-        if self._fail:
-            raise RuntimeError("simulated DB failure")
-        return self._rows.get(revision_id)
-
-    async def list_all(self):
-        if self._fail:
-            raise RuntimeError("simulated DB failure")
-        return sorted(self._rows.values(), key=lambda r: r.created_at, reverse=True)
-
-    async def delete(self, revision_id: int) -> bool:
-        if self._fail:
-            raise RuntimeError("simulated DB failure")
-        return self._rows.pop(revision_id, None) is not None
-
-
 @pytest.fixture
-def override_revision_service(request):
-    """A working (or, parametrized with `fail=True`, permanently-failing)
-    in-memory revision service, overriding `get_revision_service` the same
-    way `override_pdf_service` overrides `get_pdf_service`.
-
-    Usage: `@pytest.mark.parametrize("override_revision_service", [{"fail": True}], indirect=True)`
-    for a test that must exercise the file-fallback path.
-    """
-    from services.portfolio.dependencies import get_revision_service
-    from services.portfolio.revisions.revision_service import RevisionService
-
-    fail = getattr(request, "param", {}).get("fail", False)
-    service = RevisionService(FakeRevisionRepository(fail=fail))
-    app.dependency_overrides[get_revision_service] = lambda: service
-    app.state.revision_service = service
-    yield service
-    app.dependency_overrides.pop(get_revision_service, None)
-    app.state.revision_service = None
-
-
-@pytest.fixture
-def admin_access_token(auth_settings):
-    """A valid admin (cv:manage + cv:read) access JWT for the protected surface.
-
-    Depends on `auth_settings` so the signing key + issuer/audience are
-    configured before minting. Used both to seed the `client` fixture's default
-    Authorization header and directly by tests that must place a typed/scoped
-    token into a `?token=` query param.
-    """
-    from services.portfolio.auth.crypto import sign_access_token
-
-    return sign_access_token("operator", ["cv:read", "cv:manage"], role="admin")
-
-
-@pytest.fixture
-async def client(admin_access_token):
+async def client():
     transport = ASGITransport(app=app)
-    async with AsyncClient(
-        transport=transport,
-        base_url="http://test",
-        headers={"Authorization": f"Bearer {admin_access_token}"},
-    ) as ac:
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
 
 
@@ -341,7 +276,7 @@ def tailor_settings(
     data/cv_baseline.json and data/jd_vocabulary.json (gitignored, real
     operator content, not part of this checkout) and no test ever writes a
     cv_tailored-*.json into the repo's data/ dir. Patches the settings
-    instance directly (same pattern as the auth fixtures).
+    instance directly.
     """
     from services.portfolio.settings import settings
 
@@ -349,360 +284,3 @@ def tailor_settings(
     monkeypatch.setattr(settings, "jd_vocabulary_path", synthetic_vocabulary_path)
     monkeypatch.setattr(settings, "cv_tailored_dir", tmp_path / "tailored")
     yield
-
-
-# --- Phase 1c/2 auth fixtures ------------------------------------------------
-
-
-# One Postgres container for the whole test session (starting a container per
-# test would be far too slow); each test gets its own throwaway database on
-# it via `_fresh_postgres_url` below, mirroring the old "fresh tmp SQLite file
-# per test" isolation model with "fresh database" instead of "fresh file".
-@pytest.fixture(scope="session")
-def _postgres_container():
-    from testcontainers.community.postgres import PostgresContainer
-
-    # Match Cloud SQL's Postgres version (terraform/modules/cloud_sql).
-    with PostgresContainer("postgres:17-alpine", driver=None) as container:
-        yield container
-
-
-@pytest.fixture
-def _make_fresh_postgres_url(_postgres_container):
-    """Factory fixture: each call creates a NEW throwaway database on the
-    session's container and returns its asyncpg URL. A plain (non-factory)
-    fixture would be cached per test and hand back the SAME database to
-    every fixture/test-body reference within one test — some tests
-    deliberately need two independent databases (e.g. one seeded via the
-    `user_service` fixture, one empty built directly in the test body), so
-    this must be callable more than once per test.
-
-    Connects to the container's default admin database only to issue
-    CREATE/DROP DATABASE; each returned URL points at its own new database.
-    """
-    import uuid
-
-    import psycopg
-    from psycopg import sql
-    from sqlalchemy.engine import make_url
-
-    admin_url = make_url(_postgres_container.get_connection_url())
-    created: list[str] = []
-
-    def _make() -> str:
-        db_name = f"test_{uuid.uuid4().hex}"
-        with psycopg.connect(
-            host=admin_url.host,
-            port=admin_url.port,
-            user=admin_url.username,
-            password=admin_url.password,
-            dbname=admin_url.database,
-            autocommit=True,
-        ) as conn:
-            conn.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(db_name)))
-        created.append(db_name)
-        fresh_url = admin_url.set(database=db_name, drivername="postgresql+asyncpg")
-        return fresh_url.render_as_string(hide_password=False)
-
-    yield _make
-
-    with psycopg.connect(
-        host=admin_url.host,
-        port=admin_url.port,
-        user=admin_url.username,
-        password=admin_url.password,
-        dbname=admin_url.database,
-        autocommit=True,
-    ) as conn:
-        for db_name in created:
-            conn.execute(
-                sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(db_name))
-            )
-
-
-@pytest.fixture
-def _fresh_postgres_url(_make_fresh_postgres_url):
-    """Convenience: a single fresh database URL for tests that only need one."""
-    return _make_fresh_postgres_url()
-
-
-# Every fixture that stands up a throwaway database (container + Alembic
-# migrate) — the 2-6s per test that dominates a full run. `item.fixturenames`
-# is the transitive fixture closure, so a test reaching these directly or
-# through `user_service`/`auth_client`/`session_factory` is caught without
-# hand-annotating anything.
-_DB_FIXTURES = frozenset(
-    {"_postgres_container", "_make_fresh_postgres_url", "_fresh_postgres_url"}
-)
-
-
-def pytest_collection_modifyitems(items: list[pytest.Function]) -> None:
-    """Tag every test whose fixture closure touches Postgres as `slow`.
-
-    Derived rather than declared, so `just test-fast` (`-m 'not slow'`) can
-    never quietly start building a container per test.
-    """
-    for item in items:
-        if _DB_FIXTURES.intersection(item.fixturenames):
-            item.add_marker(pytest.mark.slow)
-
-
-# Throwaway, and never leaves this process: the role exists only for the
-# lifetime of a test database that is dropped at session end.
-_APP_ROLE_PASSWORD = "rls-test-only"
-
-
-def as_app_role(admin_url: str) -> str:
-    """Rewrite an admin URL to connect as the non-superuser app role.
-
-    Tests run under row-level security, like production, because the policy
-    is invisible otherwise: `postgres` bypasses RLS entirely, so a tenant
-    filter dropped from a query would keep passing here and fail only once
-    deployed. Connecting as the app role makes that a failing test.
-
-    Provisioned here because nothing else does it for a throwaway database:
-    production gets the role from Terraform and local dev from
-    `scripts/postgres-init/`, neither of which runs for a test container.
-    The statements mirror that init script — if they drift, tests stop
-    resembling the thing they are meant to protect.
-    """
-    import psycopg
-    from psycopg import sql
-    from sqlalchemy.engine import make_url
-
-    url = make_url(admin_url)
-    with psycopg.connect(
-        host=url.host,
-        port=url.port,
-        user=url.username,
-        password=url.password,
-        dbname=url.database,
-        autocommit=True,
-    ) as conn:
-        role = sql.Identifier(APP_ROLE)
-        # Roles are cluster-wide, so the first test database creates it and
-        # every later one finds it already there. Grants are per-database and
-        # must run every time.
-        try:
-            conn.execute(
-                sql.SQL(
-                    "CREATE ROLE {role} LOGIN PASSWORD {password} "
-                    "NOSUPERUSER NOBYPASSRLS"
-                ).format(role=role, password=sql.Literal(_APP_ROLE_PASSWORD))
-            )
-        except psycopg.errors.DuplicateObject:
-            pass
-        for statement in (
-            "GRANT USAGE ON SCHEMA public TO {role}",
-            "GRANT SELECT, INSERT, UPDATE, DELETE "
-            "ON ALL TABLES IN SCHEMA public TO {role}",
-            "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO {role}",
-        ):
-            conn.execute(sql.SQL(statement).format(role=role))
-    return url.set(username=APP_ROLE, password=_APP_ROLE_PASSWORD).render_as_string(
-        hide_password=False
-    )
-
-
-@pytest.fixture
-def auth_settings(synthetic_baseline_path, tmp_path, monkeypatch):
-    """Configure the auth module for a test: signing key + JWT knobs.
-
-    Sets an ephemeral HS256 signing secret (a plain string — symmetric JWT), a
-    refresh pepper, and a pinned CORS origin, then clears the in-memory token
-    store so families don't leak across tests. Patches the settings instance
-    directly (same pattern as the other settings fixtures). Returns a dict with the
-    configured secrets (`jwt_signing_key`, `pepper`).
-
-    User passwords are NOT configured here — they live in the SQLAlchemy-backed
-    user store (see the `user_service` fixture below), per ADR-022 Phase 2.
-    Refresh-token families likewise live in Postgres (see `user_service`), so
-    there is no in-memory store to reset here — each test gets a fresh database.
-    """
-    from services.portfolio.settings import settings
-
-    signing_key = "test-hs256-secret-that-is-long-enough-for-signing"
-
-    monkeypatch.setattr(settings, "environment", "production")
-    monkeypatch.setattr(settings, "jwt_signing_key", signing_key)
-    monkeypatch.setattr(settings, "refresh_token_pepper", "test-pepper")
-    monkeypatch.setattr(settings, "jwt_audience", "cv-rest-mcp-server")
-    monkeypatch.setattr(settings, "jwt_issuer", "https://api.example.com")
-    monkeypatch.setattr(settings, "cors_origin", "https://app.example.com")
-    monkeypatch.setattr(settings, "access_token_ttl_minutes", 10)
-    monkeypatch.setattr(settings, "refresh_token_ttl_days", 30)
-
-    yield {"jwt_signing_key": signing_key, "pepper": "test-pepper"}
-
-
-@pytest.fixture
-async def user_service(auth_settings, _fresh_postgres_url, monkeypatch):
-    """A per-test SQLAlchemy-backed user + revision service on an isolated
-    Postgres database.
-
-    Builds one shared engine/session-factory against a throwaway database on
-    the shared testcontainers Postgres instance (mirrors the app lifespan —
-    one engine for every repository, not one per repository), migrates it to
-    head via the same Alembic path the app lifespan uses, seeds the first
-    admin (username=`operator`, password=`correct-password`, role=`admin`),
-    and overrides `dependencies.get_user_service`/`get_revision_service` so
-    the routes (which take them via `Depends`) hit these isolated stores.
-    Matches the `login()` helper's defaults used across the auth tests.
-
-    Named `user_service` (not `db_services` or similar) because every
-    existing test/fixture already depends on this exact name for the user
-    store half — revision_service is a same-database sibling bundled in
-    here rather than a second Postgres setup.
-    """
-    from services.portfolio.auth.refresh_token_repository import (
-        SqlAlchemyRefreshTokenRepository,
-    )
-    from services.portfolio.auth.refresh_token_service import RefreshTokenService
-    from services.portfolio.auth.user_repository import SqlAlchemyUserRepository
-    from services.portfolio.auth.user_service import UserService
-    from services.portfolio.db import build_engine, build_session_factory
-    from services.portfolio.db_migrations import upgrade_head
-    from services.portfolio.dependencies import (
-        get_document_service,
-        get_gap_service,
-        get_idempotency_repository,
-        get_refresh_token_service,
-        get_revision_service,
-        get_tracked_board_service,
-    )
-    from services.portfolio.documents.document_repository import (
-        SqlAlchemyDocumentRepository,
-    )
-    from services.portfolio.documents.document_service import DocumentService
-    from services.portfolio.gaps.gap_repository import SqlAlchemyGapRepository
-    from services.portfolio.gaps.gap_service import GapService
-    from services.portfolio.gaps.idempotency_repository import (
-        SqlAlchemyIdempotencyRepository,
-    )
-    from services.portfolio.gaps.job_posting_document_store import (
-        InMemoryJobPostingDocumentStore,
-    )
-    from services.portfolio.gaps.tracked_board_repository import (
-        SqlAlchemyTrackedBoardRepository,
-    )
-    from services.portfolio.gaps.tracked_board_service import TrackedBoardService
-    from services.portfolio.revisions.revision_repository import (
-        SqlAlchemyRevisionRepository,
-    )
-    from services.portfolio.revisions.revision_service import RevisionService
-    from services.portfolio.settings import settings
-
-    # Migrations run as the superuser (DDL); the app then connects as the
-    # non-superuser role, so every test below runs under the same row-level
-    # security as production. Order matters: the grants below cover tables
-    # that exist, so they must follow the migrations.
-    await upgrade_head(_fresh_postgres_url.replace("+asyncpg", "+psycopg"))
-    app_url = as_app_role(_fresh_postgres_url)
-
-    engine = build_engine(app_url)
-    session_factory = build_session_factory(engine)
-
-    repo = SqlAlchemyUserRepository(session_factory)
-    service = UserService(repo)
-    await service.seed_first_admin(
-        username="operator",
-        email="operator@example.com",
-        password="correct-password",
-        role="admin",
-    )
-
-    revision_service = RevisionService(SqlAlchemyRevisionRepository(session_factory))
-    refresh_token_service = RefreshTokenService(
-        SqlAlchemyRefreshTokenRepository(session_factory)
-    )
-    gap_service = GapService(
-        SqlAlchemyGapRepository(session_factory), InMemoryJobPostingDocumentStore()
-    )
-    document_service = DocumentService(SqlAlchemyDocumentRepository(session_factory))
-    idempotency_repository = SqlAlchemyIdempotencyRepository(session_factory)
-    tracked_board_service = TrackedBoardService(
-        SqlAlchemyTrackedBoardRepository(session_factory)
-    )
-
-    operator = await service.get_by_username("operator")
-    assert operator is not None, "operator not seeded"
-    from services.portfolio.dependencies import get_operator_tenant_id
-    from services.portfolio.tenancy import TenantId
-
-    operator_tenant_id = TenantId(operator.id)
-
-    monkeypatch.setattr(settings, "database_url", app_url)
-    app.dependency_overrides[get_user_service] = lambda: service
-    app.dependency_overrides[get_revision_service] = lambda: revision_service
-    app.dependency_overrides[get_refresh_token_service] = lambda: refresh_token_service
-    app.dependency_overrides[get_gap_service] = lambda: gap_service
-    app.dependency_overrides[get_idempotency_repository] = lambda: (
-        idempotency_repository
-    )
-    app.dependency_overrides[get_document_service] = lambda: document_service
-    app.dependency_overrides[get_tracked_board_service] = lambda: tracked_board_service
-    app.dependency_overrides[get_operator_tenant_id] = lambda: operator_tenant_id
-    app.state.user_service = service
-    app.state.db_session_factory = session_factory
-    app.state.document_service = document_service
-    app.state.revision_service = revision_service
-    app.state.refresh_token_service = refresh_token_service
-    app.state.gap_service = gap_service
-    app.state.idempotency_repository = idempotency_repository
-    app.state.tracked_board_service = tracked_board_service
-    app.state.operator_tenant_id = operator_tenant_id
-    yield service
-    app.dependency_overrides.pop(get_user_service, None)
-    app.dependency_overrides.pop(get_revision_service, None)
-    app.dependency_overrides.pop(get_refresh_token_service, None)
-    app.dependency_overrides.pop(get_gap_service, None)
-    app.dependency_overrides.pop(get_idempotency_repository, None)
-    app.dependency_overrides.pop(get_document_service, None)
-    app.dependency_overrides.pop(get_tracked_board_service, None)
-    app.dependency_overrides.pop(get_operator_tenant_id, None)
-    app.state.user_service = None
-    app.state.db_session_factory = None
-    app.state.document_service = None
-    app.state.revision_service = None
-    app.state.refresh_token_service = None
-    app.state.gap_service = None
-    app.state.idempotency_repository = None
-    app.state.tracked_board_service = None
-    app.state.operator_tenant_id = None
-    await engine.dispose()
-
-
-@pytest.fixture
-async def auth_client(user_service, override_pdf_service):
-    """httpx client for auth endpoints with auth + PDF service configured.
-
-    `override_pdf_service` sets `app.state.pdf_service` so public CV routes
-    (which the middleware-passthrough tests hit) can render.
-    """
-    from httpx import ASGITransport, AsyncClient
-
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        yield ac
-
-
-@pytest.fixture
-async def operator_tenant_id(user_service) -> int:
-    """The seeded operator's id — the tenant its documents belong to.
-
-    Resolved rather than hardcoded: ids come from a sequence on a throwaway
-    database, so a literal would pass or fail depending on test order.
-    """
-    user = await user_service.get_by_username("operator")
-    assert user is not None, "operator not seeded"
-    return user.id
-
-
-@pytest.fixture
-def session_factory(user_service):
-    """The session factory the app's repositories use.
-
-    Taken from the app rather than rebuilt so tests observe the real
-    connection — the app role, with row-level security in force.
-    """
-    return app.state.db_session_factory

@@ -66,7 +66,7 @@ def check_routes_file(path: Path) -> list[str]:
     return issues
 
 
-REQUIRED_MIDDLEWARE = ("SecurityHeadersMiddleware", "JWTAuthMiddleware")
+REQUIRED_MIDDLEWARE = ("SecurityHeadersMiddleware", "GuardMiddleware")
 
 
 def check_main_middleware(path: Path) -> list[str]:

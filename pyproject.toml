@@ -20,16 +20,7 @@ dependencies = [
     "rapidfuzz>=3.14.5",
     "python-dotenv>=1.2.3",
     "PyJWT[crypto]>=2.13,<3.0",
-    "bcrypt>=4.2,<5.0",
-    "sqlalchemy[asyncio]>=2.0,<3.0",
-    "alembic>=1.19.1",
-    "asyncpg>=0.31.0",
-    "psycopg[binary]>=3.3.5",
-    "fastembed>=0.8.0",
-    "numpy>=2.5.3",
-    "google-cloud-firestore>=2.30.0",
-    "anthropic>=1.4.0",
-    "google-cloud-pubsub>=2.40.0",
+    "cryptography>=45.0.1",
 ]
 
 [dependency-groups]
@@ -53,7 +44,6 @@ Homepage = "https://github.com/ivanprytula/cv-rest-mcp-server"
 [tool.uv.workspace]
 members = [
     "services/portfolio",
-    "services/games",
 ]
 
 [tool.ruff]
@@ -67,6 +57,48 @@ ignore = ["E501"]
 [tool.ruff.lint.isort]
 known-first-party = ["services.portfolio"]
 lines-after-imports = 2
+
+# api-core is now file/GCS-only. These modules belong to the retired Postgres,
+# Pub/Sub, Scheduler, and JD-review subsystems; keep them out of type checking
+# until they are either removed or re-enabled with their dependencies.
+[tool.ty.src]
+exclude = [
+    "services/portfolio/alembic",
+    "services/portfolio/analysis_worker.py",
+    "services/portfolio/auth",
+    "services/portfolio/cv_extraction.py",
+    "services/portfolio/cv_review",
+    "services/portfolio/db.py",
+    "services/portfolio/db_migrations.py",
+    "services/portfolio/documents/routes.py",
+    "services/portfolio/events",
+    "services/portfolio/gaps",
+    "services/portfolio/matching/clustering.py",
+    "services/portfolio/refresh_trigger.py",
+    "services/portfolio/revisions",
+    "services/portfolio/tests/conftest.py",
+    "services/portfolio/tests/test_access_matrix.py",
+    "services/portfolio/tests/test_analysis_worker.py",
+    "services/portfolio/tests/test_ats.py",
+    "services/portfolio/tests/test_ats_sync.py",
+    "services/portfolio/tests/test_auth.py",
+    "services/portfolio/tests/test_cv_extraction.py",
+    "services/portfolio/tests/test_critic_agent.py",
+    "services/portfolio/tests/test_matching/test_clustering.py",
+    "services/portfolio/tests/test_documents_api.py",
+    "services/portfolio/tests/test_events_publisher.py",
+    "services/portfolio/tests/test_firestore_store.py",
+    "services/portfolio/tests/test_gaps_api.py",
+    "services/portfolio/tests/test_gen_secrets.py",
+    "services/portfolio/tests/test_idempotency.py",
+    "services/portfolio/tests/test_outbox.py",
+    "services/portfolio/tests/test_pubsub_publisher.py",
+    "services/portfolio/tests/test_review_service.py",
+    "services/portfolio/tests/test_tenant_isolation.py",
+    "services/portfolio/tests/test_tenancy_type.py",
+    "services/portfolio/tests/test_tailor_jwt.py",
+    "services/portfolio/tests/test_tracked_boards_api.py",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

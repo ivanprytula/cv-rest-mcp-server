@@ -28,15 +28,6 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y --no-ins
 COPY pyproject.toml uv.lock ./
 RUN uv sync --no-dev --frozen --no-install-project
 
-# Bake the sentence-embedding model into the image at build time. fastembed
-# otherwise downloads it on first use — on Cloud Run that means a cold-start
-# network fetch (or an outright failure in a network-restricted revision).
-# The clustering feature needs a JD classified the moment it arrives, so
-# paying this cost at build time (not a `just` recipe run occasionally) is
-# the latency-correct tradeoff. Measured cost: +286MB image size.
-ENV FASTEMBED_CACHE_PATH=/app/.fastembed_cache
-RUN uv run python -c "from fastembed import TextEmbedding; TextEmbedding(model_name='BAAI/bge-small-en-v1.5')"
-
 FROM base AS runtime
 
 RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y --no-install-recommends \
@@ -51,12 +42,10 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y --no-ins
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder --chown=65532:65532 /app/.venv /app/.venv
-COPY --from=builder --chown=65532:65532 /app/.fastembed_cache /app/.fastembed_cache
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONPATH=/app \
     PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    FASTEMBED_CACHE_PATH=/app/.fastembed_cache
+    PYTHONDONTWRITEBYTECODE=1
 
 COPY --chown=65532:65532 shared/ ./shared/
 COPY --chown=65532:65532 templates/ ./templates/
