@@ -156,7 +156,7 @@ EOF
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STEP 3: Secret Manager secrets — JWT key, refresh pepper, first-admin password
+# STEP 3: Secret Manager secrets — database and optional JD extraction
 # ─────────────────────────────────────────────────────────────────────────────
 
 bootstrap_secrets() {
@@ -164,7 +164,7 @@ bootstrap_secrets() {
     log "STEP 3: Create Secret Manager secrets (empty containers)"
 
     log "  3a. Creating secrets"
-    for secret in cv-jwt-signing-key cv-refresh-token-pepper cv-first-admin-password cv-db-password cv-database-url cv-migration-database-url cv-anthropic-api-key; do
+    for secret in cv-db-password cv-database-url cv-migration-database-url cv-anthropic-api-key; do
         if gcloud secrets describe "$secret" --project "$GCP_PROJECT" >/dev/null 2>&1; then
             echo "    $secret exists, skipping create"
         else
@@ -181,22 +181,13 @@ bootstrap_secrets() {
 
   ── Add a version to each secret (paste your own value, then Ctrl-D) ──
 
-    gcloud secrets versions add cv-jwt-signing-key \\
-      --project $GCP_PROJECT --data-file=-
-
-    gcloud secrets versions add cv-refresh-token-pepper \\
-      --project $GCP_PROJECT --data-file=-
-
-    gcloud secrets versions add cv-first-admin-password \\
-      --project $GCP_PROJECT --data-file=-
-
     gcloud secrets versions add cv-db-password \\
       --project $GCP_PROJECT --data-file=-
 
     gcloud secrets versions add cv-anthropic-api-key \\
       --project $GCP_PROJECT --data-file=-
-  (optional — leave the secret with no version if CV-intake extraction is
-   not enabled yet; api-core boots fine either way)
+   (optional — leave the secret with no version if CV-intake extraction is
+    not enabled yet; api-core boots fine either way)
 
   cv-database-url and cv-migration-database-url are NOT filled in here —
   they're composed from cv-db-password / POSTGRES_PASSWORD + the Cloud SQL
@@ -210,15 +201,10 @@ bootstrap_secrets() {
       | tr -d '\\n' \\
       | gcloud secrets versions add <secret-id> --project $GCP_PROJECT --data-file=-
 
-  Read a value back (e.g. the admin password, to log in the first time):
+  Read a value back (e.g. the app DB password):
 
-    gcloud secrets versions access latest --secret=cv-first-admin-password \\
+    gcloud secrets versions access latest --secret=cv-db-password \\
       --project $GCP_PROJECT
-
-  WARNING: a secret with NO version breaks silently rather than loudly —
-  app/auth/crypto.py HMACs with an empty pepper, and
-  seed_first_admin_from_settings() skips seeding when the password is empty,
-  so login is impossible while everything *looks* configured.
 
 EOF
 

@@ -83,7 +83,6 @@ flowchart TB
     subgraph storage["Storage"]
         cvbucket[("<b>cv-data bucket</b><br/>cv.json — versioned")]:::store
         static[("<b>static bucket</b><br/>Vite-hashed assets<br/>fronted by Cloud CDN")]:::store
-        sm[("<b>Secret Manager</b><br/>cv-jwt-signing-key<br/>cv-refresh-token-pepper")]:::store
         pg[("<b>Cloud SQL Postgres</b><br/>users, tailored revisions<br/>Alembic-migrated")]:::store
     end
 
@@ -97,9 +96,8 @@ flowchart TB
     lb -->|"Host: app.<br/>Path: /assets/*"| static
 
     core -->|"reads (hot reload)"| cvbucket
-    core -->|"env var injection"| sm
     core --> pg
-    spa -.->|"XHR: api.<APEX_DOMAIN><br/>credentialed CORS"| lb
+    spa -.->|"XHR: api.<APEX_DOMAIN><br/>credential-less CORS"| lb
 
     classDef person fill:#08427b,stroke:#052e56,color:#fff
     classDef container fill:#1168bd,stroke:#0b4884,color:#fff
@@ -108,8 +106,8 @@ flowchart TB
 ```
 
 > **Note the dotted line.** The SPA is served from `app.` but calls the API at
-> `api.` — a cross-origin request. This is why `api-core` runs credentialed CORS
-> pinned to the SPA origin, and why the refresh cookie is host-prefixed.
+> `api.` — a cross-origin request. `api-core` answers with wildcard,
+> credential-less CORS; there is no pinned `CORS_ORIGIN` or refresh cookie.
 
 ---
 
