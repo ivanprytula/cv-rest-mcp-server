@@ -85,7 +85,7 @@ variable "timeout_seconds" {
 variable "ingress" {
   description = "Ingress setting: INGRESS_TRAFFIC_ALL/INGRESS_TRAFFIC_INTERNAL_ONLY/INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER."
   type        = string
-  default     = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  default     = "INGRESS_TRAFFIC_ALL"
 }
 
 variable "command" {

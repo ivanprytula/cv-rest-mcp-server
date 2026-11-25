@@ -52,7 +52,7 @@ variable "services" {
         max_instances         = int
         min_instances         = int
         memory                = "512Mi"
-        ingress               = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"  # optional
+        ingress               = "INGRESS_TRAFFIC_ALL"                      # optional
         command               = []                                        # optional
       }
   EOT
@@ -65,10 +65,10 @@ variable "services" {
     max_instances         = optional(number, 1)
     min_instances         = optional(number, 0)
     memory                = optional(string, "512Mi")
-    # Internal-only services (e.g. the ATS refresh trigger, invoked by Cloud
-    # Scheduler's OIDC token, never by the public LB) override this away
-    # from the LB-routed default. See modules/cloud_run_service/variables.tf.
-    ingress = optional(string, "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER")
+    # Public services are reached through Cloud Run domain mappings, which
+    # need INGRESS_TRAFFIC_ALL. Private services (e.g. the ATS refresh trigger,
+    # invoked by Cloud Scheduler's OIDC token) override this to INTERNAL_ONLY.
+    ingress = optional(string, "INGRESS_TRAFFIC_ALL")
     # Container command override — lets a second service run a different
     # entrypoint from the same image (see modules/cloud_run_service).
     command = optional(list(string), [])

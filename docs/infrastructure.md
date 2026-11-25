@@ -262,18 +262,20 @@ creates one per service in `modules/cloud_run_service`. You rarely interact with
 them directly, but they appear in `terraform plan` output and require the
 deployer to hold `compute.viewer` to read them.
 
-### Ingress: why `*.run.app` URLs return 404
+### Ingress: domain mapping needs public ingress
 
-Each Cloud Run service sets:
+Public Cloud Run services set:
 
 ```text
-ingress: internal-and-cloud-load-balancing
+ingress: INGRESS_TRAFFIC_ALL
 ```
 
-This **rejects direct traffic** to the service's own
-`https://api-core-....run.app` URL. Requests must arrive through the load
-balancer. Hitting the `.run.app` URL directly returns 404 — that is the security
-setting working, not a broken deployment. Always test through the real hostname.
+The edge load balancer was removed; `api-core` is reached through a Cloud Run
+domain mapping for `<APEX_DOMAIN>` (and `www.<APEX_DOMAIN>`). Domain-mapping
+requests arrive at Cloud Run from Google's frontend, so leaving the old
+`INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER` setting in place makes every hostname
+return 404. Private services (workers, refresh trigger) still use
+`INGRESS_TRAFFIC_INTERNAL_ONLY`.
 
 ---
 
