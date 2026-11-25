@@ -15,28 +15,28 @@ variable "environment" {
   default     = "production"
 }
 
-variable "apex_domain" {
-  description = "Apex domain, e.g. example.com. Placeholder must be overridden via terraform.tfvars."
-  type        = string
-}
+# variable "apex_domain" {  # unused after LB removal
+#   description = "Apex domain, e.g. example.com. Placeholder must be overridden via terraform.tfvars."
+#   type        = string
+# }
 
-variable "dns_name" {
-  description = "DNS zone name (apex_domain + trailing dot). Empty = derive from apex_domain."
-  type        = string
-  default     = ""
-}
+# variable "dns_name" {  # unused after LB removal
+#   description = "DNS zone name (apex_domain + trailing dot). Empty = derive from apex_domain."
+#   type        = string
+#   default     = ""
+# }
 
-variable "create_dns_zone" {
-  description = "Create and own the Cloud DNS zone. Set false if DNS stays at the current registrar; then wire the LB IP manually."
-  type        = bool
-  default     = true
-}
+# variable "create_dns_zone" {  # unused after LB removal
+#   description = "Create and own the Cloud DNS zone. Set false if DNS stays at the current registrar; then wire the LB IP manually."
+#   type        = bool
+#   default     = true
+# }
 
-variable "subdomains" {
-  description = "A records to create toward the LB IP; '@' = apex. www/api/app/games are the Phase 1a set."
-  type        = list(string)
-  default     = ["@", "www", "api", "app", "games"]
-}
+# variable "subdomains" {  # unused after LB removal
+#   description = "A records to create toward the LB IP; '@' = apex. www/api/app/games are the Phase 1a set."
+#   type        = list(string)
+#   default     = ["@", "www", "api", "app", "games"]
+# }
 
 # Workloads are the DISTINCT Cloud Run services. www and api can both route to
 # the one api-core workload — see host_routing.
@@ -89,10 +89,10 @@ variable "image_overrides" {
 
 # hostname -> workload name. Multiple hosts may map to one workload (e.g. both
 # www.<apex> and api.<apex> -> "api-core").
-variable "host_routing" {
-  description = "Map of fully-qualified hostname -> workload name from `services`."
-  type        = map(string)
-}
+# variable "host_routing" {  # unused after LB removal
+#   description = "Map of fully-qualified hostname -> workload name from `services`."
+#   type        = map(string)
+# }
 
 # Cloud SQL Postgres for the auth/user store (ADR-023 Phase 2, PR2). Defaults
 # to false so this module is opt-in until Infracost has confirmed the tier

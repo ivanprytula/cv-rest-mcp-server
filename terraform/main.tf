@@ -109,25 +109,9 @@ locals {
     environment = var.environment
   }
 
-  dns_name = var.dns_name != "" ? var.dns_name : "${var.apex_domain}."
-
-  # One NEG backend per routed hostname -> the workload's serverless NEG.
-  neg_backends = {
-    for host, workload in var.host_routing :
-    host => {
-      type          = "neg"
-      neg_self_link = module.run[workload].neg_self_link
-      neg_region    = module.run[workload].neg_region
-    }
-  }
-
-  # Cloud CDN path route (e.g. app.<apex>/assets/* -> static bucket).
-  cdn_path_route = var.static_assets != null && var.static_assets.enabled ? {
-    (var.static_assets.host) = {
-      prefix = var.static_assets.prefix
-      bucket = var.static_assets.bucket_name
-    }
-  } : {}
+  # dns_name = var.dns_name != "" ? var.dns_name : "${var.apex_domain}."  # unused after LB removal
+  # neg_backends = { ... }  # unused after LB removal
+  # cdn_path_route = ...  # unused after LB removal
 }
 
 # Distinct Cloud Run workloads + serverless NEGs.
@@ -299,24 +283,24 @@ module "run" {
 # }
 
 # HTTPS edge: global IP, managed certs, URL-map host routing, Cloud CDN bucket.
-module "edge_lb" {
-  source = "./modules/edge_lb"
-
-  project     = var.project_id
-  name_prefix = "cv-edge"
-
-  # One managed cert per routed host (hostname is both label and FQDN).
-  domains = {
-    for host in keys(var.host_routing) : host => host
-  }
-
-  backends = local.neg_backends
-
-  # Prefix-route the SPA's static assets to the Cloud CDN bucket.
-  path_routes = local.cdn_path_route
-
-  labels = merge(local.base_labels, { service = "edge-lb" })
-}
+# module "edge_lb" {
+#   source = "./modules/edge_lb"
+# 
+#   project     = var.project_id
+#   name_prefix = "cv-edge"
+# 
+#   # One managed cert per routed host (hostname is both label and FQDN).
+#   domains = {
+#     for host in keys(var.host_routing) : host => host
+#   }
+# 
+#   backends = local.neg_backends
+# 
+#   # Prefix-route the SPA's static assets to the Cloud CDN bucket.
+#   path_routes = local.cdn_path_route
+# 
+#   labels = merge(local.base_labels, { service = "edge-lb" })
+# }
 
 # Cloud Armor: DDoS/abuse protection for CDN static assets
 module "cloud_armor" {
@@ -359,15 +343,16 @@ module "uploads" {
   labels         = merge(local.base_labels, { service = "uploads" })
 }
 
-# DNS records for apex + subdomains -> the LB IP.
-module "dns" {
-  source = "./modules/dns"
-
-  project            = var.project_id
-  apex_domain        = var.apex_domain
-  dns_name           = local.dns_name
-  load_balancer_ipv4 = module.edge_lb.ipv4_address
-  subdomains         = var.subdomains
-  create_zone        = var.create_dns_zone
-  labels             = merge(local.base_labels, { service = "dns" })
-}
+# DNS records: now managed via Cloud Run domain mapping (free managed SSL).
+# The Cloud DNS zone still exists (created earlier); records updated manually.
+# module "dns" {
+#   source = "./modules/dns"
+#
+#   project            = var.project_id
+#   apex_domain        = var.apex_domain
+#   dns_name           = local.dns_name
+#   load_balancer_ipv4 = module.edge_lb.ipv4_address
+#   subdomains         = var.subdomains
+#   create_zone        = var.create_dns_zone
+#   labels             = merge(local.base_labels, { service = "dns" })
+# }

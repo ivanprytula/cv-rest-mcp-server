@@ -1,6 +1,6 @@
 output "load_balancer_ipv4" {
-  description = "Global LB IPv4 address (all subdomain A records point here)."
-  value       = module.edge_lb.ipv4_address
+  description = "Global LB IPv4 address (LB removed — now using Cloud Run domain mapping)."
+  value       = "removed"
 }
 
 output "service_urls" {
@@ -15,7 +15,7 @@ output "neg_names" {
 
 output "nameservers" {
   description = "DNS nameservers to register at the registrar when create_dns_zone=true."
-  value       = module.dns.nameservers
+  value       = "ns-cloud-a1.googledomains.com, ns-cloud-a2.googledomains.com, ns-cloud-a3.googledomains.com, ns-cloud-a4.googledomains.com"
 }
 
 output "checksum" {
