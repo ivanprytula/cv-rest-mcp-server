@@ -56,7 +56,7 @@ variable "services" {
     max_instances         = optional(number, 1)
     min_instances         = optional(number, 0)
     memory                = optional(string, "512Mi")
-    ingress               = optional(string, "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER")
+    ingress               = optional(string, "INGRESS_TRAFFIC_ALL")
     command               = optional(list(string), [])
   }))
   default = {}

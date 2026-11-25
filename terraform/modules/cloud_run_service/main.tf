@@ -86,10 +86,9 @@ resource "google_cloud_run_v2_service" "service" {
   }
 }
 
-# Invoker binding. Requests arriving through the load balancer are still
+# Invoker binding. Requests arriving through a Cloud Run domain mapping are
 # unauthenticated as far as Cloud Run is concerned, so a public-facing service
-# needs allUsers/run.invoker even though `ingress` already restricts the
-# traffic source to the LB. Without this the edge returns 403.
+# needs allUsers/run.invoker. Without this the domain mapping returns 403.
 resource "google_cloud_run_v2_service_iam_member" "invoker" {
   count = var.allow_unauthenticated ? 1 : 0
 

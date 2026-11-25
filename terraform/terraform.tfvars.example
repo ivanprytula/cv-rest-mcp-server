@@ -53,11 +53,12 @@ services = {
     image                 = "europe-west1-docker.pkg.dev/cv-rest-mcp-server/cv-images/api-core:latest"
     service_account       = "api-core-runtime@cv-rest-mcp-server.iam.gserviceaccount.com"
     allow_unauthenticated = true
+    # Public services are reached through Cloud Run domain mappings, which
+    # require all ingress. Private services override this to INTERNAL_ONLY.
+    ingress               = "INGRESS_TRAFFIC_ALL"
     env_vars = {
-      # Gates settings.environment == "production" checks — e.g. the
-      # __Host-refresh_token cookie's Secure flag (auth/routes.py). Missing
-      # this silently defaults to "development" and breaks that cookie in
-      # prod (browser rejects SameSite=None without Secure).
+      # Gates settings.environment == "production" checks. Without it the
+      # app silently falls back to development-mode defaults.
       ENVIRONMENT          = "production"
       TRUST_PROXY          = "true"
       CLIENT_IP_XFF_ENTRY  = "2"
